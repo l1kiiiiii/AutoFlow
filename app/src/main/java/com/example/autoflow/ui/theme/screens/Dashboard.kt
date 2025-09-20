@@ -25,9 +25,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector // Ensure this import is present
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.tooling.preview.Preview
+import com.example.autoflow.ui.theme.AutoFlowTheme
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -136,5 +136,7 @@ fun ContentScreen(
 @Preview(showBackground = true)
 @Composable
 fun DashboardPreview() {
+    AutoFlowTheme {
     Dashboard()
+    }
 }

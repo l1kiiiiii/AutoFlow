@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.autoflow.ui.theme.AutoFlowTheme
 
 @Composable
 fun HomeScreen(
@@ -71,8 +72,10 @@ fun HomeScreen(
 @Preview(showBackground = true)
 @Composable
 fun HomeScreenPreview() {
-    HomeScreen(
-        onNavigateToCreateTask = { println("Preview: Navigate to Create Task") },
-        onNavigateToProfile = { println("Preview: Navigate to Profile") }
-    )
+    AutoFlowTheme {
+        HomeScreen(
+            onNavigateToCreateTask = { println("Preview: Navigate to Create Task") },
+            onNavigateToProfile = { println("Preview: Navigate to Profile") }
+        )
+    }
 }
