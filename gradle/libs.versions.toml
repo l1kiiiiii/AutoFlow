@@ -8,12 +8,23 @@ espressoCore = "3.7.0"
 lifecycleRuntimeKtx = "2.9.3"
 activityCompose = "1.11.0"
 composeBom = "2024.09.00"
+roomCommonJvm = "2.8.0"
+androidxCoreKtx = "1.15.0"
+androidxLifecycle = "2.8.0"
+androidxActivityCompose = "1.9.3"
+composeUi = "1.7.0"
+composeMaterial = "1.7.0"
+composeMaterial3 = "1.3.0"
+room = "2.8.0"
+workRuntime = "2.9.0"
+playServicesLocation = "21.3.0"
+mockito = "5.12.0"
+androidxTestRunner = "1.6.2"
+espresso = "3.6.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
-androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
-androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
@@ -24,6 +35,17 @@ androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "u
 androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+androidx-room-common-jvm = { group = "androidx.room", name = "room-common-jvm", version.ref = "roomCommonJvm" }
+androidx-compose-material = { module = "androidx.compose.material:material", version.ref = "composeMaterial" }
+androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
+androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
+androidx-work-runtime = { module = "androidx.work:work-runtime", version.ref = "workRuntime" }
+androidx-lifecycle-viewmodel = { module = "androidx.lifecycle:lifecycle-viewmodel", version.ref = "androidxLifecycle" }
+androidx-lifecycle-livedata = { module = "androidx.lifecycle:lifecycle-livedata", version.ref = "androidxLifecycle" }
+google-play-services-location = { module = "com.google.android.gms:play-services-location", version.ref = "playServicesLocation" }
+mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
+androidx-test-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
