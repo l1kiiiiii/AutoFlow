@@ -1,7 +1,9 @@
 package com.example.autoflow.viewmodel;
 
+import android.Manifest;
 import android.app.Application;
 import androidx.annotation.NonNull;
+import androidx.annotation.RequiresPermission;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
@@ -49,6 +51,7 @@ public class WorkflowViewModel extends AndroidViewModel {
         return workflows;
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
     public void checkTrigger(Trigger trigger, TriggerCallback callback) {
         switch (trigger.getType()) {
             case Constants.TRIGGER_BLE:
@@ -86,6 +89,7 @@ public class WorkflowViewModel extends AndroidViewModel {
         void onTriggerFired(Trigger trigger, boolean isFired);
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
     public void stopAllTriggers() {
         if (PermissionUtils.hasBluetoothPermissions(getApplication())) {
             bleManager.stopScanning();
