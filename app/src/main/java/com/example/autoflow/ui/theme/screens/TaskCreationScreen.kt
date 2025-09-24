@@ -119,7 +119,6 @@ fun TaskCreationScreen(
                             "Time" -> expandedState = timeTriggerExpanded
                             "Bluetooth Device" -> expandedState = bluetoothDeviceTriggerExpanded
                         }
-
                         Column {
                             Row(
                                 modifier = Modifier
@@ -245,7 +244,6 @@ fun TaskCreationScreen(
                 }
             }
         }
-
         // Card 3: Define Actions
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -313,7 +311,6 @@ fun TaskCreationScreen(
                         }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-
                     // Toggle Settings Action
                     Column {
                         Row(
@@ -387,7 +384,6 @@ fun TaskCreationScreen(
                 }
             }
         }
-
         // Card 4: Save/Back Buttons
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
