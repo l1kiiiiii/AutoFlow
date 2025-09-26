@@ -1,5 +1,4 @@
 
-
     plugins {
         alias(libs.plugins.android.application)
         alias(libs.plugins.kotlin.android)
@@ -22,11 +21,13 @@
 
         buildTypes {
             release {
-                isMinifyEnabled = false
+                isMinifyEnabled = true
+                isShrinkResources = true
                 proguardFiles(
                     getDefaultProguardFile("proguard-android-optimize.txt"),
                     "proguard-rules.pro"
                 )
+                signingConfig = signingConfigs.getByName("debug")
             }
         }
         compileOptions {
@@ -81,4 +82,14 @@
         debugImplementation(libs.androidx.compose.ui.test.manifest)
 
         implementation(libs.androidx.compose.material.icons.extended)
+        implementation(libs.androidx.work.runtime)
+
+        implementation(libs.androidx.navigation.compose)
+
+        implementation(libs.androidx.lifecycle.livedata.ktx)
+        implementation(libs.androidx.compose.runtime.livedata)
+
+        // Google Play Services Location
+        implementation(libs.google.play.services.location)
+        implementation(libs.play.services.maps)
     }
