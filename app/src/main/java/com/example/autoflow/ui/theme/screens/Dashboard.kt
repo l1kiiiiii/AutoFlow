@@ -12,7 +12,6 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -22,12 +21,12 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,7 +38,7 @@ fun Dashboard(modifier: Modifier = Modifier) {
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             TopAppBar(
-                title = { Text(text = "Tasker") },
+                title = { Text(text = "AutoFlow") },
                 scrollBehavior = scrollBehavior,
                 actions = {
                     IconButton(onClick = { /* TODO: Handle notification icon click */ }) {
@@ -53,15 +52,37 @@ fun Dashboard(modifier: Modifier = Modifier) {
         },
         bottomBar = { BottomNavigationBar(navController) }
     ) { innerPadding ->
-        NavHost(navController, startDestination = "home", Modifier.padding(innerPadding)) {
-            composable("home") { HomeScreen(
-                modifier = TODO(),
-                onNavigateToCreateTask = TODO(),
-                onNavigateToProfile = TODO()
-            ) }
-            composable("task_creation") { TaskCreationScreen(onBack = { navController.popBackStack() }, onSaveTask = { navController.navigate("home") }) }
-            composable("profile") { ProfileManagment() }
-            composable("settings") { Settings() }
+        NavHost(
+            navController = navController,
+            startDestination = "home",
+            modifier = Modifier.padding(innerPadding)
+        ) {
+            composable("home") {
+                HomeScreen(
+                    modifier = Modifier,
+                    onNavigateToCreateTask = { navController.navigate("task_creation") },
+                    onNavigateToProfile = { navController.navigate("profile") }
+                )
+            }
+            composable("task_creation") {
+                TaskCreationScreen(
+                    onBack = { navController.popBackStack() },
+                    onSaveTask = { taskName ->
+                        navController.navigate("home") {
+                            popUpTo(navController.graph.startDestinationId) {
+                                inclusive = true
+                            }
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
+            composable("profile") {
+                ProfileManagment()
+            }
+            composable("settings") {
+                Settings()
+            }
         }
     }
 }
@@ -82,7 +103,13 @@ fun BottomNavigationBar(navController: NavHostController) {
         items.forEachIndexed { index, item ->
             NavigationBarItem(
                 icon = {
-                    BadgedBox(badge = { if (item.badgeCount != null) Badge { Text(item.badgeCount.toString()) } }) {
+                    BadgedBox(
+                        badge = {
+                            if (item.badgeCount != null && item.badgeCount > 0) {
+                                Badge { Text(item.badgeCount.toString()) }
+                            }
+                        }
+                    ) {
                         Icon(item.icon, contentDescription = item.label)
                     }
                 },

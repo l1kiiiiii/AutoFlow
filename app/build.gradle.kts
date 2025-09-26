@@ -82,8 +82,6 @@
         debugImplementation(libs.androidx.compose.ui.test.manifest)
 
         implementation(libs.androidx.compose.material.icons.extended)
-
-        implementation(libs.google.play.services.location)
         implementation(libs.androidx.work.runtime)
 
         implementation(libs.androidx.navigation.compose)
@@ -91,4 +89,7 @@
         implementation(libs.androidx.lifecycle.livedata.ktx)
         implementation(libs.androidx.compose.runtime.livedata)
 
+        // Google Play Services Location
+        implementation(libs.google.play.services.location)
+        implementation(libs.play.services.maps)
     }

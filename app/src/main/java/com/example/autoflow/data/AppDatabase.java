@@ -26,6 +26,7 @@ public abstract class AppDatabase extends RoomDatabase {
     }
 
     // For testing or cleanup
+    @SuppressWarnings("unused")
     public static void destroyInstance() {
         INSTANCE = null;
     }

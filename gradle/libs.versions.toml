@@ -10,6 +10,7 @@ lifecycleRuntimeKtx = "2.9.3"
 activityCompose = "1.11.0"
 composeBom = "2024.09.00"
 navigationCompose = "2.9.4"
+playServicesMaps = "18.2.0"
 roomCommonJvm = "2.8.0"
 androidxCoreKtx = "1.15.0"
 androidxLifecycle = "2.8.0"
@@ -53,6 +54,7 @@ google-play-services-location = { module = "com.google.android.gms:play-services
 mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
 androidx-test-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
+play-services-maps = { module = "com.google.android.gms:play-services-maps", version.ref = "playServicesMaps" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

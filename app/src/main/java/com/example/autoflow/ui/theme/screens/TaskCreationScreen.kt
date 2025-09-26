@@ -407,12 +407,12 @@ fun TaskCreationScreen(
                             }
                             // Assuming Trigger has an isValid() method
                             if (trigger != null && action != null /* && trigger.isValid() */) {
-                                // viewModel.addWorkflow(trigger, action) // Call your ViewModel function
+                                viewModel.addWorkflow(trigger, action) // Call your ViewModel function
                                 onSaveTask(taskName)
-                            } else {
+                            } /*else {
                                 // Handle cases where trigger or action is null or trigger is invalid
                                 // Maybe show a Toast or a Snackbar
-                            }
+                            }*/
                         }
                     },
                     modifier = Modifier.fillMaxWidth()

@@ -37,8 +37,7 @@ fun HomeScreen(
     viewModel: WorkflowViewModel = viewModel()
 ) {
     val scrollState = rememberScrollState()
-    // Adjust to handle List<WorkflowEntity>? from LiveData
-    val workflows: List<WorkflowEntity>? by viewModel.getWorkflows().observeAsState(null)
+    val workflows: List<WorkflowEntity>? by viewModel.workflows.observeAsState(null)
 
     Column(
         modifier = modifier
@@ -52,6 +51,7 @@ fun HomeScreen(
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )
+
         if (workflows != null && workflows!!.isNotEmpty()) {
             workflows!!.forEach { workflowEntity ->
                 val trigger = workflowEntity.toTrigger()
@@ -66,11 +66,10 @@ fun HomeScreen(
                         WorkflowItem(
                             trigger = trigger,
                             action = action,
-                            onClick = { /* Handle workflow click (e.g., edit or details for workflowEntity.id) */ }
+                            onClick = { /* Handle workflow click */ }
                         )
                     }
                 } else {
-                    // Optional: Display an error or skip this item if parsing failed
                     Text(
                         text = "Error loading workflow: ${workflowEntity.workflowName}",
                         color = Color.Red,
@@ -85,6 +84,7 @@ fun HomeScreen(
                 color = Color.Gray
             )
         }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
@@ -92,11 +92,13 @@ fun HomeScreen(
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )
+
         Text(
             text = "No recent executions recorded yet.",
             style = MaterialTheme.typography.bodyMedium,
             color = Color.Gray
         )
+
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
@@ -104,20 +106,25 @@ fun HomeScreen(
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )
+
         Spacer(modifier = Modifier.height(8.dp))
+
         Button(
             onClick = onNavigateToCreateTask,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Create New Task")
         }
+
         Spacer(modifier = Modifier.height(8.dp))
+
         Button(
             onClick = onNavigateToProfile,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Manage Profile")
         }
+
         Spacer(modifier = Modifier.height(200.dp))
     }
 }
@@ -129,7 +136,6 @@ fun HomeScreenPreview() {
         HomeScreen(
             onNavigateToCreateTask = { println("Preview: Navigate to Create Task") },
             onNavigateToProfile = { println("Preview: Navigate to Profile") }
-            // Preview won't have a real ViewModel, so workflows will be null/empty
         )
     }
 }
