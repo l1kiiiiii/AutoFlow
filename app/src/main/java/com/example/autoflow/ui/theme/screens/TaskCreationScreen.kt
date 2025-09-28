@@ -1,24 +1,33 @@
 package com.example.autoflow.ui.theme.screens
 
 import android.R.attr.action
+import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -37,10 +47,15 @@ import com.example.autoflow.model.Trigger
 import com.example.autoflow.ui.theme.AutoFlowTheme
 import com.example.autoflow.util.Constants
 import com.example.autoflow.util.LocationState
+import com.example.autoflow.util.TimeUtils
 import com.example.autoflow.util.rememberLocationState
 import com.example.autoflow.viewmodel.WorkflowViewModel
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
 import kotlin.math.roundToInt
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskCreationScreen(
     modifier: Modifier = Modifier,
@@ -50,6 +65,7 @@ fun TaskCreationScreen(
 ) {
     var taskName by remember { mutableStateOf("") }
     val scrollState = rememberScrollState()
+    val context = LocalContext.current // Added this line
 
     // States for Triggers
     var locationTriggerExpanded by remember { mutableStateOf(false) }
@@ -141,7 +157,6 @@ fun TaskCreationScreen(
                                 )
                             }
 
-                            // Updated Location Trigger Section
                             when (triggerName) {
                                 "Location" -> {
                                     LocationTriggerSection(
@@ -183,15 +198,10 @@ fun TaskCreationScreen(
                                 }
 
                                 "Time" -> {
-                                    if (timeTriggerExpanded) {
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        TextField(
-                                            value = timeValue,
-                                            onValueChange = { timeValue = it },
-                                            label = { Text("Time (Unix Timestamp ms)") },
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                    }
+                                    TimeTriggerSection(
+                                        expanded = timeTriggerExpanded,
+                                        onTimeValueChange = { timeValue = it }
+                                    )
                                 }
 
                                 "Bluetooth Device" -> {
@@ -213,7 +223,7 @@ fun TaskCreationScreen(
             }
         }
 
-        // Card 3: Define Actions (unchanged from your original)
+        // Card 3: Define Actions
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Define Actions", style = MaterialTheme.typography.titleMedium)
@@ -327,7 +337,7 @@ fun TaskCreationScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    // Run Script Action
+                    // Run Script Action (Enhanced) - Fixed version
                     Column {
                         Row(
                             modifier = Modifier
@@ -346,20 +356,106 @@ fun TaskCreationScreen(
 
                         if (runScriptActionExpanded) {
                             Spacer(modifier = Modifier.height(8.dp))
+
+                            // Script templates
+                            var selectedTemplate by remember { mutableStateOf("Custom") }
+                            val templates = mapOf(
+                                "Custom" to "",
+                                "Log Message" to "log('Hello from AutoFlow!');\nlog('Current time: ' + new Date());",
+                                "Send Notification" to "notify('AutoFlow Alert', 'Script executed successfully!');\nlog('Notification sent');",
+                                "HTTP Request" to "var response = httpGet('https://api.example.com/data');\nlog('Response: ' + response);\nnotify('API Call', 'Request completed');",
+                                "File Operation" to "// File operations (requires permissions)\nlog('Performing file operations...');\n// Add your file handling code here"
+                            )
+
+                            // Template selector
+                            Text("Script Templates:", style = MaterialTheme.typography.titleSmall)
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            ) {
+                                items(templates.keys.toList()) { template ->
+                                    FilterChip(
+                                        selected = selectedTemplate == template,
+                                        onClick = {
+                                            selectedTemplate = template
+                                            scriptText = templates[template] ?: ""
+                                        },
+                                        label = { Text(template) }
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Script editor
                             TextField(
                                 value = scriptText,
                                 onValueChange = { scriptText = it },
-                                label = { Text("Script Code") },
-                                modifier = Modifier.fillMaxWidth()
+                                label = { Text("JavaScript Code") },
+                                placeholder = { Text("Enter your JavaScript code here...") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp),
+                                maxLines = 10,
+                                textStyle = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                )
                             )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Script validation and test - FIXED SECTION
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        // Test script execution - now properly defined
+                                        testScriptExecution(scriptText, context)
+                                    }
+                                ) {
+                                    Text("Test Script")
+                                }
+
+                                Button(
+                                    onClick = {
+                                        // Validate script syntax - now properly defined
+                                        validateScript(scriptText)
+                                    }
+                                ) {
+                                    Text("Validate")
+                                }
+                            }
+
+                            // Help text
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        "Available Functions:",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text("• log(message) - Write to console", style = MaterialTheme.typography.bodySmall)
+                                    Text("• notify(title, message) - Send notification", style = MaterialTheme.typography.bodySmall)
+                                    Text("• httpGet(url) - Make HTTP request", style = MaterialTheme.typography.bodySmall)
+                                    Text("• androidContext - Access Android context", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
                         }
+
                         Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
             }
         }
 
-        // Card 4: Save/Back Buttons (unchanged from your original)
+        // Card 4: Save/Back Buttons
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Button(
@@ -370,7 +466,7 @@ fun TaskCreationScreen(
                                     Trigger(0, 0, Constants.TRIGGER_LOCATION,
                                         "{\"locationName\":\"$locationName\",\"coordinates\":\"$locationDetailsInput\",\"radius\":${radiusValue.roundToInt()},\"triggerOnEntry\":${triggerOnOption == "Entry" || triggerOnOption == "Both"},\"triggerOnExit\":${triggerOnOption == "Exit" || triggerOnOption == "Both"}}")
                                 }
-                                wifiTriggerExpanded -> Trigger(0, 0, Constants.TRIGGER_BLE, wifiState)
+                                wifiTriggerExpanded -> Trigger(0, 0, Constants.TRIGGER_WIFI, wifiState)
                                 timeTriggerExpanded && timeValue.isNotBlank() -> Trigger(0, 0, Constants.TRIGGER_TIME, timeValue)
                                 bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank() -> Trigger(0, 0, Constants.TRIGGER_BLE, bluetoothDeviceAddress)
                                 else -> null
@@ -403,6 +499,87 @@ fun TaskCreationScreen(
                 }
             }
         }
+    }
+}
+
+// ADDED MISSING FUNCTIONS:
+
+/**
+ * Test script execution function
+ */
+private fun testScriptExecution(scriptCode: String, context: android.content.Context) {
+    Log.i("ScriptTest", "Testing script: $scriptCode")
+
+    // Basic validation
+    if (scriptCode.trim().isEmpty()) {
+        Log.w("ScriptTest", "Empty script provided")
+        return
+    }
+
+    // Simple syntax checks
+    val basicChecks = listOf(
+        "log(" to "log function usage detected",
+        "notify(" to "notify function usage detected",
+        "httpGet(" to "httpGet function usage detected"
+    )
+
+    basicChecks.forEach { (pattern, message) ->
+        if (scriptCode.contains(pattern)) {
+            Log.i("ScriptTest", message)
+        }
+    }
+
+    Log.i("ScriptTest", "Script test completed")
+
+    // TODO: Implement actual script execution with ScriptExecutor when ready
+    // val scriptExecutor = ScriptExecutor(context)
+    // val result = scriptExecutor.executeScript(scriptCode)
+}
+
+/**
+ * Validate script syntax function
+ */
+private fun validateScript(scriptCode: String) {
+    Log.i("ScriptValidation", "Validating script syntax")
+
+    if (scriptCode.trim().isEmpty()) {
+        Log.w("ScriptValidation", "Empty script - validation failed")
+        return
+    }
+
+    // Basic JavaScript syntax validation
+    val errors = mutableListOf<String>()
+
+    // Check for balanced parentheses
+    var parenthesesCount = 0
+    var braceCount = 0
+
+    for (char in scriptCode) {
+        when (char) {
+            '(' -> parenthesesCount++
+            ')' -> parenthesesCount--
+            '{' -> braceCount++
+            '}' -> braceCount--
+        }
+    }
+
+    if (parenthesesCount != 0) {
+        errors.add("Unbalanced parentheses")
+    }
+
+    if (braceCount != 0) {
+        errors.add("Unbalanced braces")
+    }
+
+    // Check for common syntax issues
+    if (scriptCode.contains("function") && !scriptCode.contains("{")) {
+        errors.add("Function declaration missing opening brace")
+    }
+
+    if (errors.isEmpty()) {
+        Log.i("ScriptValidation", "Script validation passed")
+    } else {
+        Log.w("ScriptValidation", "Script validation errors: ${errors.joinToString(", ")}")
     }
 }
 
@@ -657,6 +834,263 @@ fun CurrentLocationSection(
             }
         }
     }
+}
+
+// Enhanced Time Trigger Section with Date/Time Pickers
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TimeTriggerSection(
+    expanded: Boolean,
+    onTimeValueChange: (String) -> Unit
+) {
+    if (expanded) {
+        var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
+        var selectedTime by remember { mutableStateOf<LocalTime?>(null) }
+        var showDatePicker by remember { mutableStateOf(false) }
+        var showTimePicker by remember { mutableStateOf(false) }
+        var showQuickOptions by remember { mutableStateOf(true) }
+
+        val datePickerState = rememberDatePickerState()
+        val timePickerState = rememberTimePickerState()
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Quick time options toggle
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Quick Options")
+            Switch(
+                checked = showQuickOptions,
+                onCheckedChange = { showQuickOptions = it }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (showQuickOptions) {
+            // Quick time options
+            QuickTimeOptionsSection(
+                onTimeSelected = { minutes ->
+                    val futureTime = LocalDateTime.now().plusMinutes(minutes.toLong())
+                    val timestamp = TimeUtils.dateTimeToUnixTimestamp(futureTime)
+                    onTimeValueChange(timestamp.toString())
+                    selectedDate = futureTime.toLocalDate()
+                    selectedTime = futureTime.toLocalTime()
+                }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "OR",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.fillMaxSize(),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Custom date and time selection
+        Text(
+            text = if (showQuickOptions) "Set Custom Date & Time:" else "Set Date & Time:",
+            style = MaterialTheme.typography.titleSmall
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Date selection
+        OutlinedButton(
+            onClick = { showDatePicker = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(
+                imageVector = Icons.Default.DateRange,
+                contentDescription = "Select Date"
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = selectedDate?.let { TimeUtils.formatDate(it) } ?: "Select Date"
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Time selection
+        OutlinedButton(
+            onClick = { showTimePicker = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(
+                imageVector = Icons.Default.Schedule,
+                contentDescription = "Select Time"
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = selectedTime?.let { TimeUtils.formatTime(it) } ?: "Select Time"
+            )
+        }
+
+        // Display selected datetime and validation
+        if (selectedDate != null && selectedTime != null) {
+            val selectedDateTime = LocalDateTime.of(selectedDate, selectedTime)
+            val isFuture = TimeUtils.isFutureTime(selectedDateTime)
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isFuture)
+                        MaterialTheme.colorScheme.primaryContainer
+                    else
+                        MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text(
+                        text = "Scheduled for:",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    Text(
+                        text = TimeUtils.formatDateTime(selectedDateTime),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (isFuture)
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        else
+                            MaterialTheme.colorScheme.onErrorContainer
+                    )
+
+                    if (!isFuture) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "⚠️ Selected time is in the past",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+
+            // Convert to Unix timestamp when both date and time are selected
+            if (isFuture) {
+                val timestamp = TimeUtils.dateAndTimeToUnixTimestamp(selectedDate!!, selectedTime!!)
+                onTimeValueChange(timestamp.toString())
+            }
+        }
+
+        // Date Picker Dialog
+        if (showDatePicker) {
+            DatePickerDialog(
+                onDismissRequest = { showDatePicker = false },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            datePickerState.selectedDateMillis?.let { millis ->
+                                selectedDate = LocalDate.ofEpochDay(millis / (24 * 60 * 60 * 1000))
+                            }
+                            showDatePicker = false
+                        }
+                    ) {
+                        Text("OK")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDatePicker = false }) {
+                        Text("Cancel")
+                    }
+                }
+            ) {
+                DatePicker(state = datePickerState)
+            }
+        }
+
+        // Time Picker Dialog
+        if (showTimePicker) {
+            TimePickerDialog(
+                onDismissRequest = { showTimePicker = false },
+                onConfirm = {
+                    selectedTime = LocalTime.of(
+                        timePickerState.hour,
+                        timePickerState.minute
+                    )
+                    showTimePicker = false
+                },
+                onDismiss = { showTimePicker = false }
+            ) {
+                TimePicker(state = timePickerState)
+            }
+        }
+    }
+}
+
+@Composable
+fun QuickTimeOptionsSection(
+    onTimeSelected: (Int) -> Unit
+) {
+    Text(
+        text = "Quick Time Options:",
+        style = MaterialTheme.typography.titleSmall
+    )
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    val quickOptions = listOf(
+        "5 min" to 5,
+        "15 min" to 15,
+        "30 min" to 30,
+        "1 hour" to 60,
+        "2 hours" to 120,
+        "1 day" to 1440
+    )
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(3),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.height(120.dp)
+    ) {
+        items(quickOptions) { (label, minutes) ->
+            OutlinedButton(
+                onClick = { onTimeSelected(minutes) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun TimePickerDialog(
+    onDismissRequest: () -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("OK")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+        text = { content() }
+    )
 }
 
 @Preview(showBackground = true, name = "Task Creation Screen Preview")

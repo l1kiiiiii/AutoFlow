@@ -3,8 +3,13 @@ package com.example.autoflow.viewmodel;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Application;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.location.Location;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresPermission;
@@ -20,7 +25,10 @@ import com.example.autoflow.integrations.LocationManager;
 import com.example.autoflow.integrations.WiFiManager;
 import com.example.autoflow.model.Action;
 import com.example.autoflow.model.Trigger;
+import com.example.autoflow.script.ScriptExecutor;
+import com.example.autoflow.script.ScriptResult;
 import com.example.autoflow.util.Constants;
+import com.example.autoflow.util.NotificationHelper;
 import com.example.autoflow.util.PermissionUtils;
 import java.util.List;
 
@@ -471,6 +479,7 @@ public class WorkflowViewModel extends AndroidViewModel {
         void onWorkflowError(@NonNull String error);
     }
 
+
     @SuppressLint("MissingPermission")
     @Override
     protected void onCleared() {
@@ -495,3 +504,6 @@ public class WorkflowViewModel extends AndroidViewModel {
         }
     }
 }
+// Add to WorkflowViewModel.java or create new ScriptActionExecutor
+
+

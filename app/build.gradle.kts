@@ -31,12 +31,12 @@
             }
         }
         compileOptions {
-            sourceCompatibility = JavaVersion.VERSION_18
-            targetCompatibility = JavaVersion.VERSION_18
+            sourceCompatibility = JavaVersion.VERSION_21
+            targetCompatibility = JavaVersion.VERSION_21
         }
         kotlin {
             compilerOptions {
-                jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_18)
+                jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
             }
         }
         buildFeatures {
@@ -94,4 +94,10 @@
         implementation(libs.play.services.maps)
 
         implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.0")
+
+        implementation(libs.rhino.android)
+
+
+        // For HTTP requests (if not already included)
+        implementation(libs.okhttp)
     }
