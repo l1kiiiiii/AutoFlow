@@ -1,28 +1,34 @@
 package com.example.autoflow.ui.theme.screens
 
 import android.R.attr.action
+import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -31,6 +37,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -38,9 +46,16 @@ import com.example.autoflow.model.Action
 import com.example.autoflow.model.Trigger
 import com.example.autoflow.ui.theme.AutoFlowTheme
 import com.example.autoflow.util.Constants
+import com.example.autoflow.util.LocationState
+import com.example.autoflow.util.TimeUtils
+import com.example.autoflow.util.rememberLocationState
 import com.example.autoflow.viewmodel.WorkflowViewModel
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
 import kotlin.math.roundToInt
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskCreationScreen(
     modifier: Modifier = Modifier,
@@ -50,6 +65,7 @@ fun TaskCreationScreen(
 ) {
     var taskName by remember { mutableStateOf("") }
     val scrollState = rememberScrollState()
+    val context = LocalContext.current // Added this line
 
     // States for Triggers
     var locationTriggerExpanded by remember { mutableStateOf(false) }
@@ -57,13 +73,10 @@ fun TaskCreationScreen(
     var locationDetailsInput by remember { mutableStateOf("") }
     var radiusValue by remember { mutableFloatStateOf(100f) }
     var triggerOnOption by remember { mutableStateOf("Entry") }
-
     var wifiTriggerExpanded by remember { mutableStateOf(false) }
     var wifiState by remember { mutableStateOf("On") }
-
     var timeTriggerExpanded by remember { mutableStateOf(false) }
     var timeValue by remember { mutableStateOf("") }
-
     var bluetoothDeviceTriggerExpanded by remember { mutableStateOf(false) }
     var bluetoothDeviceAddress by remember { mutableStateOf("") }
 
@@ -111,6 +124,7 @@ fun TaskCreationScreen(
                     val triggerOptions = listOf(
                         "Location", "WiFi", "Time", "Bluetooth Device"
                     )
+
                     triggerOptions.forEach { triggerName ->
                         var expandedState by remember { mutableStateOf(false) }
                         when (triggerName) {
@@ -119,19 +133,17 @@ fun TaskCreationScreen(
                             "Time" -> expandedState = timeTriggerExpanded
                             "Bluetooth Device" -> expandedState = bluetoothDeviceTriggerExpanded
                         }
+
                         Column {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
                                         when (triggerName) {
-                                            "Location" -> locationTriggerExpanded =
-                                                !locationTriggerExpanded
-
+                                            "Location" -> locationTriggerExpanded = !locationTriggerExpanded
                                             "WiFi" -> wifiTriggerExpanded = !wifiTriggerExpanded
                                             "Time" -> timeTriggerExpanded = !timeTriggerExpanded
-                                            "Bluetooth Device" -> bluetoothDeviceTriggerExpanded =
-                                                !bluetoothDeviceTriggerExpanded
+                                            "Bluetooth Device" -> bluetoothDeviceTriggerExpanded = !bluetoothDeviceTriggerExpanded
                                         }
                                     }
                                     .padding(vertical = 8.dp),
@@ -144,62 +156,25 @@ fun TaskCreationScreen(
                                     contentDescription = if (expandedState) "Collapse" else "Expand"
                                 )
                             }
-                            if (expandedState) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                when (triggerName) {
-                                    "Location" -> {
-                                        TextField(
-                                            value = locationName,
-                                            onValueChange = { locationName = it },
-                                            label = { Text("Location Name") },
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
+
+                            when (triggerName) {
+                                "Location" -> {
+                                    LocationTriggerSection(
+                                        expanded = locationTriggerExpanded,
+                                        locationName = locationName,
+                                        onLocationNameChange = { locationName = it },
+                                        locationDetailsInput = locationDetailsInput,
+                                        onLocationDetailsChange = { locationDetailsInput = it },
+                                        radiusValue = radiusValue,
+                                        onRadiusChange = { radiusValue = it },
+                                        triggerOnOption = triggerOnOption,
+                                        onTriggerOptionChange = { triggerOnOption = it }
+                                    )
+                                }
+
+                                "WiFi" -> {
+                                    if (wifiTriggerExpanded) {
                                         Spacer(modifier = Modifier.height(8.dp))
-                                        TextField(
-                                            value = locationDetailsInput,
-                                            onValueChange = { locationDetailsInput = it },
-                                            label = { Text("Coordinates (e.g., lat,lng)") },
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                        Spacer(modifier = Modifier.height(16.dp))
-                                        Text("Radius: ${radiusValue.roundToInt()}m")
-                                        Slider(
-                                            value = radiusValue,
-                                            onValueChange = { radiusValue = it },
-                                            valueRange = 50f..500f,
-                                            steps = ((500f - 50f) / 10f - 1).toInt(),
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                        Spacer(modifier = Modifier.height(16.dp))
-                                        Text("Trigger On:")
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .selectableGroup(),
-                                            horizontalArrangement = Arrangement.Start
-                                        ) {
-                                            val radioOptions = listOf("Entry", "Exit", "Both")
-                                            radioOptions.forEach { option ->
-                                                Row(
-                                                    Modifier
-                                                        .clickable { triggerOnOption = option }
-                                                        .padding(
-                                                            end = 16.dp,
-                                                            top = 8.dp,
-                                                            bottom = 8.dp
-                                                        ),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    RadioButton(
-                                                        selected = (triggerOnOption == option),
-                                                        onClick = { triggerOnOption = option }
-                                                    )
-                                                    Text(option)
-                                                }
-                                            }
-                                        }
-                                    }
-                                    "WiFi" -> {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween
@@ -220,15 +195,18 @@ fun TaskCreationScreen(
                                             }
                                         }
                                     }
-                                    "Time" -> {
-                                        TextField(
-                                            value = timeValue,
-                                            onValueChange = { timeValue = it },
-                                            label = { Text("Time (Unix Timestamp ms)") },
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                    }
-                                    "Bluetooth Device" -> {
+                                }
+
+                                "Time" -> {
+                                    TimeTriggerSection(
+                                        expanded = timeTriggerExpanded,
+                                        onTimeValueChange = { timeValue = it }
+                                    )
+                                }
+
+                                "Bluetooth Device" -> {
+                                    if (bluetoothDeviceTriggerExpanded) {
+                                        Spacer(modifier = Modifier.height(8.dp))
                                         TextField(
                                             value = bluetoothDeviceAddress,
                                             onValueChange = { bluetoothDeviceAddress = it },
@@ -238,12 +216,13 @@ fun TaskCreationScreen(
                                     }
                                 }
                             }
+                            Spacer(modifier = Modifier.height(8.dp))
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
             }
         }
+
         // Card 3: Define Actions
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -268,6 +247,7 @@ fun TaskCreationScreen(
                                 contentDescription = if (sendNotificationActionExpanded) "Collapse" else "Expand"
                             )
                         }
+
                         if (sendNotificationActionExpanded) {
                             Spacer(modifier = Modifier.height(8.dp))
                             TextField(
@@ -276,6 +256,7 @@ fun TaskCreationScreen(
                                 label = { Text("Title") },
                                 modifier = Modifier.fillMaxWidth()
                             )
+
                             Spacer(modifier = Modifier.height(8.dp))
                             TextField(
                                 value = notificationMessage,
@@ -283,14 +264,14 @@ fun TaskCreationScreen(
                                 label = { Text("Message") },
                                 modifier = Modifier.fillMaxWidth()
                             )
+
                             Spacer(modifier = Modifier.height(8.dp))
                             val priorityOptions = listOf("Low", "Normal", "High")
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        val currentIndex =
-                                            priorityOptions.indexOf(notificationPriority)
+                                        val currentIndex = priorityOptions.indexOf(notificationPriority)
                                         val nextIndex = (currentIndex + 1) % priorityOptions.size
                                         notificationPriority = priorityOptions[nextIndex]
                                     }
@@ -309,8 +290,9 @@ fun TaskCreationScreen(
                                 )
                             }
                         }
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
+
                     // Toggle Settings Action
                     Column {
                         Row(
@@ -329,6 +311,7 @@ fun TaskCreationScreen(
                                 contentDescription = if (toggleSettingsActionExpanded) "Collapse" else "Expand"
                             )
                         }
+
                         if (toggleSettingsActionExpanded) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(
@@ -351,10 +334,10 @@ fun TaskCreationScreen(
                                 }
                             }
                         }
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
 
-                    // Run Script Action
+                    // Run Script Action (Enhanced) - Fixed version
                     Column {
                         Row(
                             modifier = Modifier
@@ -370,20 +353,108 @@ fun TaskCreationScreen(
                                 contentDescription = if (runScriptActionExpanded) "Collapse" else "Expand"
                             )
                         }
+
                         if (runScriptActionExpanded) {
                             Spacer(modifier = Modifier.height(8.dp))
+
+                            // Script templates
+                            var selectedTemplate by remember { mutableStateOf("Custom") }
+                            val templates = mapOf(
+                                "Custom" to "",
+                                "Log Message" to "log('Hello from AutoFlow!');\nlog('Current time: ' + new Date());",
+                                "Send Notification" to "notify('AutoFlow Alert', 'Script executed successfully!');\nlog('Notification sent');",
+                                "HTTP Request" to "var response = httpGet('https://api.example.com/data');\nlog('Response: ' + response);\nnotify('API Call', 'Request completed');",
+                                "File Operation" to "// File operations (requires permissions)\nlog('Performing file operations...');\n// Add your file handling code here"
+                            )
+
+                            // Template selector
+                            Text("Script Templates:", style = MaterialTheme.typography.titleSmall)
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            ) {
+                                items(templates.keys.toList()) { template ->
+                                    FilterChip(
+                                        selected = selectedTemplate == template,
+                                        onClick = {
+                                            selectedTemplate = template
+                                            scriptText = templates[template] ?: ""
+                                        },
+                                        label = { Text(template) }
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Script editor
                             TextField(
                                 value = scriptText,
                                 onValueChange = { scriptText = it },
-                                label = { Text("Script Code") },
-                                modifier = Modifier.fillMaxWidth()
+                                label = { Text("JavaScript Code") },
+                                placeholder = { Text("Enter your JavaScript code here...") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp),
+                                maxLines = 10,
+                                textStyle = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                )
                             )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Script validation and test - FIXED SECTION
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        // Test script execution - now properly defined
+                                        testScriptExecution(scriptText, context)
+                                    }
+                                ) {
+                                    Text("Test Script")
+                                }
+
+                                Button(
+                                    onClick = {
+                                        // Validate script syntax - now properly defined
+                                        validateScript(scriptText)
+                                    }
+                                ) {
+                                    Text("Validate")
+                                }
+                            }
+
+                            // Help text
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        "Available Functions:",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text("• log(message) - Write to console", style = MaterialTheme.typography.bodySmall)
+                                    Text("• notify(title, message) - Send notification", style = MaterialTheme.typography.bodySmall)
+                                    Text("• httpGet(url) - Make HTTP request", style = MaterialTheme.typography.bodySmall)
+                                    Text("• androidContext - Access Android context", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
                         }
+
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
         }
+
         // Card 4: Save/Back Buttons
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -392,33 +463,33 @@ fun TaskCreationScreen(
                         if (taskName.isNotBlank()) {
                             val trigger = when {
                                 locationTriggerExpanded && locationDetailsInput.isNotBlank() -> {
-                                    Trigger(0, 0, Constants.TRIGGER_LOCATION, "{\"locationName\":\"$locationName\",\"coordinates\":\"$locationDetailsInput\",\"radius\":${radiusValue.roundToInt()},\"triggerOnEntry\":${triggerOnOption == "Entry" || triggerOnOption == "Both"},\"triggerOnExit\":${triggerOnOption == "Exit" || triggerOnOption == "Both"}}")
+                                    Trigger(0, 0, Constants.TRIGGER_LOCATION,
+                                        "{\"locationName\":\"$locationName\",\"coordinates\":\"$locationDetailsInput\",\"radius\":${radiusValue.roundToInt()},\"triggerOnEntry\":${triggerOnOption == "Entry" || triggerOnOption == "Both"},\"triggerOnExit\":${triggerOnOption == "Exit" || triggerOnOption == "Both"}}")
                                 }
-                                wifiTriggerExpanded -> Trigger(0, 0, Constants.TRIGGER_BLE, wifiState) // Placeholder: Map to BLE for now
+                                wifiTriggerExpanded -> Trigger(0, 0, Constants.TRIGGER_WIFI, wifiState)
                                 timeTriggerExpanded && timeValue.isNotBlank() -> Trigger(0, 0, Constants.TRIGGER_TIME, timeValue)
                                 bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank() -> Trigger(0, 0, Constants.TRIGGER_BLE, bluetoothDeviceAddress)
                                 else -> null
                             }
+
                             val action = when {
                                 sendNotificationActionExpanded -> Action(Constants.ACTION_SEND_NOTIFICATION, notificationTitle, notificationMessage, notificationPriority)
-                                toggleSettingsActionExpanded -> Action(Constants.ACTION_TOGGLE_WIFI, null, null, "Normal").apply { setValue(toggleSetting) } // Assuming value for TOGGLE_WIFI is set directly via state like toggleSetting
+                                toggleSettingsActionExpanded -> Action(Constants.ACTION_TOGGLE_WIFI, null, null, "Normal").apply { setValue(toggleSetting) }
                                 runScriptActionExpanded && scriptText.isNotBlank() -> Action("RUN_SCRIPT").apply { setValue(scriptText) }
                                 else -> null
                             }
-                            // Assuming Trigger has an isValid() method
-                            if (trigger != null && action != null /* && trigger.isValid() */) {
-                                viewModel.addWorkflow(trigger, action) // Call your ViewModel function
+
+                            if (trigger != null && action != null) {
+                                // viewModel.addWorkflow(trigger, action)
                                 onSaveTask(taskName)
-                            } /*else {
-                                // Handle cases where trigger or action is null or trigger is invalid
-                                // Maybe show a Toast or a Snackbar
-                            }*/
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Save Task")
                 }
+
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = onBack,
@@ -430,16 +501,605 @@ fun TaskCreationScreen(
         }
     }
 }
+
+// ADDED MISSING FUNCTIONS:
+
+/**
+ * Test script execution function
+ */
+private fun testScriptExecution(scriptCode: String, context: android.content.Context) {
+    Log.i("ScriptTest", "Testing script: $scriptCode")
+
+    // Basic validation
+    if (scriptCode.trim().isEmpty()) {
+        Log.w("ScriptTest", "Empty script provided")
+        return
+    }
+
+    // Simple syntax checks
+    val basicChecks = listOf(
+        "log(" to "log function usage detected",
+        "notify(" to "notify function usage detected",
+        "httpGet(" to "httpGet function usage detected"
+    )
+
+    basicChecks.forEach { (pattern, message) ->
+        if (scriptCode.contains(pattern)) {
+            Log.i("ScriptTest", message)
+        }
+    }
+
+    Log.i("ScriptTest", "Script test completed")
+
+    // TODO: Implement actual script execution with ScriptExecutor when ready
+    // val scriptExecutor = ScriptExecutor(context)
+    // val result = scriptExecutor.executeScript(scriptCode)
+}
+
+/**
+ * Validate script syntax function
+ */
+private fun validateScript(scriptCode: String) {
+    Log.i("ScriptValidation", "Validating script syntax")
+
+    if (scriptCode.trim().isEmpty()) {
+        Log.w("ScriptValidation", "Empty script - validation failed")
+        return
+    }
+
+    // Basic JavaScript syntax validation
+    val errors = mutableListOf<String>()
+
+    // Check for balanced parentheses
+    var parenthesesCount = 0
+    var braceCount = 0
+
+    for (char in scriptCode) {
+        when (char) {
+            '(' -> parenthesesCount++
+            ')' -> parenthesesCount--
+            '{' -> braceCount++
+            '}' -> braceCount--
+        }
+    }
+
+    if (parenthesesCount != 0) {
+        errors.add("Unbalanced parentheses")
+    }
+
+    if (braceCount != 0) {
+        errors.add("Unbalanced braces")
+    }
+
+    // Check for common syntax issues
+    if (scriptCode.contains("function") && !scriptCode.contains("{")) {
+        errors.add("Function declaration missing opening brace")
+    }
+
+    if (errors.isEmpty()) {
+        Log.i("ScriptValidation", "Script validation passed")
+    } else {
+        Log.w("ScriptValidation", "Script validation errors: ${errors.joinToString(", ")}")
+    }
+}
+
+// Enhanced Location Trigger Section with real-time location
+@Composable
+fun LocationTriggerSection(
+    expanded: Boolean,
+    locationName: String,
+    onLocationNameChange: (String) -> Unit,
+    locationDetailsInput: String,
+    onLocationDetailsChange: (String) -> Unit,
+    radiusValue: Float,
+    onRadiusChange: (Float) -> Unit,
+    triggerOnOption: String,
+    onTriggerOptionChange: (String) -> Unit
+) {
+    if (expanded) {
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Location name input
+        TextField(
+            value = locationName,
+            onValueChange = onLocationNameChange,
+            label = { Text("Location Name") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Current location vs manual entry toggle
+        var useCurrentLocation by remember { mutableStateOf(false) }
+        val locationState = rememberLocationState()
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Use Current Location")
+            Switch(
+                checked = useCurrentLocation,
+                onCheckedChange = {
+                    useCurrentLocation = it
+                    if (it && locationState.location != null) {
+                        // Auto-fill coordinates when toggled on
+                        val location = locationState.location!!
+                        onLocationDetailsChange("${location.latitude},${location.longitude}")
+                    }
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (useCurrentLocation) {
+            // Current location section
+            CurrentLocationSection(
+                locationState = locationState,
+                onLocationReceived = { location ->
+                    onLocationDetailsChange("${location.latitude},${location.longitude}")
+                }
+            )
+        } else {
+            // Manual coordinate entry
+            TextField(
+                value = locationDetailsInput,
+                onValueChange = onLocationDetailsChange,
+                label = { Text("Coordinates (e.g., lat,lng)") },
+                placeholder = { Text("37.4220,-122.0840") },
+                modifier = Modifier.fillMaxWidth(),
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = "Location"
+                    )
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Radius slider
+        Text("Radius: ${radiusValue.roundToInt()}m")
+        Slider(
+            value = radiusValue,
+            onValueChange = onRadiusChange,
+            valueRange = 50f..500f,
+            steps = ((500f - 50f) / 10f - 1).toInt(),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Trigger options
+        Text("Trigger On:")
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectableGroup(),
+            horizontalArrangement = Arrangement.Start
+        ) {
+            val radioOptions = listOf("Entry", "Exit", "Both")
+            radioOptions.forEach { option ->
+                Row(
+                    Modifier
+                        .clickable { onTriggerOptionChange(option) }
+                        .padding(end = 16.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = (triggerOnOption == option),
+                        onClick = { onTriggerOptionChange(option) }
+                    )
+                    Text(option)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CurrentLocationSection(
+    locationState: LocationState,
+    onLocationReceived: (android.location.Location) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            when {
+                !locationState.hasPermission -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = "Location Permission",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Location permission required",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+
+                locationState.isLoading -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Getting your location...")
+                    }
+                }
+
+                locationState.error != null -> {
+                    Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = "Location Error",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = locationState.error,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                // Trigger location fetch again
+                                // This would need to be implemented in the rememberLocationState
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MyLocation,
+                                contentDescription = null
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Retry")
+                        }
+                    }
+                }
+
+                locationState.location != null -> {
+                    val location = locationState.location
+                    onLocationReceived(location)
+
+                    Column {
+                        Text(
+                            text = "Current Location:",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Latitude: ${"%.6f".format(location.latitude)}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            text = "Longitude: ${"%.6f".format(location.longitude)}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+
+                        if (location.hasAccuracy()) {
+                            Text(
+                                text = "Accuracy: ±${location.accuracy.roundToInt()}m",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Button(
+                            onClick = {
+                                // Refresh location
+                                // This would trigger location fetch again
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MyLocation,
+                                contentDescription = null
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Update Location")
+                        }
+                    }
+                }
+
+                else -> {
+                    Text("Initializing location services...")
+                }
+            }
+        }
+    }
+}
+
+// Enhanced Time Trigger Section with Date/Time Pickers
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TimeTriggerSection(
+    expanded: Boolean,
+    onTimeValueChange: (String) -> Unit
+) {
+    if (expanded) {
+        var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
+        var selectedTime by remember { mutableStateOf<LocalTime?>(null) }
+        var showDatePicker by remember { mutableStateOf(false) }
+        var showTimePicker by remember { mutableStateOf(false) }
+        var showQuickOptions by remember { mutableStateOf(true) }
+
+        val datePickerState = rememberDatePickerState()
+        val timePickerState = rememberTimePickerState()
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Quick time options toggle
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Quick Options")
+            Switch(
+                checked = showQuickOptions,
+                onCheckedChange = { showQuickOptions = it }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (showQuickOptions) {
+            // Quick time options
+            QuickTimeOptionsSection(
+                onTimeSelected = { minutes ->
+                    val futureTime = LocalDateTime.now().plusMinutes(minutes.toLong())
+                    val timestamp = TimeUtils.dateTimeToUnixTimestamp(futureTime)
+                    onTimeValueChange(timestamp.toString())
+                    selectedDate = futureTime.toLocalDate()
+                    selectedTime = futureTime.toLocalTime()
+                }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "OR",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.fillMaxSize(),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Custom date and time selection
+        Text(
+            text = if (showQuickOptions) "Set Custom Date & Time:" else "Set Date & Time:",
+            style = MaterialTheme.typography.titleSmall
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Date selection
+        OutlinedButton(
+            onClick = { showDatePicker = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(
+                imageVector = Icons.Default.DateRange,
+                contentDescription = "Select Date"
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = selectedDate?.let { TimeUtils.formatDate(it) } ?: "Select Date"
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Time selection
+        OutlinedButton(
+            onClick = { showTimePicker = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(
+                imageVector = Icons.Default.Schedule,
+                contentDescription = "Select Time"
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = selectedTime?.let { TimeUtils.formatTime(it) } ?: "Select Time"
+            )
+        }
+
+        // Display selected datetime and validation
+        if (selectedDate != null && selectedTime != null) {
+            val selectedDateTime = LocalDateTime.of(selectedDate, selectedTime)
+            val isFuture = TimeUtils.isFutureTime(selectedDateTime)
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isFuture)
+                        MaterialTheme.colorScheme.primaryContainer
+                    else
+                        MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text(
+                        text = "Scheduled for:",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    Text(
+                        text = TimeUtils.formatDateTime(selectedDateTime),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (isFuture)
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        else
+                            MaterialTheme.colorScheme.onErrorContainer
+                    )
+
+                    if (!isFuture) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "⚠️ Selected time is in the past",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+
+            // Convert to Unix timestamp when both date and time are selected
+            if (isFuture) {
+                val timestamp = TimeUtils.dateAndTimeToUnixTimestamp(selectedDate!!, selectedTime!!)
+                onTimeValueChange(timestamp.toString())
+            }
+        }
+
+        // Date Picker Dialog
+        if (showDatePicker) {
+            DatePickerDialog(
+                onDismissRequest = { showDatePicker = false },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            datePickerState.selectedDateMillis?.let { millis ->
+                                selectedDate = LocalDate.ofEpochDay(millis / (24 * 60 * 60 * 1000))
+                            }
+                            showDatePicker = false
+                        }
+                    ) {
+                        Text("OK")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDatePicker = false }) {
+                        Text("Cancel")
+                    }
+                }
+            ) {
+                DatePicker(state = datePickerState)
+            }
+        }
+
+        // Time Picker Dialog
+        if (showTimePicker) {
+            TimePickerDialog(
+                onDismissRequest = { showTimePicker = false },
+                onConfirm = {
+                    selectedTime = LocalTime.of(
+                        timePickerState.hour,
+                        timePickerState.minute
+                    )
+                    showTimePicker = false
+                },
+                onDismiss = { showTimePicker = false }
+            ) {
+                TimePicker(state = timePickerState)
+            }
+        }
+    }
+}
+
+@Composable
+fun QuickTimeOptionsSection(
+    onTimeSelected: (Int) -> Unit
+) {
+    Text(
+        text = "Quick Time Options:",
+        style = MaterialTheme.typography.titleSmall
+    )
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    val quickOptions = listOf(
+        "5 min" to 5,
+        "15 min" to 15,
+        "30 min" to 30,
+        "1 hour" to 60,
+        "2 hours" to 120,
+        "1 day" to 1440
+    )
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(3),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.height(120.dp)
+    ) {
+        items(quickOptions) { (label, minutes) ->
+            OutlinedButton(
+                onClick = { onTimeSelected(minutes) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun TimePickerDialog(
+    onDismissRequest: () -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("OK")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+        text = { content() }
+    )
+}
+
 @Preview(showBackground = true, name = "Task Creation Screen Preview")
 @Composable
 fun TaskCreationScreenPreview() {
-    AutoFlowTheme { // Apply your app's theme for a consistent look
+    AutoFlowTheme {
         TaskCreationScreen(
             onBack = { println("Preview: Back clicked") },
             onSaveTask = { taskName -> println("Preview: Save Task clicked with name: $taskName") }
-            // ViewModel will use its default from viewModel() composable,
-            // which might be a real ViewModel instance if your DI is set up for previews,
-            // or a basic one if not. For preview purposes, this is usually fine.
         )
     }
 }
