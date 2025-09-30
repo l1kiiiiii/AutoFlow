@@ -56,7 +56,7 @@ import com.example.autoflow.util.LocationState
 import com.example.autoflow.util.TimeUtils
 import com.example.autoflow.util.refreshLocation
 import com.example.autoflow.util.rememberLocationState
-import com.example.autoflow.viewmodel.WorkflowViewModel
+import com.example.autoflow.data.WorkflowViewModel
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -69,18 +69,32 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.livedata.observeAsState
+import org.json.JSONObject
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskCreationScreen(
     modifier: Modifier = Modifier,
+    workflowId: Long? = null,
     onBack: () -> Unit,
     onSaveTask: (taskName: String) -> Unit,
     viewModel: WorkflowViewModel = viewModel()
 ) {
-    var taskName by remember { mutableStateOf("") }
+    //var taskName by remember { mutableStateOf("") }
     val scrollState = rememberScrollState()
-    val context = LocalContext.current // Added this line
+
+    val context = LocalContext.current //  this line
+
+    // Load existing workflow if editing
+    val workflows by viewModel.getWorkflows().observeAsState()
+    val existingWorkflow = workflowId?.let { id ->
+        workflows?.find { it.id == id }
+    }
+
+    // State variables
+    var taskName by remember { mutableStateOf(existingWorkflow?.workflowName ?: "") }
 
     // States for Triggers
     var locationTriggerExpanded by remember { mutableStateOf(false) }
@@ -108,6 +122,66 @@ fun TaskCreationScreen(
     // State for Run Script Action
     var runScriptActionExpanded by remember { mutableStateOf(false) }
     var scriptText by remember { mutableStateOf("") }
+
+    // Pre-populate fields if editing
+    LaunchedEffect(existingWorkflow) {
+        existingWorkflow?.let { workflow ->
+            taskName = workflow.workflowName
+
+            val trigger = workflow.toTrigger()
+            val action = workflow.toAction()
+
+            // Pre-fill trigger fields
+            trigger?.let {
+                when (it.type) {
+                    Constants.TRIGGER_TIME -> {
+                        timeTriggerExpanded = true
+                        timeValue = it.value ?: ""
+                    }
+                    Constants.TRIGGER_WIFI -> {
+                        wifiTriggerExpanded = true
+                        wifiState = it.value ?: "On"
+                    }
+                    Constants.TRIGGER_BLE -> {
+                        bluetoothDeviceTriggerExpanded = true
+                        bluetoothDeviceAddress = it.value ?: ""
+                    }
+                    Constants.TRIGGER_LOCATION -> {
+                        locationTriggerExpanded = true
+                        // Parse location JSON and populate fields
+                        try {
+                            val locationJson = JSONObject(it.value ?: "{}")
+                            locationName = locationJson.optString("locationName", "")
+                            locationDetailsInput = locationJson.optString("coordinates", "")
+                            radiusValue = locationJson.optDouble("radius", 100.0).toFloat()
+                        } catch (e: Exception) {
+                            Log.e("TaskCreation", "Error parsing location: ${e.message}")
+                        }
+                    }
+                }
+            }
+
+            // Pre-fill action fields
+            action?.let {
+                when (it.type) {
+                    Constants.ACTION_SEND_NOTIFICATION -> {
+                        sendNotificationActionExpanded = true
+                        notificationTitle = it.title ?: ""
+                        notificationMessage = it.message ?: ""
+                        notificationPriority = it.priority ?: "Normal"
+                    }
+                    Constants.ACTION_TOGGLE_WIFI -> {
+                        toggleSettingsActionExpanded = true
+                        toggleSetting = it.value ?: "WiFi"
+                    }
+                    "RUN_SCRIPT" -> {
+                        runScriptActionExpanded = true
+                        scriptText = it.value ?: ""
+                    }
+                }
+            }
+        }
+    }
 
     Column(
         modifier = modifier
@@ -559,6 +633,7 @@ fun TaskCreationScreen(
         // Card 4: Save/Back Buttons
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
+                // Save Button
                 Button(
                     onClick = {
                         Log.d("TaskCreation", "Save button clicked")
@@ -570,25 +645,58 @@ fun TaskCreationScreen(
                             val trigger = when {
                                 locationTriggerExpanded && locationDetailsInput.isNotBlank() -> {
                                     Log.d("TaskCreation", "Creating location trigger")
-                                    Trigger(
-                                        0, // id
-                                        0, // workflowId
-                                        Constants.TRIGGER_LOCATION, // type
-                                        "{\"locationName\":\"$locationName\",\"coordinates\":\"$locationDetailsInput\",\"radius\":${radiusValue.roundToInt()},\"triggerOnEntry\":${triggerOnOption == "Entry" || triggerOnOption == "Both"},\"triggerOnExit\":${triggerOnOption == "Exit" || triggerOnOption == "Both"}}" // value
-                                    )
+                                    Log.d("TaskCreation", "Location details: $locationDetailsInput")
+
+                                    val coordinateParts = locationDetailsInput.split(",")
+                                    if (coordinateParts.size == 2) {
+                                        try {
+                                            val lat = coordinateParts[0].trim().toDoubleOrNull()
+                                            val lng = coordinateParts[1].trim().toDoubleOrNull()
+
+                                            if (lat != null && lng != null) {
+                                                val locationJson = """
+                                {
+                                    "locationName":"${locationName.ifEmpty { "Unnamed Location" }}",
+                                    "coordinates":"$locationDetailsInput",
+                                    "latitude":$lat,
+                                    "longitude":$lng,
+                                    "radius":${radiusValue.roundToInt()},
+                                    "triggerOnEntry":${triggerOnOption == "Entry" || triggerOnOption == "Both"},
+                                    "triggerOnExit":${triggerOnOption == "Exit" || triggerOnOption == "Both"}
                                 }
+                                """.trimIndent()
+
+                                                Log.d("TaskCreation", "Location JSON: $locationJson")
+                                                Trigger(0, 0, Constants.TRIGGER_LOCATION, locationJson)
+                                            } else {
+                                                Log.e("TaskCreation", "Invalid coordinate values")
+                                                null
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e("TaskCreation", "Error parsing coordinates: ${e.message}")
+                                            null
+                                        }
+                                    } else {
+                                        Log.e("TaskCreation", "Invalid coordinate format. Expected: lat,lng")
+                                        null
+                                    }
+                                }
+
                                 wifiTriggerExpanded -> {
                                     Log.d("TaskCreation", "Creating WiFi trigger")
                                     Trigger(0, 0, Constants.TRIGGER_WIFI, wifiState)
                                 }
+
                                 timeTriggerExpanded && timeValue.isNotBlank() -> {
                                     Log.d("TaskCreation", "Creating time trigger")
                                     Trigger(0, 0, Constants.TRIGGER_TIME, timeValue)
                                 }
+
                                 bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank() -> {
                                     Log.d("TaskCreation", "Creating Bluetooth trigger")
                                     Trigger(0, 0, Constants.TRIGGER_BLE, bluetoothDeviceAddress)
                                 }
+
                                 else -> {
                                     Log.w("TaskCreation", "No trigger selected or configured")
                                     null
@@ -600,24 +708,27 @@ fun TaskCreationScreen(
                                 sendNotificationActionExpanded && notificationTitle.isNotBlank() -> {
                                     Log.d("TaskCreation", "Creating notification action")
                                     Action(
-                                        Constants.ACTION_SEND_NOTIFICATION, // type
-                                        notificationTitle, // title
-                                        notificationMessage, // message
-                                        notificationPriority // priority
+                                        Constants.ACTION_SEND_NOTIFICATION,
+                                        notificationTitle,
+                                        notificationMessage,
+                                        notificationPriority
                                     )
                                 }
+
                                 toggleSettingsActionExpanded -> {
                                     Log.d("TaskCreation", "Creating toggle settings action")
                                     val toggleAction = Action(Constants.ACTION_TOGGLE_WIFI, null, null, "Normal")
                                     toggleAction.setValue(toggleSetting)
                                     toggleAction
                                 }
+
                                 runScriptActionExpanded && scriptText.isNotBlank() -> {
                                     Log.d("TaskCreation", "Creating script action")
                                     val scriptAction = Action("RUN_SCRIPT", null, null, null)
                                     scriptAction.setValue(scriptText)
                                     scriptAction
                                 }
+
                                 else -> {
                                     Log.w("TaskCreation", "No action selected or configured")
                                     null
@@ -626,70 +737,92 @@ fun TaskCreationScreen(
 
                             // Validate and save
                             if (trigger != null && action != null) {
-                                Log.d("TaskCreation", "Both trigger and action are valid, saving to database...")
+                                if (workflowId != null) {
+                                    // UPDATING existing workflow
+                                    Log.d("TaskCreation", "Updating workflow $workflowId")
+                                    viewModel.updateWorkflow(
+                                        workflowId,
+                                        taskName,
+                                        trigger,
+                                        action,
+                                        object : com.example.autoflow.data.WorkflowViewModel.WorkflowOperationCallback {
+                                            override fun onSuccess(message: String) {
+                                                Log.d("TaskCreation", "Update success: $message")
+                                                onSaveTask(taskName)
+                                            }
 
-                                viewModel.addWorkflow(trigger, action, object : WorkflowViewModel.WorkflowOperationCallback {
-                                    override fun onSuccess(message: String) {
-                                        Log.d("TaskCreation", "Task saved successfully: $message")
-
-                                        // IMPORTANT: Schedule alarm if it's a time trigger
-                                        if (trigger.type == Constants.TRIGGER_TIME && timeValue.isNotBlank()) {
-                                            try {
-                                                val triggerTimeMillis = timeValue.toLong()
-                                                val notificationTitle = if (action.type == Constants.ACTION_SEND_NOTIFICATION) {
-                                                    action.title ?: "AutoFlow Alert"
-                                                } else {
-                                                    "AutoFlow Alert"
-                                                }
-                                                val notificationMessage = if (action.type == Constants.ACTION_SEND_NOTIFICATION) {
-                                                    action.message ?: "Time trigger activated"
-                                                } else {
-                                                    "Time trigger activated"
-                                                }
-
-                                                // Extract workflow ID from success message
-                                                val workflowId = message.substringAfterLast(":").trim().toLongOrNull() ?: 0
-
-                                                AlarmScheduler.scheduleNotification(
-                                                    context,
-                                                    workflowId,
-                                                    triggerTimeMillis,
-                                                    notificationTitle,
-                                                    notificationMessage
-                                                )
-
-                                                Log.d("TaskCreation", "Alarm scheduled for time: $triggerTimeMillis")
-                                            } catch (e: Exception) {
-                                                Log.e("TaskCreation", "Failed to schedule alarm: ${e.message}")
+                                            override fun onError(error: String) {
+                                                Log.e("TaskCreation", "Update failed: $error")
                                             }
                                         }
+                                    )
+                                } else {
+                                    // CREATING new workflow
+                                    Log.d("TaskCreation", "Creating new workflow")
+                                    viewModel.addWorkflow(
+                                        trigger,
+                                        action,
+                                        object : WorkflowViewModel.WorkflowOperationCallback {
+                                            override fun onSuccess(message: String) {
+                                                Log.d("TaskCreation", "Task saved successfully: $message")
 
-                                        onSaveTask(taskName)
-                                    }
+                                                // Schedule alarm if time trigger
+                                                if (trigger.type == Constants.TRIGGER_TIME && timeValue.isNotBlank()) {
+                                                    try {
+                                                        val triggerTimeMillis = timeValue.toLong()
+                                                        val notificationTitle = if (action.type == Constants.ACTION_SEND_NOTIFICATION) {
+                                                            action.title ?: "AutoFlow Alert"
+                                                        } else {
+                                                            "AutoFlow Alert"
+                                                        }
+                                                        val notificationMessage = if (action.type == Constants.ACTION_SEND_NOTIFICATION) {
+                                                            action.message ?: "Time trigger activated"
+                                                        } else {
+                                                            "Time trigger activated"
+                                                        }
 
-                                    override fun onError(error: String) {
-                                        Log.e("TaskCreation", "Failed to save task: $error")
-                                    }
-                                })
-                            }
+                                                        val workflowId = message.substringAfterLast(":").trim().toLongOrNull() ?: 0
 
-                            else {
-                                Log.w("TaskCreation", "Cannot save - Trigger: $trigger, Action: $action")
-                                // TODO: Show validation error to user
+                                                        AlarmScheduler.scheduleNotification(
+                                                            context,
+                                                            workflowId,
+                                                            triggerTimeMillis,
+                                                            notificationTitle,
+                                                            notificationMessage
+                                                        )
+
+                                                        Log.d("TaskCreation", "Alarm scheduled for time: $triggerTimeMillis")
+                                                    } catch (e: Exception) {
+                                                        Log.e("TaskCreation", "Failed to schedule alarm: ${e.message}")
+                                                    }
+                                                }
+
+                                                onSaveTask(taskName)
+                                            }
+
+                                            override fun onError(error: String) {
+                                                Log.e("TaskCreation", "Failed to save task: $error")
+                                            }
+                                        }
+                                    )
+                                }
+                            } else {
+                                Log.w("TaskCreation", "Cannot save - Missing trigger or action")
                                 when {
-                                    trigger == null -> Log.w("TaskCreation", "No trigger configured")
-                                    action == null -> Log.w("TaskCreation", "No action configured")
+                                    trigger == null -> Log.w("TaskCreation", "Trigger is null or invalid")
+                                    action == null -> Log.w("TaskCreation", "Action is null or invalid")
                                 }
                             }
                         } else {
                             Log.w("TaskCreation", "Task name is blank")
-                            // TODO: Show "Please enter task name" message
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Save Task")
+                    Text(if (workflowId != null) "Update Task" else "Save Task")
                 }
+
+
 
                 Spacer(modifier = Modifier.height(8.dp))
 

@@ -62,12 +62,13 @@ public class WorkflowRepository {
     /**
      * Update workflow entity with callback
      */
-    public void update(@NonNull final WorkflowEntity workflowEntity, @Nullable final UpdateCallback callback) {
+    public void update(@NonNull WorkflowEntity workflow, @Nullable UpdateCallback callback) {
         executorService.execute(() -> {
             try {
-                int updatedRows = workflowDao.update(workflowEntity);
+                int rowsUpdated = workflowDao.update(workflow);
+
                 if (callback != null) {
-                    mainThreadHandler.post(() -> callback.onUpdateComplete(updatedRows > 0));
+                    mainThreadHandler.post(() -> callback.onUpdateComplete(rowsUpdated > 0));
                 }
             } catch (Exception e) {
                 if (callback != null) {

@@ -93,11 +93,16 @@
         implementation(libs.google.play.services.location)
         implementation(libs.play.services.maps)
 
-        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.0")
+        implementation(libs.kotlinx.coroutines.play.services)
 
         implementation(libs.rhino.android)
 
-
-        // For HTTP requests (if not already included)
+        // For HTTP requests and network operations
         implementation(libs.okhttp)
+
+        // Google Maps Compose
+        implementation(libs.maps.compose)
+        implementation(libs.maps.compose.utils)
+        implementation(libs.maps.compose.widgets)
+
     }

@@ -1,11 +1,11 @@
 package com.example.autoflow.model;
 
 public class Action {
-    private String type;
-    private String title;    // For notification action
-    private String message;  // For notification action
-    private String priority; // For notification action
-    private String value;    // Generic value for other parameters (e.g., Wi-Fi state "On"/"Off")
+    public String type;
+    public String title;    // For notification action
+    public String message;  // For notification action
+    public String priority; // For notification action
+    public String value;    // Generic value for other parameters (e.g., Wi-Fi state "On"/"Off")
 
     // Constructor for notification actions
     public Action(String type, String title, String message, String priority) {
