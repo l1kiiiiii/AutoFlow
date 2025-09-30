@@ -13,10 +13,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.autoflow.ui.theme.AutoFlowTheme
 import com.example.autoflow.ui.theme.screens.Dashboard
+import com.example.autoflow.util.NotificationHelper
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Create notification channels early on app start
+        NotificationHelper.createNotificationChannels(this)
         enableEdgeToEdge()
         setContent {
             AutoFlowTheme {
@@ -25,4 +28,3 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-// hello

@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -137,4 +138,9 @@ fun BottomNavigationBar(navController: NavHostController) {
             )
         }
     }
+}
+@Preview(showBackground = true)
+@Composable
+fun DashboardPreview(){
+    Dashboard()
 }

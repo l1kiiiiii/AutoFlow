@@ -242,6 +242,7 @@ public class WorkflowEntity {
             return null;
         }
     }
+    // Helper class for returning two strings (Java equivalent of Kotlin Pair)
 
     // Override equals and hashCode for proper object comparison
     @Override

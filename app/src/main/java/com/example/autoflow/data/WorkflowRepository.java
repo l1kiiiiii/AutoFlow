@@ -15,6 +15,7 @@ public class WorkflowRepository {
 
     public WorkflowRepository(@NonNull AppDatabase database) {
         workflowDao = database.workflowDao();
+
     }
 
     /**

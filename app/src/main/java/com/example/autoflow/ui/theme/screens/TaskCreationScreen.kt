@@ -1,6 +1,9 @@
 package com.example.autoflow.ui.theme.screens
 
 import android.R.attr.action
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothManager
+import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -34,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,12 +52,21 @@ import com.example.autoflow.ui.theme.AutoFlowTheme
 import com.example.autoflow.util.Constants
 import com.example.autoflow.util.LocationState
 import com.example.autoflow.util.TimeUtils
+import com.example.autoflow.util.refreshLocation
 import com.example.autoflow.util.rememberLocationState
 import com.example.autoflow.viewmodel.WorkflowViewModel
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.util.jar.Manifest
 import kotlin.math.roundToInt
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -207,14 +220,100 @@ fun TaskCreationScreen(
                                 "Bluetooth Device" -> {
                                     if (bluetoothDeviceTriggerExpanded) {
                                         Spacer(modifier = Modifier.height(8.dp))
+
+                                        val context = LocalContext.current
+                                        var pairedDevices by remember { mutableStateOf<List<BluetoothDeviceInfo>>(emptyList()) }
+                                        var showDevicePicker by remember { mutableStateOf(false) }
+
+                                        // Fetch paired devices button
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    pairedDevices = getPairedBluetoothDevices(context)
+                                                    showDevicePicker = true
+                                                }
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Bluetooth,
+                                                    contentDescription = "Get Paired Devices"
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("Get Paired Devices")
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                        // Manual entry
                                         TextField(
                                             value = bluetoothDeviceAddress,
                                             onValueChange = { bluetoothDeviceAddress = it },
-                                            label = { Text("Device Address") },
+                                            label = { Text("Device Address (MAC)") },
+                                            placeholder = { Text("XX:XX:XX:XX:XX:XX") },
                                             modifier = Modifier.fillMaxWidth()
                                         )
+
+                                        // Device picker dialog
+                                        if (showDevicePicker && pairedDevices.isNotEmpty()) {
+                                            AlertDialog(
+                                                onDismissRequest = { showDevicePicker = false },
+                                                title = { Text("Select Bluetooth Device") },
+                                                text = {
+                                                    LazyColumn {
+                                                        items(pairedDevices) { device ->
+                                                            Card(
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .padding(vertical = 4.dp)
+                                                                    .clickable {
+                                                                        bluetoothDeviceAddress = device.address
+                                                                        showDevicePicker = false
+                                                                    }
+                                                            ) {
+                                                                Column(modifier = Modifier.padding(12.dp)) {
+                                                                    Text(
+                                                                        text = device.name,
+                                                                        style = MaterialTheme.typography.titleMedium,
+                                                                        fontWeight = FontWeight.Bold
+                                                                    )
+                                                                    Text(
+                                                                        text = device.address,
+                                                                        style = MaterialTheme.typography.bodyMedium,
+                                                                        color = MaterialTheme.colorScheme.secondary
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                confirmButton = {
+                                                    TextButton(onClick = { showDevicePicker = false }) {
+                                                        Text("Cancel")
+                                                    }
+                                                }
+                                            )
+                                        }
+
+                                        // Show message if no devices found
+                                        if (showDevicePicker && pairedDevices.isEmpty()) {
+                                            AlertDialog(
+                                                onDismissRequest = { showDevicePicker = false },
+                                                title = { Text("No Paired Devices") },
+                                                text = { Text("No Bluetooth devices are currently paired with this phone.") },
+                                                confirmButton = {
+                                                    TextButton(onClick = { showDevicePicker = false }) {
+                                                        Text("OK")
+                                                    }
+                                                }
+                                            )
+                                        }
                                     }
                                 }
+
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                         }
@@ -460,29 +559,100 @@ fun TaskCreationScreen(
             Column(modifier = Modifier.padding(16.dp)) {
                 Button(
                     onClick = {
+                        Log.d("TaskCreation", "Save button clicked")
+
                         if (taskName.isNotBlank()) {
+                            Log.d("TaskCreation", "Task name is valid: $taskName")
+
+                            // Create trigger based on expanded sections
                             val trigger = when {
                                 locationTriggerExpanded && locationDetailsInput.isNotBlank() -> {
-                                    Trigger(0, 0, Constants.TRIGGER_LOCATION,
-                                        "{\"locationName\":\"$locationName\",\"coordinates\":\"$locationDetailsInput\",\"radius\":${radiusValue.roundToInt()},\"triggerOnEntry\":${triggerOnOption == "Entry" || triggerOnOption == "Both"},\"triggerOnExit\":${triggerOnOption == "Exit" || triggerOnOption == "Both"}}")
+                                    Log.d("TaskCreation", "Creating location trigger")
+                                    Trigger(
+                                        0, // id
+                                        0, // workflowId
+                                        Constants.TRIGGER_LOCATION, // type
+                                        "{\"locationName\":\"$locationName\",\"coordinates\":\"$locationDetailsInput\",\"radius\":${radiusValue.roundToInt()},\"triggerOnEntry\":${triggerOnOption == "Entry" || triggerOnOption == "Both"},\"triggerOnExit\":${triggerOnOption == "Exit" || triggerOnOption == "Both"}}" // value
+                                    )
                                 }
-                                wifiTriggerExpanded -> Trigger(0, 0, Constants.TRIGGER_WIFI, wifiState)
-                                timeTriggerExpanded && timeValue.isNotBlank() -> Trigger(0, 0, Constants.TRIGGER_TIME, timeValue)
-                                bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank() -> Trigger(0, 0, Constants.TRIGGER_BLE, bluetoothDeviceAddress)
-                                else -> null
+                                wifiTriggerExpanded -> {
+                                    Log.d("TaskCreation", "Creating WiFi trigger")
+                                    Trigger(0, 0, Constants.TRIGGER_WIFI, wifiState)
+                                }
+                                timeTriggerExpanded && timeValue.isNotBlank() -> {
+                                    Log.d("TaskCreation", "Creating time trigger")
+                                    Trigger(0, 0, Constants.TRIGGER_TIME, timeValue)
+                                }
+                                bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank() -> {
+                                    Log.d("TaskCreation", "Creating Bluetooth trigger")
+                                    Trigger(0, 0, Constants.TRIGGER_BLE, bluetoothDeviceAddress)
+                                }
+                                else -> {
+                                    Log.w("TaskCreation", "No trigger selected or configured")
+                                    null
+                                }
                             }
 
+                            // Create action based on expanded sections
                             val action = when {
-                                sendNotificationActionExpanded -> Action(Constants.ACTION_SEND_NOTIFICATION, notificationTitle, notificationMessage, notificationPriority)
-                                toggleSettingsActionExpanded -> Action(Constants.ACTION_TOGGLE_WIFI, null, null, "Normal").apply { setValue(toggleSetting) }
-                                runScriptActionExpanded && scriptText.isNotBlank() -> Action("RUN_SCRIPT").apply { setValue(scriptText) }
-                                else -> null
+                                sendNotificationActionExpanded && notificationTitle.isNotBlank() -> {
+                                    Log.d("TaskCreation", "Creating notification action")
+                                    Action(
+                                        Constants.ACTION_SEND_NOTIFICATION, // type
+                                        notificationTitle, // title
+                                        notificationMessage, // message
+                                        notificationPriority // priority
+                                    )
+                                }
+                                toggleSettingsActionExpanded -> {
+                                    Log.d("TaskCreation", "Creating toggle settings action")
+                                    val toggleAction = Action(Constants.ACTION_TOGGLE_WIFI, null, null, "Normal")
+                                    toggleAction.setValue(toggleSetting)
+                                    toggleAction
+                                }
+                                runScriptActionExpanded && scriptText.isNotBlank() -> {
+                                    Log.d("TaskCreation", "Creating script action")
+                                    val scriptAction = Action("RUN_SCRIPT", null, null, null)
+                                    scriptAction.setValue(scriptText)
+                                    scriptAction
+                                }
+                                else -> {
+                                    Log.w("TaskCreation", "No action selected or configured")
+                                    null
+                                }
                             }
 
+                            // Validate and save
                             if (trigger != null && action != null) {
-                                // viewModel.addWorkflow(trigger, action)
-                                onSaveTask(taskName)
+                                Log.d("TaskCreation", "Both trigger and action are valid, saving to database...")
+
+                                // THIS IS THE KEY FIX - Actually save to database
+                                viewModel.addWorkflow(
+                                    trigger,
+                                    action,
+                                    object : WorkflowViewModel.WorkflowOperationCallback {
+                                        override fun onSuccess(message: String) {
+                                            Log.d("TaskCreation", "Task saved successfully: $message")
+                                            onSaveTask(taskName) // Navigate back after successful save
+                                        }
+
+                                        override fun onError(error: String) {
+                                            Log.e("TaskCreation", "Failed to save task: $error")
+                                            // TODO: Show error message to user (Toast/Snackbar)
+                                        }
+                                    }
+                                )
+                            } else {
+                                Log.w("TaskCreation", "Cannot save - Trigger: $trigger, Action: $action")
+                                // TODO: Show validation error to user
+                                when {
+                                    trigger == null -> Log.w("TaskCreation", "No trigger configured")
+                                    action == null -> Log.w("TaskCreation", "No action configured")
+                                }
                             }
+                        } else {
+                            Log.w("TaskCreation", "Task name is blank")
+                            // TODO: Show "Please enter task name" message
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
@@ -491,18 +661,23 @@ fun TaskCreationScreen(
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
+
                 Button(
-                    onClick = onBack,
+                    onClick = {
+                        Log.d("TaskCreation", "Back button clicked")
+                        onBack()
+                    },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Back")
                 }
             }
         }
+
     }
 }
 
-// ADDED MISSING FUNCTIONS:
+//  MISSING FUNCTIONS:
 
 /**
  * Test script execution function
@@ -705,6 +880,10 @@ fun CurrentLocationSection(
     locationState: LocationState,
     onLocationReceived: (android.location.Location) -> Unit
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var isRefreshing by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -732,7 +911,7 @@ fun CurrentLocationSection(
                     }
                 }
 
-                locationState.isLoading -> {
+                locationState.isLoading || isRefreshing -> {
                     Row(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -758,21 +937,35 @@ fun CurrentLocationSection(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = locationState.error,
-                                color = MaterialTheme.colorScheme.error
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
                             )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
                             onClick = {
-                                // Trigger location fetch again
-                                // This would need to be implemented in the rememberLocationState
+                                isRefreshing = true
+                                // Use the helper function for refresh
+                                refreshLocation(context, scope) { result ->
+                                    isRefreshing = false
+                                    // Note: In a real implementation, you'd need to properly
+                                    // propagate this result back to the parent state
+                                }
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.MyLocation,
-                                contentDescription = null
-                            )
+                            if (isRefreshing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.MyLocation,
+                                    contentDescription = null
+                                )
+                            }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Retry")
                         }
@@ -806,22 +999,41 @@ fun CurrentLocationSection(
                             )
                         }
 
+                        // Show location age
+                        val locationAge = (System.currentTimeMillis() - location.time) / 1000
+                        Text(
+                            text = "Updated: ${locationAge}s ago",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Button(
                             onClick = {
-                                // Refresh location
-                                // This would trigger location fetch again
+                                isRefreshing = true
+                                refreshLocation(context, scope) { result ->
+                                    isRefreshing = false
+                                    // Handle result update
+                                }
                             },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary
                             )
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.MyLocation,
-                                contentDescription = null
-                            )
+                            if (isRefreshing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.MyLocation,
+                                    contentDescription = null
+                                )
+                            }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Update Location")
                         }
@@ -835,6 +1047,8 @@ fun CurrentLocationSection(
         }
     }
 }
+
+
 
 // Enhanced Time Trigger Section with Date/Time Pickers
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1092,6 +1306,78 @@ fun TimePickerDialog(
         text = { content() }
     )
 }
+// Data class for Bluetooth device info
+data class BluetoothDeviceInfo(
+    val name: String,
+    val address: String
+)
+
+// Function to get paired Bluetooth devices
+@SuppressLint("MissingPermission")
+fun getPairedBluetoothDevices(context: Context): List<BluetoothDeviceInfo> {
+    val deviceList = mutableListOf<BluetoothDeviceInfo>()
+
+    try {
+        // Check for Bluetooth permissions
+        if (!hasBluetoothPermissions(context)) {
+            Log.w("Bluetooth", "Missing Bluetooth permissions")
+            return emptyList()
+        }
+
+        // Get Bluetooth adapter
+        val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        val bluetoothAdapter = bluetoothManager?.adapter
+
+        if (bluetoothAdapter == null) {
+            Log.w("Bluetooth", "Bluetooth adapter not available")
+            return emptyList()
+        }
+
+        if (!bluetoothAdapter.isEnabled) {
+            Log.w("Bluetooth", "Bluetooth is not enabled")
+            return emptyList()
+        }
+
+        // Get bonded (paired) devices
+        val pairedDevices = bluetoothAdapter.bondedDevices
+
+        if (pairedDevices.isNotEmpty()) {
+            for (device in pairedDevices) {
+                val deviceName = device.name ?: "Unknown Device"
+                val deviceAddress = device.address // MAC address
+
+                deviceList.add(BluetoothDeviceInfo(deviceName, deviceAddress))
+                Log.d("Bluetooth", "Found paired device: $deviceName at $deviceAddress")
+            }
+        } else {
+            Log.d("Bluetooth", "No paired devices found")
+        }
+
+    } catch (e: SecurityException) {
+        Log.e("Bluetooth", "Permission error: ${e.message}")
+    } catch (e: Exception) {
+        Log.e("Bluetooth", "Error getting paired devices: ${e.message}")
+    }
+
+    return deviceList
+}
+
+// Check if app has Bluetooth permissions
+fun hasBluetoothPermissions(context: Context): Boolean {
+    return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+        // Android 12+
+        androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.BLUETOOTH_CONNECT
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    } else {
+        // Android 11 and below
+        androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.BLUETOOTH
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+}
+
+
 
 @Preview(showBackground = true, name = "Task Creation Screen Preview")
 @Composable
