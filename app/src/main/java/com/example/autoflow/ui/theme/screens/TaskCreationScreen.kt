@@ -1,6 +1,8 @@
 package com.example.autoflow.ui.theme.screens
 
 import android.R.attr.action
+import com.example.autoflow.util.AlarmScheduler
+import androidx.compose.ui.platform.LocalContext
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.content.Context
@@ -626,23 +628,52 @@ fun TaskCreationScreen(
                             if (trigger != null && action != null) {
                                 Log.d("TaskCreation", "Both trigger and action are valid, saving to database...")
 
-                                // THIS IS THE KEY FIX - Actually save to database
-                                viewModel.addWorkflow(
-                                    trigger,
-                                    action,
-                                    object : WorkflowViewModel.WorkflowOperationCallback {
-                                        override fun onSuccess(message: String) {
-                                            Log.d("TaskCreation", "Task saved successfully: $message")
-                                            onSaveTask(taskName) // Navigate back after successful save
+                                viewModel.addWorkflow(trigger, action, object : WorkflowViewModel.WorkflowOperationCallback {
+                                    override fun onSuccess(message: String) {
+                                        Log.d("TaskCreation", "Task saved successfully: $message")
+
+                                        // IMPORTANT: Schedule alarm if it's a time trigger
+                                        if (trigger.type == Constants.TRIGGER_TIME && timeValue.isNotBlank()) {
+                                            try {
+                                                val triggerTimeMillis = timeValue.toLong()
+                                                val notificationTitle = if (action.type == Constants.ACTION_SEND_NOTIFICATION) {
+                                                    action.title ?: "AutoFlow Alert"
+                                                } else {
+                                                    "AutoFlow Alert"
+                                                }
+                                                val notificationMessage = if (action.type == Constants.ACTION_SEND_NOTIFICATION) {
+                                                    action.message ?: "Time trigger activated"
+                                                } else {
+                                                    "Time trigger activated"
+                                                }
+
+                                                // Extract workflow ID from success message
+                                                val workflowId = message.substringAfterLast(":").trim().toLongOrNull() ?: 0
+
+                                                AlarmScheduler.scheduleNotification(
+                                                    context,
+                                                    workflowId,
+                                                    triggerTimeMillis,
+                                                    notificationTitle,
+                                                    notificationMessage
+                                                )
+
+                                                Log.d("TaskCreation", "Alarm scheduled for time: $triggerTimeMillis")
+                                            } catch (e: Exception) {
+                                                Log.e("TaskCreation", "Failed to schedule alarm: ${e.message}")
+                                            }
                                         }
 
-                                        override fun onError(error: String) {
-                                            Log.e("TaskCreation", "Failed to save task: $error")
-                                            // TODO: Show error message to user (Toast/Snackbar)
-                                        }
+                                        onSaveTask(taskName)
                                     }
-                                )
-                            } else {
+
+                                    override fun onError(error: String) {
+                                        Log.e("TaskCreation", "Failed to save task: $error")
+                                    }
+                                })
+                            }
+
+                            else {
                                 Log.w("TaskCreation", "Cannot save - Trigger: $trigger, Action: $action")
                                 // TODO: Show validation error to user
                                 when {
