@@ -1,6 +1,11 @@
 package com.example.autoflow.ui.theme.screens
 
 import android.R.attr.action
+import com.example.autoflow.util.AlarmScheduler
+import androidx.compose.ui.platform.LocalContext
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothManager
+import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -34,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,24 +54,47 @@ import com.example.autoflow.ui.theme.AutoFlowTheme
 import com.example.autoflow.util.Constants
 import com.example.autoflow.util.LocationState
 import com.example.autoflow.util.TimeUtils
+import com.example.autoflow.util.refreshLocation
 import com.example.autoflow.util.rememberLocationState
-import com.example.autoflow.viewmodel.WorkflowViewModel
+import com.example.autoflow.data.WorkflowViewModel
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.util.jar.Manifest
 import kotlin.math.roundToInt
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.livedata.observeAsState
+import org.json.JSONObject
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskCreationScreen(
     modifier: Modifier = Modifier,
+    workflowId: Long? = null,
     onBack: () -> Unit,
     onSaveTask: (taskName: String) -> Unit,
     viewModel: WorkflowViewModel = viewModel()
 ) {
-    var taskName by remember { mutableStateOf("") }
+    //var taskName by remember { mutableStateOf("") }
     val scrollState = rememberScrollState()
-    val context = LocalContext.current // Added this line
+
+    val context = LocalContext.current //  this line
+
+    // Load existing workflow if editing
+    val workflows by viewModel.getWorkflows().observeAsState()
+    val existingWorkflow = workflowId?.let { id ->
+        workflows?.find { it.id == id }
+    }
+
+    // State variables
+    var taskName by remember { mutableStateOf(existingWorkflow?.workflowName ?: "") }
 
     // States for Triggers
     var locationTriggerExpanded by remember { mutableStateOf(false) }
@@ -93,6 +122,66 @@ fun TaskCreationScreen(
     // State for Run Script Action
     var runScriptActionExpanded by remember { mutableStateOf(false) }
     var scriptText by remember { mutableStateOf("") }
+
+    // Pre-populate fields if editing
+    LaunchedEffect(existingWorkflow) {
+        existingWorkflow?.let { workflow ->
+            taskName = workflow.workflowName
+
+            val trigger = workflow.toTrigger()
+            val action = workflow.toAction()
+
+            // Pre-fill trigger fields
+            trigger?.let {
+                when (it.type) {
+                    Constants.TRIGGER_TIME -> {
+                        timeTriggerExpanded = true
+                        timeValue = it.value ?: ""
+                    }
+                    Constants.TRIGGER_WIFI -> {
+                        wifiTriggerExpanded = true
+                        wifiState = it.value ?: "On"
+                    }
+                    Constants.TRIGGER_BLE -> {
+                        bluetoothDeviceTriggerExpanded = true
+                        bluetoothDeviceAddress = it.value ?: ""
+                    }
+                    Constants.TRIGGER_LOCATION -> {
+                        locationTriggerExpanded = true
+                        // Parse location JSON and populate fields
+                        try {
+                            val locationJson = JSONObject(it.value ?: "{}")
+                            locationName = locationJson.optString("locationName", "")
+                            locationDetailsInput = locationJson.optString("coordinates", "")
+                            radiusValue = locationJson.optDouble("radius", 100.0).toFloat()
+                        } catch (e: Exception) {
+                            Log.e("TaskCreation", "Error parsing location: ${e.message}")
+                        }
+                    }
+                }
+            }
+
+            // Pre-fill action fields
+            action?.let {
+                when (it.type) {
+                    Constants.ACTION_SEND_NOTIFICATION -> {
+                        sendNotificationActionExpanded = true
+                        notificationTitle = it.title ?: ""
+                        notificationMessage = it.message ?: ""
+                        notificationPriority = it.priority ?: "Normal"
+                    }
+                    Constants.ACTION_TOGGLE_WIFI -> {
+                        toggleSettingsActionExpanded = true
+                        toggleSetting = it.value ?: "WiFi"
+                    }
+                    "RUN_SCRIPT" -> {
+                        runScriptActionExpanded = true
+                        scriptText = it.value ?: ""
+                    }
+                }
+            }
+        }
+    }
 
     Column(
         modifier = modifier
@@ -207,14 +296,100 @@ fun TaskCreationScreen(
                                 "Bluetooth Device" -> {
                                     if (bluetoothDeviceTriggerExpanded) {
                                         Spacer(modifier = Modifier.height(8.dp))
+
+                                        val context = LocalContext.current
+                                        var pairedDevices by remember { mutableStateOf<List<BluetoothDeviceInfo>>(emptyList()) }
+                                        var showDevicePicker by remember { mutableStateOf(false) }
+
+                                        // Fetch paired devices button
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    pairedDevices = getPairedBluetoothDevices(context)
+                                                    showDevicePicker = true
+                                                }
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Bluetooth,
+                                                    contentDescription = "Get Paired Devices"
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("Get Paired Devices")
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                        // Manual entry
                                         TextField(
                                             value = bluetoothDeviceAddress,
                                             onValueChange = { bluetoothDeviceAddress = it },
-                                            label = { Text("Device Address") },
+                                            label = { Text("Device Address (MAC)") },
+                                            placeholder = { Text("XX:XX:XX:XX:XX:XX") },
                                             modifier = Modifier.fillMaxWidth()
                                         )
+
+                                        // Device picker dialog
+                                        if (showDevicePicker && pairedDevices.isNotEmpty()) {
+                                            AlertDialog(
+                                                onDismissRequest = { showDevicePicker = false },
+                                                title = { Text("Select Bluetooth Device") },
+                                                text = {
+                                                    LazyColumn {
+                                                        items(pairedDevices) { device ->
+                                                            Card(
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .padding(vertical = 4.dp)
+                                                                    .clickable {
+                                                                        bluetoothDeviceAddress = device.address
+                                                                        showDevicePicker = false
+                                                                    }
+                                                            ) {
+                                                                Column(modifier = Modifier.padding(12.dp)) {
+                                                                    Text(
+                                                                        text = device.name,
+                                                                        style = MaterialTheme.typography.titleMedium,
+                                                                        fontWeight = FontWeight.Bold
+                                                                    )
+                                                                    Text(
+                                                                        text = device.address,
+                                                                        style = MaterialTheme.typography.bodyMedium,
+                                                                        color = MaterialTheme.colorScheme.secondary
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                confirmButton = {
+                                                    TextButton(onClick = { showDevicePicker = false }) {
+                                                        Text("Cancel")
+                                                    }
+                                                }
+                                            )
+                                        }
+
+                                        // Show message if no devices found
+                                        if (showDevicePicker && pairedDevices.isEmpty()) {
+                                            AlertDialog(
+                                                onDismissRequest = { showDevicePicker = false },
+                                                title = { Text("No Paired Devices") },
+                                                text = { Text("No Bluetooth devices are currently paired with this phone.") },
+                                                confirmButton = {
+                                                    TextButton(onClick = { showDevicePicker = false }) {
+                                                        Text("OK")
+                                                    }
+                                                }
+                                            )
+                                        }
                                     }
                                 }
+
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                         }
@@ -458,51 +633,215 @@ fun TaskCreationScreen(
         // Card 4: Save/Back Buttons
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
+                // Save Button
                 Button(
                     onClick = {
+                        Log.d("TaskCreation", "Save button clicked")
+
                         if (taskName.isNotBlank()) {
+                            Log.d("TaskCreation", "Task name is valid: $taskName")
+
+                            // Create trigger based on expanded sections
                             val trigger = when {
                                 locationTriggerExpanded && locationDetailsInput.isNotBlank() -> {
-                                    Trigger(0, 0, Constants.TRIGGER_LOCATION,
-                                        "{\"locationName\":\"$locationName\",\"coordinates\":\"$locationDetailsInput\",\"radius\":${radiusValue.roundToInt()},\"triggerOnEntry\":${triggerOnOption == "Entry" || triggerOnOption == "Both"},\"triggerOnExit\":${triggerOnOption == "Exit" || triggerOnOption == "Both"}}")
+                                    Log.d("TaskCreation", "Creating location trigger")
+                                    Log.d("TaskCreation", "Location details: $locationDetailsInput")
+
+                                    val coordinateParts = locationDetailsInput.split(",")
+                                    if (coordinateParts.size == 2) {
+                                        try {
+                                            val lat = coordinateParts[0].trim().toDoubleOrNull()
+                                            val lng = coordinateParts[1].trim().toDoubleOrNull()
+
+                                            if (lat != null && lng != null) {
+                                                val locationJson = """
+                                {
+                                    "locationName":"${locationName.ifEmpty { "Unnamed Location" }}",
+                                    "coordinates":"$locationDetailsInput",
+                                    "latitude":$lat,
+                                    "longitude":$lng,
+                                    "radius":${radiusValue.roundToInt()},
+                                    "triggerOnEntry":${triggerOnOption == "Entry" || triggerOnOption == "Both"},
+                                    "triggerOnExit":${triggerOnOption == "Exit" || triggerOnOption == "Both"}
                                 }
-                                wifiTriggerExpanded -> Trigger(0, 0, Constants.TRIGGER_WIFI, wifiState)
-                                timeTriggerExpanded && timeValue.isNotBlank() -> Trigger(0, 0, Constants.TRIGGER_TIME, timeValue)
-                                bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank() -> Trigger(0, 0, Constants.TRIGGER_BLE, bluetoothDeviceAddress)
-                                else -> null
+                                """.trimIndent()
+
+                                                Log.d("TaskCreation", "Location JSON: $locationJson")
+                                                Trigger(0, 0, Constants.TRIGGER_LOCATION, locationJson)
+                                            } else {
+                                                Log.e("TaskCreation", "Invalid coordinate values")
+                                                null
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e("TaskCreation", "Error parsing coordinates: ${e.message}")
+                                            null
+                                        }
+                                    } else {
+                                        Log.e("TaskCreation", "Invalid coordinate format. Expected: lat,lng")
+                                        null
+                                    }
+                                }
+
+                                wifiTriggerExpanded -> {
+                                    Log.d("TaskCreation", "Creating WiFi trigger")
+                                    Trigger(0, 0, Constants.TRIGGER_WIFI, wifiState)
+                                }
+
+                                timeTriggerExpanded && timeValue.isNotBlank() -> {
+                                    Log.d("TaskCreation", "Creating time trigger")
+                                    Trigger(0, 0, Constants.TRIGGER_TIME, timeValue)
+                                }
+
+                                bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank() -> {
+                                    Log.d("TaskCreation", "Creating Bluetooth trigger")
+                                    Trigger(0, 0, Constants.TRIGGER_BLE, bluetoothDeviceAddress)
+                                }
+
+                                else -> {
+                                    Log.w("TaskCreation", "No trigger selected or configured")
+                                    null
+                                }
                             }
 
+                            // Create action based on expanded sections
                             val action = when {
-                                sendNotificationActionExpanded -> Action(Constants.ACTION_SEND_NOTIFICATION, notificationTitle, notificationMessage, notificationPriority)
-                                toggleSettingsActionExpanded -> Action(Constants.ACTION_TOGGLE_WIFI, null, null, "Normal").apply { setValue(toggleSetting) }
-                                runScriptActionExpanded && scriptText.isNotBlank() -> Action("RUN_SCRIPT").apply { setValue(scriptText) }
-                                else -> null
+                                sendNotificationActionExpanded && notificationTitle.isNotBlank() -> {
+                                    Log.d("TaskCreation", "Creating notification action")
+                                    Action(
+                                        Constants.ACTION_SEND_NOTIFICATION,
+                                        notificationTitle,
+                                        notificationMessage,
+                                        notificationPriority
+                                    )
+                                }
+
+                                toggleSettingsActionExpanded -> {
+                                    Log.d("TaskCreation", "Creating toggle settings action")
+                                    val toggleAction = Action(Constants.ACTION_TOGGLE_WIFI, null, null, "Normal")
+                                    toggleAction.setValue(toggleSetting)
+                                    toggleAction
+                                }
+
+                                runScriptActionExpanded && scriptText.isNotBlank() -> {
+                                    Log.d("TaskCreation", "Creating script action")
+                                    val scriptAction = Action("RUN_SCRIPT", null, null, null)
+                                    scriptAction.setValue(scriptText)
+                                    scriptAction
+                                }
+
+                                else -> {
+                                    Log.w("TaskCreation", "No action selected or configured")
+                                    null
+                                }
                             }
 
+                            // Validate and save
                             if (trigger != null && action != null) {
-                                // viewModel.addWorkflow(trigger, action)
-                                onSaveTask(taskName)
+                                if (workflowId != null) {
+                                    // UPDATING existing workflow
+                                    Log.d("TaskCreation", "Updating workflow $workflowId")
+                                    viewModel.updateWorkflow(
+                                        workflowId,
+                                        taskName,
+                                        trigger,
+                                        action,
+                                        object : com.example.autoflow.data.WorkflowViewModel.WorkflowOperationCallback {
+                                            override fun onSuccess(message: String) {
+                                                Log.d("TaskCreation", "Update success: $message")
+                                                onSaveTask(taskName)
+                                            }
+
+                                            override fun onError(error: String) {
+                                                Log.e("TaskCreation", "Update failed: $error")
+                                            }
+                                        }
+                                    )
+                                } else {
+                                    // CREATING new workflow
+                                    Log.d("TaskCreation", "Creating new workflow")
+                                    viewModel.addWorkflow(
+                                        trigger,
+                                        action,
+                                        object : WorkflowViewModel.WorkflowOperationCallback {
+                                            override fun onSuccess(message: String) {
+                                                Log.d("TaskCreation", "Task saved successfully: $message")
+
+                                                // Schedule alarm if time trigger
+                                                if (trigger.type == Constants.TRIGGER_TIME && timeValue.isNotBlank()) {
+                                                    try {
+                                                        val triggerTimeMillis = timeValue.toLong()
+                                                        val notificationTitle = if (action.type == Constants.ACTION_SEND_NOTIFICATION) {
+                                                            action.title ?: "AutoFlow Alert"
+                                                        } else {
+                                                            "AutoFlow Alert"
+                                                        }
+                                                        val notificationMessage = if (action.type == Constants.ACTION_SEND_NOTIFICATION) {
+                                                            action.message ?: "Time trigger activated"
+                                                        } else {
+                                                            "Time trigger activated"
+                                                        }
+
+                                                        val workflowId = message.substringAfterLast(":").trim().toLongOrNull() ?: 0
+
+                                                        AlarmScheduler.scheduleNotification(
+                                                            context,
+                                                            workflowId,
+                                                            triggerTimeMillis,
+                                                            notificationTitle,
+                                                            notificationMessage
+                                                        )
+
+                                                        Log.d("TaskCreation", "Alarm scheduled for time: $triggerTimeMillis")
+                                                    } catch (e: Exception) {
+                                                        Log.e("TaskCreation", "Failed to schedule alarm: ${e.message}")
+                                                    }
+                                                }
+
+                                                onSaveTask(taskName)
+                                            }
+
+                                            override fun onError(error: String) {
+                                                Log.e("TaskCreation", "Failed to save task: $error")
+                                            }
+                                        }
+                                    )
+                                }
+                            } else {
+                                Log.w("TaskCreation", "Cannot save - Missing trigger or action")
+                                when {
+                                    trigger == null -> Log.w("TaskCreation", "Trigger is null or invalid")
+                                    action == null -> Log.w("TaskCreation", "Action is null or invalid")
+                                }
                             }
+                        } else {
+                            Log.w("TaskCreation", "Task name is blank")
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Save Task")
+                    Text(if (workflowId != null) "Update Task" else "Save Task")
                 }
 
+
+
                 Spacer(modifier = Modifier.height(8.dp))
+
                 Button(
-                    onClick = onBack,
+                    onClick = {
+                        Log.d("TaskCreation", "Back button clicked")
+                        onBack()
+                    },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Back")
                 }
             }
         }
+
     }
 }
 
-// ADDED MISSING FUNCTIONS:
+//  MISSING FUNCTIONS:
 
 /**
  * Test script execution function
@@ -705,6 +1044,10 @@ fun CurrentLocationSection(
     locationState: LocationState,
     onLocationReceived: (android.location.Location) -> Unit
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var isRefreshing by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -732,7 +1075,7 @@ fun CurrentLocationSection(
                     }
                 }
 
-                locationState.isLoading -> {
+                locationState.isLoading || isRefreshing -> {
                     Row(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -758,21 +1101,35 @@ fun CurrentLocationSection(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = locationState.error,
-                                color = MaterialTheme.colorScheme.error
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
                             )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
                             onClick = {
-                                // Trigger location fetch again
-                                // This would need to be implemented in the rememberLocationState
+                                isRefreshing = true
+                                // Use the helper function for refresh
+                                refreshLocation(context, scope) { result ->
+                                    isRefreshing = false
+                                    // Note: In a real implementation, you'd need to properly
+                                    // propagate this result back to the parent state
+                                }
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.MyLocation,
-                                contentDescription = null
-                            )
+                            if (isRefreshing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.MyLocation,
+                                    contentDescription = null
+                                )
+                            }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Retry")
                         }
@@ -806,22 +1163,41 @@ fun CurrentLocationSection(
                             )
                         }
 
+                        // Show location age
+                        val locationAge = (System.currentTimeMillis() - location.time) / 1000
+                        Text(
+                            text = "Updated: ${locationAge}s ago",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Button(
                             onClick = {
-                                // Refresh location
-                                // This would trigger location fetch again
+                                isRefreshing = true
+                                refreshLocation(context, scope) { result ->
+                                    isRefreshing = false
+                                    // Handle result update
+                                }
                             },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary
                             )
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.MyLocation,
-                                contentDescription = null
-                            )
+                            if (isRefreshing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.MyLocation,
+                                    contentDescription = null
+                                )
+                            }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Update Location")
                         }
@@ -835,6 +1211,8 @@ fun CurrentLocationSection(
         }
     }
 }
+
+
 
 // Enhanced Time Trigger Section with Date/Time Pickers
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1092,6 +1470,78 @@ fun TimePickerDialog(
         text = { content() }
     )
 }
+// Data class for Bluetooth device info
+data class BluetoothDeviceInfo(
+    val name: String,
+    val address: String
+)
+
+// Function to get paired Bluetooth devices
+@SuppressLint("MissingPermission")
+fun getPairedBluetoothDevices(context: Context): List<BluetoothDeviceInfo> {
+    val deviceList = mutableListOf<BluetoothDeviceInfo>()
+
+    try {
+        // Check for Bluetooth permissions
+        if (!hasBluetoothPermissions(context)) {
+            Log.w("Bluetooth", "Missing Bluetooth permissions")
+            return emptyList()
+        }
+
+        // Get Bluetooth adapter
+        val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        val bluetoothAdapter = bluetoothManager?.adapter
+
+        if (bluetoothAdapter == null) {
+            Log.w("Bluetooth", "Bluetooth adapter not available")
+            return emptyList()
+        }
+
+        if (!bluetoothAdapter.isEnabled) {
+            Log.w("Bluetooth", "Bluetooth is not enabled")
+            return emptyList()
+        }
+
+        // Get bonded (paired) devices
+        val pairedDevices = bluetoothAdapter.bondedDevices
+
+        if (pairedDevices.isNotEmpty()) {
+            for (device in pairedDevices) {
+                val deviceName = device.name ?: "Unknown Device"
+                val deviceAddress = device.address // MAC address
+
+                deviceList.add(BluetoothDeviceInfo(deviceName, deviceAddress))
+                Log.d("Bluetooth", "Found paired device: $deviceName at $deviceAddress")
+            }
+        } else {
+            Log.d("Bluetooth", "No paired devices found")
+        }
+
+    } catch (e: SecurityException) {
+        Log.e("Bluetooth", "Permission error: ${e.message}")
+    } catch (e: Exception) {
+        Log.e("Bluetooth", "Error getting paired devices: ${e.message}")
+    }
+
+    return deviceList
+}
+
+// Check if app has Bluetooth permissions
+fun hasBluetoothPermissions(context: Context): Boolean {
+    return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+        // Android 12+
+        androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.BLUETOOTH_CONNECT
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    } else {
+        // Android 11 and below
+        androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.BLUETOOTH
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+}
+
+
 
 @Preview(showBackground = true, name = "Task Creation Screen Preview")
 @Composable

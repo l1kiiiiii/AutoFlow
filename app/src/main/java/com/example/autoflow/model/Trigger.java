@@ -11,8 +11,8 @@ import java.util.regex.Pattern;
 public class Trigger {
     private final long id;
     private final long workflowId;
-    private final String type;
-    private final String value;
+    public final String type;
+    public final String value;
 
     // Validation patterns
     private static final Pattern MAC_ADDRESS_PATTERN =

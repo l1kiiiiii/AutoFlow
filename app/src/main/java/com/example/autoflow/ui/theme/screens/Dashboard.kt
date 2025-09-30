@@ -2,46 +2,37 @@ package com.example.autoflow.ui.theme.screens
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.navigation.NavHostController
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Dashboard(modifier: Modifier = Modifier) {
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = navBackStackEntry?.destination
 
     Scaffold(
-        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        modifier = modifier,
         topBar = {
             TopAppBar(
                 title = { Text(text = "AutoFlow") },
-                scrollBehavior = scrollBehavior,
                 actions = {
-                    IconButton(onClick = { /* TODO: Handle notification icon click */ }) {
+                    IconButton(onClick = { /* TODO: Handle notification */ }) {
                         Icon(
                             imageVector = Icons.Filled.Notifications,
                             contentDescription = "Notifications"
@@ -50,91 +41,124 @@ fun Dashboard(modifier: Modifier = Modifier) {
                 }
             )
         },
-        bottomBar = { BottomNavigationBar(navController) }
+        bottomBar = {
+            NavigationBar {
+                // Home
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Home, "Home") },
+                    label = { Text("Home") },
+                    selected = currentDestination?.route == "home",
+                    onClick = {
+                        navController.navigate("home") {
+                            popUpTo("home") { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                )
+
+                // Create Task
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Add, "Create") },
+                    label = { Text("Create") },
+                    selected = currentDestination?.route == "create_task",
+                    onClick = {
+                        navController.navigate("create_task") {
+                            launchSingleTop = true
+                        }
+                    }
+                )
+
+                // Profile
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Person, "Profile") },
+                    label = { Text("Profile") },
+                    selected = currentDestination?.route == "profile",
+                    onClick = {
+                        navController.navigate("profile") {
+                            popUpTo("home")
+                            launchSingleTop = true
+                        }
+                    }
+                )
+
+                // Settings
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Settings, "Settings") },
+                    label = { Text("Settings") },
+                    selected = currentDestination?.route == "settings",
+                    onClick = {
+                        navController.navigate("settings") {
+                            popUpTo("home")
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
+        }
     ) { innerPadding ->
         NavHost(
             navController = navController,
             startDestination = "home",
             modifier = Modifier.padding(innerPadding)
         ) {
+            // Home screen
             composable("home") {
                 HomeScreen(
-                    modifier = Modifier,
-                    onNavigateToCreateTask = { navController.navigate("task_creation") },
-                    onNavigateToProfile = { navController.navigate("profile") }
+                    onNavigateToCreateTask = {
+                        navController.navigate("create_task")
+                    },
+                    onNavigateToEditTask = { workflowId ->
+                        navController.navigate("edit_task/$workflowId")
+                    },
+                    onNavigateToProfile = {
+                        navController.navigate("profile")
+                    }
                 )
             }
-            composable("task_creation") {
+
+            // Create task screen
+            composable("create_task") {
                 TaskCreationScreen(
-                    onBack = { navController.popBackStack() },
+                    workflowId = null,
+                    onBack = {
+                        navController.popBackStack()
+                    },
                     onSaveTask = { taskName ->
                         navController.navigate("home") {
-                            popUpTo(navController.graph.startDestinationId) {
-                                inclusive = true
-                            }
-                            launchSingleTop = true
+                            popUpTo("home") { inclusive = true }
                         }
                     }
                 )
             }
+
+            // Edit task screen
+            composable(
+                route = "edit_task/{workflowId}",
+                arguments = listOf(navArgument("workflowId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val workflowId = backStackEntry.arguments?.getLong("workflowId") ?: 0L
+                TaskCreationScreen(
+                    workflowId = workflowId,
+                    onBack = {
+                        navController.popBackStack()
+                    },
+                    onSaveTask = {
+                        navController.navigate("home") {
+                            popUpTo("home") { inclusive = true }
+                        }
+                    }
+                )
+            }
+
+            // Profile screen
             composable("profile") {
                 ProfileManagment()
             }
+
+            // Settings screen
             composable("settings") {
                 Settings()
             }
-        }
-    }
-}
-
-@Composable
-fun BottomNavigationBar(navController: NavHostController) {
-    val items = listOf(
-        NavItem("Home", Icons.Default.Home),
-        NavItem("Create Task", Icons.Default.Create),
-        NavItem("Profile", Icons.Default.Person),
-        NavItem("Settings", Icons.Default.Settings)
-    )
-
-    val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = backStackEntry?.destination?.route
-
-    NavigationBar {
-        items.forEachIndexed { index, item ->
-            NavigationBarItem(
-                icon = {
-                    BadgedBox(
-                        badge = {
-                            if (item.badgeCount != null && item.badgeCount > 0) {
-                                Badge { Text(item.badgeCount.toString()) }
-                            }
-                        }
-                    ) {
-                        Icon(item.icon, contentDescription = item.label)
-                    }
-                },
-                label = { Text(item.label) },
-                selected = currentRoute == when (index) {
-                    0 -> "home"
-                    1 -> "task_creation"
-                    2 -> "profile"
-                    3 -> "settings"
-                    else -> "home"
-                },
-                onClick = {
-                    navController.navigate(when (index) {
-                        0 -> "home"
-                        1 -> "task_creation"
-                        2 -> "profile"
-                        3 -> "settings"
-                        else -> "home"
-                    }) {
-                        popUpTo(navController.graph.startDestinationId) { saveState = true }
-                        restoreState = true
-                        launchSingleTop = true
-                    }
-                }
-            )
         }
     }
 }
