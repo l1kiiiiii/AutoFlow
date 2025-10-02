@@ -39,18 +39,28 @@ object RingerModeHelper {
         }
     }
 
+    @Suppress("InlinedApi")
     private fun setDnd(context: Context, filter: Int) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (!nm.isNotificationPolicyAccessGranted) {
-            promptForDndAccess(context)
-            Toast.makeText(context, "Grant ‘Do Not Disturb’ access and retry", Toast.LENGTH_LONG).show()
+            // Do NOT try to open settings from here; return and let UI prompt in foreground
             return
         }
-        try {
-            nm.setInterruptionFilter(filter)
-        } catch (e: Exception) {
-            Toast.makeText(context, "Unable to change DND mode: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
+        // Minimal “quiet” policy; adjust categories as needed
+        val policy = NotificationManager.Policy(
+            NotificationManager.Policy.PRIORITY_CATEGORY_ALARMS,
+            NotificationManager.Policy.PRIORITY_SENDERS_ANY,
+            NotificationManager.Policy.PRIORITY_SENDERS_ANY,
+            NotificationManager.Policy.SUPPRESSED_EFFECT_PEEK or
+                    NotificationManager.Policy.SUPPRESSED_EFFECT_FULL_SCREEN_INTENT or
+                    NotificationManager.Policy.SUPPRESSED_EFFECT_LIGHTS or
+                    NotificationManager.Policy.SUPPRESSED_EFFECT_STATUS_BAR or
+                    NotificationManager.Policy.SUPPRESSED_EFFECT_NOTIFICATION_LIST or
+                    NotificationManager.Policy.SUPPRESSED_EFFECT_AMBIENT,
+            NotificationManager.Policy.CONVERSATION_SENDERS_IMPORTANT
+        )
+        nm.setNotificationPolicy(policy)
+        nm.setInterruptionFilter(filter) // PRIORITY or ALARMS recommended for “silent but vibrate”
     }
 
     fun promptForDndAccess(context: Context) {

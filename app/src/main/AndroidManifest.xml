@@ -14,8 +14,6 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.INTERNET" />
@@ -29,7 +27,10 @@
     <!-- silent/dnd -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
+    <!-- Only for DPC builds -->
+    <uses-permission android:name="android.permission.BIND_DEVICE_ADMIN" tools:ignore="ProtectedPermissions" />
 
     <application
         android:allowBackup="true"
@@ -41,6 +42,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AutoFlow">
 
+        <!-- Main Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -50,12 +52,55 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+
+        <!-- Block Activity (shows when app is blocked) -->
+        <activity
+            android:name=".blocker.BlockActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AutoFlow"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true" />
+
+        <!-- Receivers -->
         <receiver
             android:name=".receiver.AlarmReceiver"
             android:enabled="true"
             android:exported="false" />
+
+        <!-- Geofence Receiver (NEW) -->
+        <receiver
+            android:name=".geofence.GeofenceReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <receiver
+            android:name=".dpc.MyDeviceAdminReceiver"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:exported="true">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin_receiver" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Accessibility Service (FIXED: exported=true) -->
+        <service
+            android:name=".blocker.AppBlockAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_config" />
+        </service>
+
         <meta-data
             android:name="com.google.android.gms.version"
-            android:value="@integer/google_play_services_version"/>
+            android:value="@integer/google_play_services_version" />
     </application>
 </manifest>
