@@ -1690,6 +1690,7 @@ fun QuickTimeOptionsSection(
     Spacer(modifier = Modifier.height(8.dp))
 
     val quickOptions = listOf(
+        "2 min" to 2,
         "5 min" to 5,
         "15 min" to 15,
         "30 min" to 30,
