@@ -5,4 +5,5 @@
     android:notificationTimeout="0"
     android:canRetrieveWindowContent="true"
     android:summary="Blocks selected apps inside geofenced areas"
-    android:description="When enabled, prevents opening selected apps at restricted locations. This helps maintain focus in specific areas like work or study zones." />
+    android:description="@string/accessibility_service_description"
+    />

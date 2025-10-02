@@ -72,6 +72,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.livedata.observeAsState
 import org.json.JSONObject
+import org.json.JSONArray // Added this import
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Checkbox
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -127,6 +130,13 @@ fun TaskCreationScreen(
     var soundModeActionExpanded by remember { mutableStateOf(false) }
     var selectedSoundMode by remember { mutableStateOf(Constants.SOUND_MODE_RING) }
 
+    // Add these with other action state variables around line where you have soundModeActionExpanded
+    var appBlockingActionExpanded by remember { mutableStateOf(false) }
+    var selectedAppsToBlock by remember { mutableStateOf(listOf<String>()) }
+    var blockingRadius by remember { mutableFloatStateOf(100f) }
+    var useLocationTriggerForBlocking by remember { mutableStateOf(true) } // Link to location trigger
+
+
     // Pre-populate fields if editing
     LaunchedEffect(existingWorkflow) {
         existingWorkflow?.let { workflow ->
@@ -181,6 +191,24 @@ fun TaskCreationScreen(
                     "RUN_SCRIPT" -> {
                         runScriptActionExpanded = true
                         scriptText = it.value ?: ""
+                    }
+                    Constants.ACTION_BLOCK_APPS -> {
+                        appBlockingActionExpanded = true
+                        try {
+                            val blockingJson = JSONObject(it.value ?: "{}")
+                            val packagesArray = blockingJson.optJSONArray("packages")
+                            selectedAppsToBlock = (0 until (packagesArray?.length() ?: 0)).map { i ->
+                                packagesArray!!.getString(i)
+                            }
+                            useLocationTriggerForBlocking = blockingJson.optBoolean("useLocationTrigger", true)
+                            blockingRadius = blockingJson.optDouble("radius", 100.0).toFloat()
+                        } catch (e: Exception) {
+                            Log.e("TaskCreation", "Error parsing app blocking action: ${e.message}")
+                        }
+                    }
+                    Constants.ACTION_SET_SOUND_MODE -> {
+                        soundModeActionExpanded = true
+                        selectedSoundMode = it.value ?: Constants.SOUND_MODE_RING
                     }
                 }
             }
@@ -516,10 +544,6 @@ fun TaskCreationScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    // State
-                    var soundModeActionExpanded by remember { mutableStateOf(false) }
-                    var selectedSoundMode by remember { mutableStateOf(Constants.SOUND_MODE_RING) }
-
                         // Toggle section
                     ActionHeaderRow(
                         title = "Set sound mode",
@@ -563,6 +587,159 @@ fun TaskCreationScreen(
                             }
                         }
                     }
+                    // App Blocking Action (after sound mode section)
+                    ActionHeaderRow(
+                        title = "Block Apps at Location",
+                        expanded = appBlockingActionExpanded,
+                        onToggle = { appBlockingActionExpanded = !appBlockingActionExpanded }
+                    )
+
+                    if (appBlockingActionExpanded) {
+                        Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                            // Link to location trigger
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = useLocationTriggerForBlocking,
+                                    onCheckedChange = { useLocationTriggerForBlocking = it }
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text("Use location trigger settings")
+                            }
+
+                            if (!useLocationTriggerForBlocking) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "Blocking radius (meters):",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Slider(
+                                    value = blockingRadius,
+                                    onValueChange = { blockingRadius = it },
+                                    valueRange = 50f..1000f,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Text(
+                                    "${blockingRadius.roundToInt()}m",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            Spacer(Modifier.height(12.dp))
+
+                            // App selection
+                            Text(
+                                "Select apps to block:",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+
+                            Spacer(Modifier.height(8.dp))
+
+                            // Predefined popular apps
+                            val popularApps = listOf(
+                                "Instagram" to "com.instagram.android",
+                                "TikTok" to "com.zhiliaoapp.musically",
+                                "Facebook" to "com.facebook.katana",
+                                "Snapchat" to "com.snapchat.android",
+                                "Twitter/X" to "com.twitter.android",
+                                "YouTube" to "com.google.android.youtube",
+                                "WhatsApp" to "com.whatsapp",
+                                "Telegram" to "org.telegram.messenger"
+                            )
+
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(2),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.height(200.dp)
+                            ) {
+                                items(popularApps) { (appName, packageName) ->
+                                    val isSelected = selectedAppsToBlock.contains(packageName)
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = {
+                                            selectedAppsToBlock = if (isSelected) {
+                                                selectedAppsToBlock - packageName
+                                            } else {
+                                                selectedAppsToBlock + packageName
+                                            }
+                                        },
+                                        label = { Text(appName, style = MaterialTheme.typography.bodySmall) }
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.height(12.dp))
+
+                            // Custom package input
+                            var customPackage by remember { mutableStateOf("") }
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                TextField(
+                                    value = customPackage,
+                                    onValueChange = { customPackage = it },
+                                    label = { Text("Custom package name") },
+                                    placeholder = { Text("com.example.app") },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                OutlinedButton(
+                                    onClick = {
+                                        if (customPackage.isNotBlank() && !selectedAppsToBlock.contains(customPackage)) {
+                                            selectedAppsToBlock = selectedAppsToBlock + customPackage
+                                            customPackage = ""
+                                        }
+                                    },
+                                    enabled = customPackage.isNotBlank()
+                                ) {
+                                    Text("Add")
+                                }
+                            }
+
+                            // Show selected packages
+                            if (selectedAppsToBlock.isNotEmpty()) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "Selected: ${selectedAppsToBlock.size} apps",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            // Requirements notice
+                            Spacer(Modifier.height(12.dp))
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        "Requirements:",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        "• Enable Accessibility Service in phone settings",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        "• Grant location permissions for geofencing",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        "• Apps will be blocked when entering the location",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                    }
+
 
 
                     // Run Script Action (Enhanced) - Fixed version
@@ -780,6 +957,26 @@ fun TaskCreationScreen(
                                     val scriptAction = Action("RUN_SCRIPT", null, null, null)
                                     scriptAction.setValue(scriptText)
                                     scriptAction
+                                }
+                                soundModeActionExpanded -> {
+                                    Log.d("TaskCreation", "Creating sound mode action: $selectedSoundMode")
+                                    Action(Constants.ACTION_SET_SOUND_MODE, null, null, null).apply {
+                                        setValue(selectedSoundMode)
+                                    }
+                                }
+                                // Add this case in your action creation when block (around line where you handle other actions)
+                                appBlockingActionExpanded && selectedAppsToBlock.isNotEmpty() -> {
+                                    Log.d("TaskCreation", "Creating app blocking action")
+                                    val blockingData = JSONObject().apply {
+                                        put("packages", JSONArray(selectedAppsToBlock))
+                                        put("useLocationTrigger", useLocationTriggerForBlocking)
+                                        if (!useLocationTriggerForBlocking) {
+                                            put("radius", blockingRadius.roundToInt())
+                                        }
+                                    }
+                                    Action(Constants.ACTION_BLOCK_APPS, null, null, null).apply {
+                                        setValue(blockingData.toString())
+                                    }
                                 }
 
                                 else -> {
