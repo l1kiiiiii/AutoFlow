@@ -123,6 +123,10 @@ fun TaskCreationScreen(
     var runScriptActionExpanded by remember { mutableStateOf(false) }
     var scriptText by remember { mutableStateOf("") }
 
+    // State
+    var soundModeActionExpanded by remember { mutableStateOf(false) }
+    var selectedSoundMode by remember { mutableStateOf(Constants.SOUND_MODE_RING) }
+
     // Pre-populate fields if editing
     LaunchedEffect(existingWorkflow) {
         existingWorkflow?.let { workflow ->
@@ -512,6 +516,55 @@ fun TaskCreationScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
+                    // State
+                    var soundModeActionExpanded by remember { mutableStateOf(false) }
+                    var selectedSoundMode by remember { mutableStateOf(Constants.SOUND_MODE_RING) }
+
+                        // Toggle section
+                    ActionHeaderRow(
+                        title = "Set sound mode",
+                        expanded = soundModeActionExpanded,
+                        onToggle = { soundModeActionExpanded = !soundModeActionExpanded }
+                    )
+
+                    if (soundModeActionExpanded) {
+                        Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                            val options = listOf(
+                                "Ring" to Constants.SOUND_MODE_RING,
+                                "Vibrate" to Constants.SOUND_MODE_VIBRATE,
+                                "Silent" to Constants.SOUND_MODE_SILENT,
+                                "DND (Total silence)" to Constants.SOUND_MODE_DND_NONE,
+                                "DND (Priority)" to Constants.SOUND_MODE_DND_PRIORITY,
+                                "DND (Alarms only)" to Constants.SOUND_MODE_DND_ALARMS,
+                                "Turn off DND" to Constants.SOUND_MODE_DND_ALL
+                            )
+                            options.forEach { (label, value) ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { selectedSoundMode = value }
+                                        .padding(vertical = 6.dp)
+                                ) {
+                                    RadioButton(
+                                        selected = selectedSoundMode == value,
+                                        onClick = { selectedSoundMode = value }
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(label)
+                                }
+                            }
+                            if (selectedSoundMode.startsWith("dnd_")) {
+                                Text(
+                                    "Requires Do Not Disturb access; you may be prompted to grant it.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+
                     // Run Script Action (Enhanced) - Fixed version
                     Column {
                         Row(
@@ -841,7 +894,27 @@ fun TaskCreationScreen(
     }
 }
 
-//  MISSING FUNCTIONS:
+@Composable
+fun ActionHeaderRow(
+    title: String,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onToggle() }
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = title, style = MaterialTheme.typography.bodyLarge)
+        Icon(
+            imageVector = if (expanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
+            contentDescription = if (expanded) "Collapse" else "Expand"
+        )
+    }
+}
 
 /**
  * Test script execution function

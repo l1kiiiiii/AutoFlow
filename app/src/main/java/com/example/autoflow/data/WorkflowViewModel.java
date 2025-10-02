@@ -98,7 +98,7 @@ public class WorkflowViewModel extends AndroidViewModel {
     }
 
     // Delete a workflow
-    public void deleteWorkflow(long workflowId) {
+    public void deleteWorkflow(long workflowId) {   
         repository.delete(workflowId, new WorkflowRepository.DeleteCallback() {
             @Override
             public void onDeleteComplete(boolean success) {
