@@ -1,22 +1,15 @@
-package com.example.autoflow.ui.theme.screens
+package com.example.autoflow.ui.screens
 
-import com.example.autoflow.util.AlarmScheduler
-import androidx.compose.ui.platform.LocalContext
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.util.Log
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -26,1220 +19,1118 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ArrowDropUp
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.*
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.autoflow.viewmodel.WorkflowViewModel
 import com.example.autoflow.model.Action
 import com.example.autoflow.model.Trigger
 import com.example.autoflow.ui.theme.AutoFlowTheme
-import com.example.autoflow.util.Constants
-import com.example.autoflow.util.LocationState
-import com.example.autoflow.util.TimeUtils
-import com.example.autoflow.util.refreshLocation
-import com.example.autoflow.util.rememberLocationState
+import com.example.autoflow.util.*
+import kotlinx.coroutines.launch
+import org.json.JSONObject
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import kotlin.math.roundToInt
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.livedata.observeAsState
-import org.json.JSONObject
-import org.json.JSONArray // Added this import
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Checkbox
-import androidx.compose.ui.text.style.TextAlign
-import com.example.autoflow.viewmodel.WorkflowViewModel
 
-
-data class Condition(
-    val type: String,
-    val parameters: JSONObject,
-    val summary: String
-)
-
+/**
+ * Production-ready Task Creation Screen with comprehensive error handling
+ * Features:
+ * - Null safety throughout
+ * - Try-catch blocks for critical operations
+ * - Input validation
+ * - Proper state management
+ * - Memory leak prevention
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskCreationScreen(
     modifier: Modifier = Modifier,
     workflowId: Long? = null,
-    onBack: () -> Unit,
-    onSaveTask: (taskName: String) -> Unit,
+    onBack: () -> Unit = {},
+    onSaveTask: (taskName: String) -> Unit = {},
     viewModel: WorkflowViewModel = viewModel()
 ) {
-    //var taskName by remember { mutableStateOf("") }
     val scrollState = rememberScrollState()
-
-    val context = LocalContext.current //  this line
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     // Load existing workflow if editing
-    val workflows by viewModel.getWorkflows().observeAsState()
-    val existingWorkflow = workflowId?.let { id ->
-        workflows?.find { it.id == id }
+    val workflows by viewModel.getWorkflows().observeAsState(emptyList())
+    val existingWorkflow = remember(workflowId, workflows) {
+        workflowId?.let { id -> workflows?.find { it.id == id } }
     }
 
-    // State variables
-    var taskName by remember { mutableStateOf(existingWorkflow?.workflowName ?: "") }
+    // Task name state
+    var taskName by remember { mutableStateOf("") }
+    var taskNameError by remember { mutableStateOf<String?>(null) }
 
-    // States for Triggers
+    // Trigger states
     var locationTriggerExpanded by remember { mutableStateOf(false) }
     var locationName by remember { mutableStateOf("") }
     var locationDetailsInput by remember { mutableStateOf("") }
     var radiusValue by remember { mutableFloatStateOf(100f) }
     var triggerOnOption by remember { mutableStateOf("Entry") }
+
     var wifiTriggerExpanded by remember { mutableStateOf(false) }
     var wifiState by remember { mutableStateOf("On") }
+
     var timeTriggerExpanded by remember { mutableStateOf(false) }
     var timeValue by remember { mutableStateOf("") }
+
     var bluetoothDeviceTriggerExpanded by remember { mutableStateOf(false) }
     var bluetoothDeviceAddress by remember { mutableStateOf("") }
 
-    // State for Send Notification Action
+    // Action states
     var sendNotificationActionExpanded by remember { mutableStateOf(false) }
     var notificationTitle by remember { mutableStateOf("") }
     var notificationMessage by remember { mutableStateOf("") }
     var notificationPriority by remember { mutableStateOf("Normal") }
 
-    // State for Toggle Settings Action
     var toggleSettingsActionExpanded by remember { mutableStateOf(false) }
     var toggleSetting by remember { mutableStateOf("WiFi") }
 
-    // State for Run Script Action
     var runScriptActionExpanded by remember { mutableStateOf(false) }
     var scriptText by remember { mutableStateOf("") }
 
-    // State
-    var soundModeActionExpanded by remember { mutableStateOf(false) }
-    var selectedSoundMode by remember { mutableStateOf(Constants.SOUND_MODE_RING) }
+    // Error/success messages
+    var showErrorDialog by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("") }
+    var showSuccessSnackbar by remember { mutableStateOf(false) }
 
-    // Add these with other action state variables around line where you have soundModeActionExpanded
-    var appBlockingActionExpanded by remember { mutableStateOf(false) }
-    var selectedAppsToBlock by remember { mutableStateOf(listOf<String>()) }
-    var blockingRadius by remember { mutableFloatStateOf(100f) }
-    var useLocationTriggerForBlocking by remember { mutableStateOf(true) } // Link to location trigger
+    //  Sound Mode Action states
+    var setSoundModeActionExpanded by remember { mutableStateOf(false) }
+    var soundMode by remember { mutableStateOf("Normal") }
 
-    // Add with other state variables near the top of TaskCreationScreen
-    var contextTriggerExpanded by remember { mutableStateOf(false) }
-    var conditionsList by remember { mutableStateOf<List<Condition>>(emptyList()) }
-    var showAddConditionDialog by remember { mutableStateOf(false) }
+    // Block Apps Action states
+    var blockAppsActionExpanded by remember { mutableStateOf(false) }
+    var selectedAppsToBlock by remember { mutableStateOf<List<String>>(emptyList()) }
 
     // Pre-populate fields if editing
     LaunchedEffect(existingWorkflow) {
         existingWorkflow?.let { workflow ->
-            taskName = workflow.workflowName
+            try {
+                taskName = workflow.workflowName
 
-            val trigger = workflow.toTrigger()
-            val action = workflow.toAction()
-
-            // Pre-fill trigger fields
-            trigger?.let {
-                when (it.type) {
-                    Constants.TRIGGER_TIME -> {
-                        timeTriggerExpanded = true
-                        timeValue = it.value ?: ""
-                    }
-                    Constants.TRIGGER_WIFI -> {
-                        wifiTriggerExpanded = true
-                        wifiState = it.value ?: "On"
-                    }
-                    Constants.TRIGGER_BLE -> {
-                        bluetoothDeviceTriggerExpanded = true
-                        bluetoothDeviceAddress = it.value ?: ""
-                    }
-                    Constants.TRIGGER_LOCATION -> {
-                        locationTriggerExpanded = true
-                        // Parse location JSON and populate fields
-                        try {
-                            val locationJson = JSONObject(it.value ?: "{}")
-                            locationName = locationJson.optString("locationName", "")
-                            locationDetailsInput = locationJson.optString("coordinates", "")
-                            radiusValue = locationJson.optDouble("radius", 100.0).toFloat()
-                        } catch (e: Exception) {
-                            Log.e("TaskCreation", "Error parsing location: ${e.message}")
+                workflow.toTrigger()?.let { trigger ->
+                    when (trigger.type) {
+                        Constants.TRIGGER_TIME -> {
+                            timeTriggerExpanded = true
+                            timeValue = trigger.value ?: ""
                         }
-                    }
-                }
-            }
-
-            // Pre-fill action fields
-            action?.let {
-                when (it.type) {
-                    Constants.ACTION_SEND_NOTIFICATION -> {
-                        sendNotificationActionExpanded = true
-                        notificationTitle = it.title ?: ""
-                        notificationMessage = it.message ?: ""
-                        notificationPriority = it.priority ?: "Normal"
-                    }
-                    Constants.ACTION_TOGGLE_WIFI -> {
-                        toggleSettingsActionExpanded = true
-                        toggleSetting = it.value ?: "WiFi"
-                    }
-                    "RUN_SCRIPT" -> {
-                        runScriptActionExpanded = true
-                        scriptText = it.value ?: ""
-                    }
-                    Constants.ACTION_BLOCK_APPS -> {
-                        appBlockingActionExpanded = true
-                        try {
-                            val blockingJson = JSONObject(it.value ?: "{}")
-                            val packagesArray = blockingJson.optJSONArray("packages")
-                            selectedAppsToBlock = (0 until (packagesArray?.length() ?: 0)).map { i ->
-                                packagesArray!!.getString(i)
+                        Constants.TRIGGER_WIFI -> {
+                            wifiTriggerExpanded = true
+                            wifiState = trigger.value ?: "On"
+                        }
+                        Constants.TRIGGER_BLE -> {
+                            bluetoothDeviceTriggerExpanded = true
+                            bluetoothDeviceAddress = trigger.value ?: ""
+                        }
+                        Constants.TRIGGER_LOCATION -> {
+                            locationTriggerExpanded = true
+                            try {
+                                val locationJson = JSONObject(trigger.value ?: "{}")
+                                locationName = locationJson.optString("locationName", "")
+                                locationDetailsInput = locationJson.optString("coordinates", "")
+                                radiusValue = locationJson.optDouble("radius", 100.0).toFloat()
+                            } catch (e: Exception) {
+                                Log.e("TaskCreation", "Error parsing location JSON", e)
                             }
-                            useLocationTriggerForBlocking = blockingJson.optBoolean("useLocationTrigger", true)
-                            blockingRadius = blockingJson.optDouble("radius", 100.0).toFloat()
-                        } catch (e: Exception) {
-                            Log.e("TaskCreation", "Error parsing app blocking action: ${e.message}")
                         }
                     }
-                    Constants.ACTION_SET_SOUND_MODE -> {
-                        soundModeActionExpanded = true
-                        selectedSoundMode = it.value ?: Constants.SOUND_MODE_RING
+                }
+
+                workflow.toAction()?.let { action ->
+                    when (action.type) {
+                        Constants.ACTION_SEND_NOTIFICATION -> {
+                            sendNotificationActionExpanded = true
+                            notificationTitle = action.title ?: ""
+                            notificationMessage = action.message ?: ""
+                            notificationPriority = action.priority ?: "Normal"
+                        }
+                        Constants.ACTION_TOGGLE_WIFI -> {
+                            toggleSettingsActionExpanded = true
+                            toggleSetting = action.value ?: "WiFi"
+                        }
+                        "RUN_SCRIPT" -> {
+                            runScriptActionExpanded = true
+                            scriptText = action.value ?: ""
+                        }
                     }
                 }
+            } catch (e: Exception) {
+                Log.e("TaskCreation", "Error loading existing workflow", e)
+                errorMessage = "Error loading workflow: ${e.message}"
+                showErrorDialog = true
             }
-
         }
     }
 
-    Column(
-        modifier = modifier
-            .padding(16.dp)
-            .fillMaxWidth()
-            .verticalScroll(scrollState),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxSize()
+                .verticalScroll(scrollState),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Header Card
+            TaskNameCard(
+                taskName = taskName,
+                onTaskNameChange = {
+                    taskName = it
+                    taskNameError = null
+                },
+                error = taskNameError
+            )
+
+            // Triggers Card
+            TriggersCard(
+                locationTriggerExpanded = locationTriggerExpanded,
+                onLocationExpandedChange = { locationTriggerExpanded = it },
+                locationName = locationName,
+                onLocationNameChange = { locationName = it },
+                locationDetailsInput = locationDetailsInput,
+                onLocationDetailsChange = { locationDetailsInput = it },
+                radiusValue = radiusValue,
+                onRadiusChange = { radiusValue = it },
+                triggerOnOption = triggerOnOption,
+                onTriggerOptionChange = { triggerOnOption = it },
+                wifiTriggerExpanded = wifiTriggerExpanded,
+                onWifiExpandedChange = { wifiTriggerExpanded = it },
+                wifiState = wifiState,
+                onWifiStateChange = { wifiState = it },
+                timeTriggerExpanded = timeTriggerExpanded,
+                onTimeExpandedChange = { timeTriggerExpanded = it },
+                onTimeValueChange = { timeValue = it },
+                bluetoothDeviceTriggerExpanded = bluetoothDeviceTriggerExpanded,
+                onBluetoothExpandedChange = { bluetoothDeviceTriggerExpanded = it },
+                bluetoothDeviceAddress = bluetoothDeviceAddress,
+                onBluetoothAddressChange = { bluetoothDeviceAddress = it }
+            )
+
+            // Actions Card
+            ActionsCard(
+                sendNotificationActionExpanded = sendNotificationActionExpanded,
+                onNotificationExpandedChange = { sendNotificationActionExpanded = it },
+                notificationTitle = notificationTitle,
+                onNotificationTitleChange = { notificationTitle = it },
+                notificationMessage = notificationMessage,
+                onNotificationMessageChange = { notificationMessage = it },
+                notificationPriority = notificationPriority,
+                onNotificationPriorityChange = { notificationPriority = it },
+                toggleSettingsActionExpanded = toggleSettingsActionExpanded,
+                onToggleExpandedChange = { toggleSettingsActionExpanded = it },
+                toggleSetting = toggleSetting,
+                onToggleSettingChange = { toggleSetting = it },
+                setSoundModeActionExpanded = setSoundModeActionExpanded,
+                onSoundModeExpandedChange = { setSoundModeActionExpanded = it },
+                soundMode = soundMode,
+                onSoundModeChange = { soundMode = it },
+                blockAppsActionExpanded = blockAppsActionExpanded,
+                onBlockAppsExpandedChange = { blockAppsActionExpanded = it },
+                selectedAppsToBlock = selectedAppsToBlock,
+                onSelectedAppsChange = { selectedAppsToBlock = it }
+            )
+
+            // Save/Back Buttons Card
+            SaveButtonsCard(
+                workflowId = workflowId,
+                onSave = {
+                    scope.launch {
+                        handleSaveTask(
+                            context = context,
+                            viewModel = viewModel,
+                            workflowId = workflowId,
+                            taskName = taskName,
+                            locationTriggerExpanded = locationTriggerExpanded,
+                            locationName = locationName,
+                            locationDetailsInput = locationDetailsInput,
+                            radiusValue = radiusValue,
+                            triggerOnOption = triggerOnOption,
+                            wifiTriggerExpanded = wifiTriggerExpanded,
+                            wifiState = wifiState,
+                            timeTriggerExpanded = timeTriggerExpanded,
+                            timeValue = timeValue,
+                            bluetoothDeviceTriggerExpanded = bluetoothDeviceTriggerExpanded,
+                            bluetoothDeviceAddress = bluetoothDeviceAddress,
+                            sendNotificationActionExpanded = sendNotificationActionExpanded,
+                            notificationTitle = notificationTitle,
+                            notificationMessage = notificationMessage,
+                            notificationPriority = notificationPriority,
+                            toggleSettingsActionExpanded = toggleSettingsActionExpanded,
+                            toggleSetting = toggleSetting,
+                            runScriptActionExpanded = runScriptActionExpanded,
+                            scriptText = scriptText,
+                            onSuccess = {
+                                showSuccessSnackbar = true
+                                onSaveTask(taskName)
+                            },
+                            onError = { error ->
+                                errorMessage = error
+                                taskNameError = if (error.contains("name")) error else null
+                                showErrorDialog = true
+                            }
+                        )
+                    }
+                },
+                onBack = onBack
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Error Dialog
+        if (showErrorDialog) {
+            ErrorDialog(
+                errorMessage = errorMessage,
+                onDismiss = { showErrorDialog = false }
+            )
+        }
+
+        // Success Snackbar
+        if (showSuccessSnackbar) {
+            LaunchedEffect(Unit) {
+                kotlinx.coroutines.delay(2000)
+                showSuccessSnackbar = false
+            }
+        }
+    }
+}
+// ========== COMPOSABLE COMPONENTS ==========
+
+@Composable
+private fun TaskNameCard(
+    taskName: String,
+    onTaskNameChange: (String) -> Unit,
+    error: String?
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "Create New Task",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedTextField(
+                value = taskName,
+                onValueChange = onTaskNameChange,
+                label = { Text("Task Name") },
+                placeholder = { Text("Enter task name") },
+                modifier = Modifier.fillMaxWidth(),
+                isError = error != null,
+                supportingText = error?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                singleLine = true
+            )
+        }
+    }
+}
+
+@Composable
+private fun TriggersCard(
+    locationTriggerExpanded: Boolean,
+    onLocationExpandedChange: (Boolean) -> Unit,
+    locationName: String,
+    onLocationNameChange: (String) -> Unit,
+    locationDetailsInput: String,
+    onLocationDetailsChange: (String) -> Unit,
+    radiusValue: Float,
+    onRadiusChange: (Float) -> Unit,
+    triggerOnOption: String,
+    onTriggerOptionChange: (String) -> Unit,
+    wifiTriggerExpanded: Boolean,
+    onWifiExpandedChange: (Boolean) -> Unit,
+    wifiState: String,
+    onWifiStateChange: (String) -> Unit,
+    timeTriggerExpanded: Boolean,
+    onTimeExpandedChange: (Boolean) -> Unit,
+    onTimeValueChange: (String) -> Unit,
+    bluetoothDeviceTriggerExpanded: Boolean,
+    onBluetoothExpandedChange: (Boolean) -> Unit,
+    bluetoothDeviceAddress: String,
+    onBluetoothAddressChange: (String) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
-        // Card 1: Task Name
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Create New Task", style = MaterialTheme.typography.headlineSmall)
-                Spacer(modifier = Modifier.height(16.dp))
-                TextField(
-                    value = taskName,
-                    onValueChange = { taskName = it },
-                    label = { Text("Task Name") },
-                    modifier = Modifier.fillMaxWidth()
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "Configure Triggers",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Location Trigger
+            ExpandableTriggerSection(
+                title = "Location",
+                icon = Icons.Default.LocationOn,
+                expanded = locationTriggerExpanded,
+                onExpandedChange = onLocationExpandedChange
+            ) {
+                LocationTriggerContent(
+                    locationName = locationName,
+                    onLocationNameChange = onLocationNameChange,
+                    locationDetailsInput = locationDetailsInput,
+                    onLocationDetailsChange = onLocationDetailsChange,
+                    radiusValue = radiusValue,
+                    onRadiusChange = onRadiusChange,
+                    triggerOnOption = triggerOnOption,
+                    onTriggerOptionChange = onTriggerOptionChange
+                )
+            }
+
+            // Time Trigger
+            ExpandableTriggerSection(
+                title = "Time",
+                icon = Icons.Default.Schedule,
+                expanded = timeTriggerExpanded,
+                onExpandedChange = onTimeExpandedChange
+            ) {
+                TimeTriggerContent(onTimeValueChange = onTimeValueChange)
+            }
+
+            // WiFi Trigger
+            ExpandableTriggerSection(
+                title = "Wi-Fi Network",
+                icon = Icons.Default.Wifi,
+                expanded = wifiTriggerExpanded,
+                onExpandedChange = onWifiExpandedChange
+            ) {
+                WiFiTriggerContent(
+                    wifiState = wifiState,
+                    onWifiStateChange = onWifiStateChange
+                )
+            }
+
+            // Bluetooth Trigger
+            ExpandableTriggerSection(
+                title = "Bluetooth Device",
+                icon = Icons.Default.Bluetooth,
+                expanded = bluetoothDeviceTriggerExpanded,
+                onExpandedChange = onBluetoothExpandedChange
+            ) {
+                BluetoothTriggerContent(
+                    bluetoothDeviceAddress = bluetoothDeviceAddress,
+                    onBluetoothAddressChange = onBluetoothAddressChange
+                )
+            }
+        }
+    }
+}
+
+// ========== UPDATED ACTIONS CARD ==========
+
+@Composable
+private fun ActionsCard(
+    sendNotificationActionExpanded: Boolean,
+    onNotificationExpandedChange: (Boolean) -> Unit,
+    notificationTitle: String,
+    onNotificationTitleChange: (String) -> Unit,
+    notificationMessage: String,
+    onNotificationMessageChange: (String) -> Unit,
+    notificationPriority: String,
+    onNotificationPriorityChange: (String) -> Unit,
+    toggleSettingsActionExpanded: Boolean,
+    onToggleExpandedChange: (Boolean) -> Unit,
+    toggleSetting: String,
+    onToggleSettingChange: (String) -> Unit,
+    setSoundModeActionExpanded: Boolean,
+    onSoundModeExpandedChange: (Boolean) -> Unit,
+    soundMode: String,
+    onSoundModeChange: (String) -> Unit,
+    blockAppsActionExpanded: Boolean,
+    onBlockAppsExpandedChange: (Boolean) -> Unit,
+    selectedAppsToBlock: List<String>,
+    onSelectedAppsChange: (List<String>) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "Define Actions",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Send Notification Action
+            ExpandableActionSection(
+                title = "Send Notification",
+                icon = Icons.Default.Notifications,
+                expanded = sendNotificationActionExpanded,
+                onExpandedChange = onNotificationExpandedChange
+            ) {
+                NotificationActionContent(
+                    notificationTitle = notificationTitle,
+                    onNotificationTitleChange = onNotificationTitleChange,
+                    notificationMessage = notificationMessage,
+                    onNotificationMessageChange = onNotificationMessageChange,
+                    notificationPriority = notificationPriority,
+                    onNotificationPriorityChange = onNotificationPriorityChange
+                )
+            }
+
+            // Toggle Settings Action
+            ExpandableActionSection(
+                title = "Toggle Settings",
+                icon = Icons.Default.Settings,
+                expanded = toggleSettingsActionExpanded,
+                onExpandedChange = onToggleExpandedChange
+            ) {
+                ToggleSettingsContent(
+                    toggleSetting = toggleSetting,
+                    onToggleSettingChange = onToggleSettingChange
+                )
+            }
+
+            // NEW: Set Sound Mode Action
+            ExpandableActionSection(
+                title = "Set Sound Mode",
+                icon = Icons.Default.VolumeUp,
+                expanded = setSoundModeActionExpanded,
+                onExpandedChange = onSoundModeExpandedChange
+            ) {
+                SetSoundModeContent(
+                    soundMode = soundMode,
+                    onSoundModeChange = onSoundModeChange
+                )
+            }
+
+            // NEW: Block Apps Action
+            ExpandableActionSection(
+                title = "Block Apps",
+                icon = Icons.Default.Block,
+                expanded = blockAppsActionExpanded,
+                onExpandedChange = onBlockAppsExpandedChange
+            ) {
+                BlockAppsContent(
+                    selectedApps = selectedAppsToBlock,
+                    onSelectedAppsChange = onSelectedAppsChange
+                )
+            }
+        }
+    }
+}
+// ========== NEW ACTION CONTENT COMPONENTS ==========
+
+@Composable
+private fun SetSoundModeContent(
+    soundMode: String,
+    onSoundModeChange: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            "Select Sound Profile:",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Medium
+        )
+
+        // Sound mode options
+        val soundModes = listOf(
+            SoundModeOption("Normal", Icons.Default.VolumeUp, "Normal ringing and notifications"),
+            SoundModeOption("Silent", Icons.Default.VolumeOff, "No sound or vibration"),
+            SoundModeOption("Vibrate", Icons.Default.Vibration, "Vibrate only, no sound"),
+            SoundModeOption("DND", Icons.Default.DoNotDisturb, "Do Not Disturb mode")
+        )
+
+        soundModes.forEach { mode ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSoundModeChange(mode.name) },
+                colors = CardDefaults.cardColors(
+                    containerColor = if (soundMode == mode.name)
+                        MaterialTheme.colorScheme.primaryContainer
+                    else
+                        MaterialTheme.colorScheme.surface
+                ),
+                border = if (soundMode == mode.name)
+                    BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                else
+                    null
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = mode.icon,
+                        contentDescription = mode.name,
+                        modifier = Modifier.size(32.dp),
+                        tint = if (soundMode == mode.name)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = mode.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = if (soundMode == mode.name) FontWeight.Bold else FontWeight.Normal
+                        )
+                        Text(
+                            text = mode.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    if (soundMode == mode.name) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "Selected",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
+
+        // Info card for DND mode
+        if (soundMode == "DND") {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    Text(
+                        text = "DND mode requires notification policy access permission",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BlockAppsContent(
+    selectedApps: List<String>,
+    onSelectedAppsChange: (List<String>) -> Unit
+) {
+    val context = LocalContext.current
+    var showAppPicker by remember { mutableStateOf(false) }
+    var installedApps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            "Select apps to block when triggered:",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Medium
+        )
+
+        // Selected apps display
+        if (selectedApps.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        "Selected Apps (${selectedApps.size}):",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    selectedApps.forEach { appPackage ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Apps,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = getAppName(context, appPackage),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    onSelectedAppsChange(selectedApps - appPackage)
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Remove",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                        if (appPackage != selectedApps.last()) {
+                            Divider(modifier = Modifier.padding(vertical = 4.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add apps button
+        Button(
+            onClick = {
+                isLoading = true
+                try {
+                    installedApps = getInstalledApps(context)
+                    showAppPicker = true
+                } catch (e: Exception) {
+                    Log.e("BlockApps", "Error loading apps", e)
+                } finally {
+                    isLoading = false
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isLoading
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Loading Apps...")
+            } else {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(if (selectedApps.isEmpty()) "Select Apps to Block" else "Add More Apps")
+            }
+        }
+
+        // Quick presets
+        Text(
+            "Quick Presets:",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(appBlockPresets.keys.toList()) { presetName ->
+                FilterChip(
+                    selected = false,
+                    onClick = {
+                        val presetApps = appBlockPresets[presetName] ?: emptyList()
+                        onSelectedAppsChange((selectedApps + presetApps).distinct())
+                    },
+                    label = { Text(presetName) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = getPresetIcon(presetName),
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 )
             }
         }
 
-        // Card 2: Configure Triggers
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Configure Triggers", style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(8.dp))
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    val triggerOptions = listOf(
-                        "Dynamic Context","Location", "WiFi", "Time", "Bluetooth Device"
-                    )
-
-                    triggerOptions.forEach { triggerName ->
-                        // Determine the expanded state for the current trigger
-                        val isExpanded = when (triggerName) {
-                            "Dynamic Context" -> contextTriggerExpanded
-                            "Location" -> locationTriggerExpanded
-                            "WiFi" -> wifiTriggerExpanded
-                            "Time" -> timeTriggerExpanded
-                            "Bluetooth Device" -> bluetoothDeviceTriggerExpanded
-                            else -> false
-                        }
-
-                        Column {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        when (triggerName) {
-                                            "Dynamic Context" -> contextTriggerExpanded = !contextTriggerExpanded
-                                            "Location" -> locationTriggerExpanded = !locationTriggerExpanded
-                                            "WiFi" -> wifiTriggerExpanded = !wifiTriggerExpanded
-                                            "Time" -> timeTriggerExpanded = !timeTriggerExpanded
-                                            "Bluetooth Device" -> bluetoothDeviceTriggerExpanded = !bluetoothDeviceTriggerExpanded
-                                        }
-                                    }
-                                    .padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(triggerName, style = MaterialTheme.typography.bodyLarge)
-                                Icon(
-                                    imageVector = if (isExpanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
-                                    contentDescription = if (isExpanded) "Collapse" else "Expand"
-                                )
-                            }
-
-                            when (triggerName) {
-                                // NEW: Case for Dynamic Context
-                                "Dynamic Context" -> {
-                                    DynamicContextTriggerSection(
-                                        expanded = contextTriggerExpanded,
-                                        conditions = conditionsList,
-                                        onAddConditionClicked = { showAddConditionDialog = true },
-                                        onRemoveCondition = { condition ->
-                                            conditionsList = conditionsList.filter { it != condition }
-                                        }
-                                    )
-                                }
-                                "Location" -> {
-                                    LocationTriggerSection(
-                                        expanded = locationTriggerExpanded,
-                                        locationName = locationName,
-                                        onLocationNameChange = { locationName = it },
-                                        locationDetailsInput = locationDetailsInput,
-                                        onLocationDetailsChange = { locationDetailsInput = it },
-                                        radiusValue = radiusValue,
-                                        onRadiusChange = { radiusValue = it },
-                                        triggerOnOption = triggerOnOption,
-                                        onTriggerOptionChange = { triggerOnOption = it }
-                                    )
-                                }
-
-                                "WiFi" -> {
-                                    if (wifiTriggerExpanded) {
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Text("Target State:")
-                                            val wifiStates = listOf("On", "Off")
-                                            wifiStates.forEach { state ->
-                                                Row(
-                                                    Modifier.clickable { wifiState = state },
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    RadioButton(
-                                                        selected = (wifiState == state),
-                                                        onClick = { wifiState = state }
-                                                    )
-                                                    Text(state)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                "Time" -> {
-                                    TimeTriggerSection(
-                                        expanded = timeTriggerExpanded,
-                                        onTimeValueChange = { timeValue = it }
-                                    )
-                                }
-
-                                "Bluetooth Device" -> {
-                                    if (bluetoothDeviceTriggerExpanded) {
-                                        Spacer(modifier = Modifier.height(8.dp))
-
-                                        val context = LocalContext.current
-                                        var pairedDevices by remember { mutableStateOf<List<BluetoothDeviceInfo>>(emptyList()) }
-                                        var showDevicePicker by remember { mutableStateOf(false) }
-
-                                        // Fetch paired devices button
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            OutlinedButton(
-                                                onClick = {
-                                                    pairedDevices = getPairedBluetoothDevices(context)
-                                                    showDevicePicker = true
-                                                }
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Bluetooth,
-                                                    contentDescription = "Get Paired Devices"
-                                                )
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text("Get Paired Devices")
-                                            }
-                                        }
-
-                                        Spacer(modifier = Modifier.height(8.dp))
-
-                                        // Manual entry
-                                        TextField(
-                                            value = bluetoothDeviceAddress,
-                                            onValueChange = { bluetoothDeviceAddress = it },
-                                            label = { Text("Device Address (MAC)") },
-                                            placeholder = { Text("XX:XX:XX:XX:XX:XX") },
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-
-                                        // Device picker dialog
-                                        if (showDevicePicker && pairedDevices.isNotEmpty()) {
-                                            AlertDialog(
-                                                onDismissRequest = { showDevicePicker = false },
-                                                title = { Text("Select Bluetooth Device") },
-                                                text = {
-                                                    LazyColumn {
-                                                        items(pairedDevices) { device ->
-                                                            Card(
-                                                                modifier = Modifier
-                                                                    .fillMaxWidth()
-                                                                    .padding(vertical = 4.dp)
-                                                                    .clickable {
-                                                                        bluetoothDeviceAddress = device.address
-                                                                        showDevicePicker = false
-                                                                    }
-                                                            ) {
-                                                                Column(modifier = Modifier.padding(12.dp)) {
-                                                                    Text(
-                                                                        text = device.name,
-                                                                        style = MaterialTheme.typography.titleMedium,
-                                                                        fontWeight = FontWeight.Bold
-                                                                    )
-                                                                    Text(
-                                                                        text = device.address,
-                                                                        style = MaterialTheme.typography.bodyMedium,
-                                                                        color = MaterialTheme.colorScheme.secondary
-                                                                    )
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                },
-                                                confirmButton = {
-                                                    TextButton(onClick = { showDevicePicker = false }) {
-                                                        Text("Cancel")
-                                                    }
-                                                }
-                                            )
-                                        }
-
-                                        // Show message if no devices found
-                                        if (showDevicePicker && pairedDevices.isEmpty()) {
-                                            AlertDialog(
-                                                onDismissRequest = { showDevicePicker = false },
-                                                title = { Text("No Paired Devices") },
-                                                text = { Text("No Bluetooth devices are currently paired with this phone.") },
-                                                confirmButton = {
-                                                    TextButton(onClick = { showDevicePicker = false }) {
-                                                        Text("OK")
-                                                    }
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-                                    // entry pont
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                    }
-                }
+        // Info card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer
+            )
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+                Text(
+                    text = "Blocked apps will be restricted when this automation triggers. Requires accessibility permission.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                )
             }
         }
-
-        // Card 3: Define Actions
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Define Actions", style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(8.dp))
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    // Send Notification Action
-                    Column {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    sendNotificationActionExpanded = !sendNotificationActionExpanded
-                                }
-                                .padding(vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Send Notification", style = MaterialTheme.typography.bodyLarge)
-                            Icon(
-                                imageVector = if (sendNotificationActionExpanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
-                                contentDescription = if (sendNotificationActionExpanded) "Collapse" else "Expand"
-                            )
-                        }
-
-                        if (sendNotificationActionExpanded) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            TextField(
-                                value = notificationTitle,
-                                onValueChange = { notificationTitle = it },
-                                label = { Text("Title") },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-                            TextField(
-                                value = notificationMessage,
-                                onValueChange = { notificationMessage = it },
-                                label = { Text("Message") },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-                            val priorityOptions = listOf("Low", "Normal", "High")
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        val currentIndex = priorityOptions.indexOf(notificationPriority)
-                                        val nextIndex = (currentIndex + 1) % priorityOptions.size
-                                        notificationPriority = priorityOptions[nextIndex]
-                                    }
-                                    .padding(vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = "Priority: $notificationPriority",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.padding(start = 8.dp)
-                                )
-                                Icon(
-                                    imageVector = Icons.Filled.ArrowDropDown,
-                                    contentDescription = "Change Priority"
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-
-                    // Toggle Settings Action
-                    Column {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    toggleSettingsActionExpanded = !toggleSettingsActionExpanded
-                                }
-                                .padding(vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Toggle Settings", style = MaterialTheme.typography.bodyLarge)
-                            Icon(
-                                imageVector = if (toggleSettingsActionExpanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
-                                contentDescription = if (toggleSettingsActionExpanded) "Collapse" else "Expand"
-                            )
-                        }
-
-                        if (toggleSettingsActionExpanded) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Setting:")
-                                val settings = listOf("WiFi", "Bluetooth")
-                                settings.forEach { setting ->
-                                    Row(
-                                        Modifier.clickable { toggleSetting = setting },
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        RadioButton(
-                                            selected = (toggleSetting == setting),
-                                            onClick = { toggleSetting = setting }
-                                        )
-                                        Text(setting)
-                                    }
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-
-                        // Toggle section
-                    ActionHeaderRow(
-                        title = "Set sound mode",
-                        expanded = soundModeActionExpanded,
-                        onToggle = { soundModeActionExpanded = !soundModeActionExpanded }
-                    )
-
-                    if (soundModeActionExpanded) {
-                        Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                            val options = listOf(
-                                "Ring" to Constants.SOUND_MODE_RING,
-                                "Vibrate" to Constants.SOUND_MODE_VIBRATE,
-                                "Silent" to Constants.SOUND_MODE_SILENT,
-                                "DND (Total silence)" to Constants.SOUND_MODE_DND_NONE,
-                                "DND (Priority)" to Constants.SOUND_MODE_DND_PRIORITY,
-                                "DND (Alarms only)" to Constants.SOUND_MODE_DND_ALARMS,
-                                "Turn off DND" to Constants.SOUND_MODE_DND_ALL
-                            )
-                            options.forEach { (label, value) ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { selectedSoundMode = value }
-                                        .padding(vertical = 6.dp)
-                                ) {
-                                    RadioButton(
-                                        selected = selectedSoundMode == value,
-                                        onClick = { selectedSoundMode = value }
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(label)
-                                }
-                            }
-                            if (selectedSoundMode.startsWith("dnd_")) {
-                                Text(
-                                    "Requires Do Not Disturb access; you may be prompted to grant it.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                    // App Blocking Action (after sound mode section)
-                    ActionHeaderRow(
-                        title = "Block Apps at Location",
-                        expanded = appBlockingActionExpanded,
-                        onToggle = { appBlockingActionExpanded = !appBlockingActionExpanded }
-                    )
-
-                    if (appBlockingActionExpanded) {
-                        Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                            // Link to location trigger
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = useLocationTriggerForBlocking,
-                                    onCheckedChange = { useLocationTriggerForBlocking = it }
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text("Use location trigger settings")
-                            }
-
-                            if (!useLocationTriggerForBlocking) {
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    "Blocking radius (meters):",
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                                Slider(
-                                    value = blockingRadius,
-                                    onValueChange = { blockingRadius = it },
-                                    valueRange = 50f..1000f,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                Text(
-                                    "${blockingRadius.roundToInt()}m",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            Spacer(Modifier.height(12.dp))
-
-                            // App selection
-                            Text(
-                                "Select apps to block:",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-
-                            Spacer(Modifier.height(8.dp))
-
-                            // Predefined popular apps
-                            val popularApps = listOf(
-                                "Instagram" to "com.instagram.android",
-                                "Facebook" to "com.facebook.katana",
-                                "Snapchat" to "com.snapchat.android",
-                                "Twitter/X" to "com.twitter.android",
-                                "YouTube" to "com.google.android.youtube",
-                                "WhatsApp" to "com.whatsapp",
-                                "Telegram" to "org.telegram.messenger"
-                            )
-
-                            LazyVerticalGrid(
-                                columns = GridCells.Fixed(2),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                                modifier = Modifier.height(200.dp)
-                            ) {
-                                items(popularApps) { (appName, packageName) ->
-                                    val isSelected = selectedAppsToBlock.contains(packageName)
-                                    FilterChip(
-                                        selected = isSelected,
-                                        onClick = {
-                                            selectedAppsToBlock = if (isSelected) {
-                                                selectedAppsToBlock - packageName
-                                            } else {
-                                                selectedAppsToBlock + packageName
-                                            }
-                                        },
-                                        label = { Text(appName, style = MaterialTheme.typography.bodySmall) }
-                                    )
-                                }
-                            }
-
-                            Spacer(Modifier.height(12.dp))
-
-                            // Custom package input
-                            var customPackage by remember { mutableStateOf("") }
-                            Row(modifier = Modifier.fillMaxWidth()) {
-                                TextField(
-                                    value = customPackage,
-                                    onValueChange = { customPackage = it },
-                                    label = { Text("Custom package name") },
-                                    placeholder = { Text("com.example.app") },
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                OutlinedButton(
-                                    onClick = {
-                                        if (customPackage.isNotBlank() && !selectedAppsToBlock.contains(customPackage)) {
-                                            selectedAppsToBlock = selectedAppsToBlock + customPackage
-                                            customPackage = ""
-                                        }
-                                    },
-                                    enabled = customPackage.isNotBlank()
-                                ) {
-                                    Text("Add")
-                                }
-                            }
-
-                            // Show selected packages
-                            if (selectedAppsToBlock.isNotEmpty()) {
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    "Selected: ${selectedAppsToBlock.size} apps",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-
-                            // Requirements notice
-                            Spacer(Modifier.height(12.dp))
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                                )
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Text(
-                                        "Requirements:",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Text(
-                                        "• Enable Accessibility Service in phone settings",
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                    Text(
-                                        "• Grant location permissions for geofencing",
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                    Text(
-                                        "• Apps will be blocked when entering the location",
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-
-
-                    // Run Script Action (Enhanced) - Fixed version
-                    Column {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { runScriptActionExpanded = !runScriptActionExpanded }
-                                .padding(vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Run Script", style = MaterialTheme.typography.bodyLarge)
-                            Icon(
-                                imageVector = if (runScriptActionExpanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
-                                contentDescription = if (runScriptActionExpanded) "Collapse" else "Expand"
-                            )
-                        }
-
-                        if (runScriptActionExpanded) {
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            // Script templates
-                            var selectedTemplate by remember { mutableStateOf("Custom") }
-                            val templates = mapOf(
-                                "Custom" to "",
-                                "Log Message" to "log('Hello from AutoFlow!');\nlog('Current time: ' + new Date());",
-                                "Send Notification" to "notify('AutoFlow Alert', 'Script executed successfully!');\nlog('Notification sent');",
-                                "HTTP Request" to "var response = httpGet('https://api.example.com/data');\nlog('Response: ' + response);\nnotify('API Call', 'Request completed');",
-                                "File Operation" to "// File operations (requires permissions)\nlog('Performing file operations...');\n// Add your file handling code here"
-                            )
-
-                            // Template selector
-                            Text("Script Templates:", style = MaterialTheme.typography.titleSmall)
-                            LazyRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            ) {
-                                items(templates.keys.toList()) { template ->
-                                    FilterChip(
-                                        selected = selectedTemplate == template,
-                                        onClick = {
-                                            selectedTemplate = template
-                                            scriptText = templates[template] ?: ""
-                                        },
-                                        label = { Text(template) }
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            // Script editor
-                            TextField(
-                                value = scriptText,
-                                onValueChange = { scriptText = it },
-                                label = { Text("JavaScript Code") },
-                                placeholder = { Text("Enter your JavaScript code here...") },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(200.dp),
-                                maxLines = 10,
-                                textStyle = MaterialTheme.typography.bodySmall.copy(
-                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                                )
-                            )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            // Script validation and test - FIXED SECTION
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                OutlinedButton(
-                                    onClick = {
-                                        // Test script execution - now properly defined
-                                        testScriptExecution(scriptText, context)
-                                    }
-                                ) {
-                                    Text("Test Script")
-                                }
-
-                                Button(
-                                    onClick = {
-                                        // Validate script syntax - now properly defined
-                                        validateScript(scriptText)
-                                    }
-                                ) {
-                                    Text("Validate")
-                                }
-                            }
-
-                            // Help text
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                                )
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Text(
-                                        "Available Functions:",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Text("• log(message) - Write to console", style = MaterialTheme.typography.bodySmall)
-                                    Text("• notify(title, message) - Send notification", style = MaterialTheme.typography.bodySmall)
-                                    Text("• httpGet(url) - Make HTTP request", style = MaterialTheme.typography.bodySmall)
-                                    Text("• androidContext - Access Android context", style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-                }
-            }
-        }
-
-        // Card 4: Save/Back Buttons
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                // Save Button
-                Button(
-                    onClick = {
-                        Log.d("TaskCreation", "Save button clicked")
-
-                        if (taskName.isNotBlank()) {
-                            Log.d("TaskCreation", "Task name is valid: $taskName")
-
-                            // Create trigger based on expanded sections
-                            val trigger = when {
-
-                                contextTriggerExpanded && conditionsList.isNotEmpty() -> {
-                                    Log.d("TaskCreation", "Creating context trigger with ${conditionsList.size} conditions")
-                                    val conditionsJsonArray = JSONArray()
-                                    conditionsList.forEach { condition ->
-                                        val conditionJson = JSONObject().apply {
-                                            put("type", condition.type)
-                                            // The 'parameters' object would be populated with real data
-                                            // from a configuration step that is currently a TODO
-                                            put("parameters", condition.parameters)
-                                            put("summary", condition.summary)
-                                        }
-                                        conditionsJsonArray.put(conditionJson)
-                                    }
-                                    // You should define TRIGGER_CONTEXT in your Constants file
-                                    Trigger(0, 0, "CONTEXT", conditionsJsonArray.toString())
-                                }
-
-                                locationTriggerExpanded && locationDetailsInput.isNotBlank() -> {
-                                    Log.d("TaskCreation", "Creating location trigger")
-                                    Log.d("TaskCreation", "Location details: $locationDetailsInput")
-
-                                    val coordinateParts = locationDetailsInput.split(",")
-                                    if (coordinateParts.size == 2) {
-                                        try {
-                                            val lat = coordinateParts[0].trim().toDoubleOrNull()
-                                            val lng = coordinateParts[1].trim().toDoubleOrNull()
-
-                                            if (lat != null && lng != null) {
-                                                val locationJson = """
-                                {
-                                    "locationName":"${locationName.ifEmpty { "Unnamed Location" }}",
-                                    "coordinates":"$locationDetailsInput",
-                                    "latitude":$lat,
-                                    "longitude":$lng,
-                                    "radius":${radiusValue.roundToInt()},
-                                    "triggerOnEntry":${triggerOnOption == "Entry" || triggerOnOption == "Both"},
-                                    "triggerOnExit":${triggerOnOption == "Exit" || triggerOnOption == "Both"}
-                                }
-                                """.trimIndent()
-
-                                                Log.d("TaskCreation", "Location JSON: $locationJson")
-                                                Trigger(0, 0, Constants.TRIGGER_LOCATION, locationJson)
-                                            } else {
-                                                Log.e("TaskCreation", "Invalid coordinate values")
-                                                null
-                                            }
-                                        } catch (e: Exception) {
-                                            Log.e("TaskCreation", "Error parsing coordinates: ${e.message}")
-                                            null
-                                        }
-                                    } else {
-                                        Log.e("TaskCreation", "Invalid coordinate format. Expected: lat,lng")
-                                        null
-                                    }
-                                }
-
-                                wifiTriggerExpanded -> {
-                                    Log.d("TaskCreation", "Creating WiFi trigger")
-                                    Trigger(0, 0, Constants.TRIGGER_WIFI, wifiState)
-                                }
-
-                                timeTriggerExpanded && timeValue.isNotBlank() -> {
-                                    Log.d("TaskCreation", "Creating time trigger")
-                                    Trigger(0, 0, Constants.TRIGGER_TIME, timeValue)
-                                }
-
-                                bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank() -> {
-                                    Log.d("TaskCreation", "Creating Bluetooth trigger")
-                                    Trigger(0, 0, Constants.TRIGGER_BLE, bluetoothDeviceAddress)
-                                }
-
-                                else -> {
-                                    Log.w("TaskCreation", "No trigger selected or configured")
-                                    null
-                                }
-                            }
-
-                            // Create action based on expanded sections
-                            val action = when {
-                                sendNotificationActionExpanded -> Action(Constants.ACTION_SEND_NOTIFICATION, notificationTitle, notificationMessage, notificationPriority)
-                                sendNotificationActionExpanded && notificationTitle.isNotBlank() -> {
-                                    Log.d("TaskCreation", "Creating notification action")
-                                    Action(
-                                        Constants.ACTION_SEND_NOTIFICATION,
-                                        notificationTitle,
-                                        notificationMessage,
-                                        notificationPriority
-                                    )
-                                }
-
-                                toggleSettingsActionExpanded -> {
-                                    Log.d("TaskCreation", "Creating toggle settings action")
-                                    val toggleAction = Action(Constants.ACTION_TOGGLE_WIFI, null, null, "Normal")
-                                    toggleAction.setValue(toggleSetting)
-                                    toggleAction
-                                }
-
-                                runScriptActionExpanded && scriptText.isNotBlank() -> {
-                                    Log.d("TaskCreation", "Creating script action")
-                                    val scriptAction = Action("RUN_SCRIPT", null, null, null)
-                                    scriptAction.setValue(scriptText)
-                                    scriptAction
-                                }
-                                soundModeActionExpanded -> {
-                                    Log.d("TaskCreation", "Creating sound mode action: $selectedSoundMode")
-                                    Action(Constants.ACTION_SET_SOUND_MODE, null, null, null).apply {
-                                        setValue(selectedSoundMode)
-                                    }
-                                }
-                                // Add this case in your action creation when block (around line where you handle other actions)
-                                appBlockingActionExpanded && selectedAppsToBlock.isNotEmpty() -> {
-                                    Log.d("TaskCreation", "Creating app blocking action")
-                                    val blockingData = JSONObject().apply {
-                                        put("packages", JSONArray(selectedAppsToBlock))
-                                        put("useLocationTrigger", useLocationTriggerForBlocking)
-                                        if (!useLocationTriggerForBlocking) {
-                                            put("radius", blockingRadius.roundToInt())
-                                        }
-                                    }
-                                    Action(Constants.ACTION_BLOCK_APPS, null, null, null).apply {
-                                        setValue(blockingData.toString())
-                                    }
-                                }
-
-                                else -> {
-                                    Log.w("TaskCreation", "No action selected or configured")
-                                    null
-                                }
-                            }
-
-                            // Validate and save
-                            if (trigger != null && action != null) {
-                                if (workflowId != null) {
-                                    // UPDATING existing workflow
-                                    Log.d("TaskCreation", "Updating workflow $workflowId")
-                                    viewModel.updateWorkflow(
-                                        workflowId,
-                                        taskName,
-                                        trigger,
-                                        action,
-                                        object :  WorkflowViewModel.WorkflowOperationCallback {
-                                            override fun onSuccess(message: String) {
-                                                Log.d("TaskCreation", "Update success: $message")
-                                                onSaveTask(taskName)
-                                            }
-
-                                            override fun onError(error: String) {
-                                                Log.e("TaskCreation", "Update failed: $error")
-                                            }
-                                        }
-                                    )
-                                } else {
-                                    // CREATING new workflow
-                                    Log.d("TaskCreation", "Creating new workflow")
-                                    viewModel.addWorkflow(
-                                        taskName,
-                                        trigger,
-                                        action,
-                                        object : WorkflowViewModel.WorkflowOperationCallback {
-                                            override fun onSuccess(message: String) {
-                                                Log.d("TaskCreation", "Task saved successfully: $message")
-
-                                                // Schedule alarm if time trigger
-                                                if (trigger.type == Constants.TRIGGER_TIME && timeValue.isNotBlank()) {
-                                                    try {
-                                                        val triggerTimeMillis = timeValue.toLong()
-                                                        val notificationTitle = if (action.type == Constants.ACTION_SEND_NOTIFICATION) {
-                                                            action.title ?: "AutoFlow Alert"
-                                                        } else {
-                                                            "AutoFlow Alert"
-                                                        }
-                                                        val notificationMessage = if (action.type == Constants.ACTION_SEND_NOTIFICATION) {
-                                                            action.message ?: "Time trigger activated"
-                                                        } else {
-                                                            "Time trigger activated"
-                                                        }
-
-                                                        val workflowId = message.substringAfterLast(":").trim().toLongOrNull() ?: 0
-
-                                                        AlarmScheduler.scheduleNotification(
-                                                            context,
-                                                            workflowId,
-                                                            triggerTimeMillis,
-                                                            notificationTitle,
-                                                            notificationMessage
-                                                        )
-
-                                                        Log.d("TaskCreation", "Alarm scheduled for time: $triggerTimeMillis")
-                                                    } catch (e: Exception) {
-                                                        Log.e("TaskCreation", "Failed to schedule alarm: ${e.message}")
-                                                    }
-                                                }
-
-                                                onSaveTask(taskName)
-                                            }
-
-                                            override fun onError(error: String) {
-                                                Log.e("TaskCreation", "Failed to save task: $error")
-                                            }
-                                        }
-                                    )
-                                }
-                            } else {
-                                Log.w("TaskCreation", "Cannot save - Missing trigger or action")
-                                when {
-                                    trigger == null -> Log.w("TaskCreation", "Trigger is null or invalid")
-                                    action == null -> Log.w("TaskCreation", "Action is null or invalid")
-                                }
-                            }
-                        } else {
-                            null
-                            Log.w("TaskCreation", "Task name is blank")
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (workflowId != null) "Update Task" else "Save Task")
-                }
-
-
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Button(
-                    onClick = {
-                        Log.d("TaskCreation", "Back button clicked")
-                        onBack()
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Back")
-                }
-            }
-        }
-
     }
-}
 
-@Composable
-fun ActionHeaderRow(
-    title: String,
-    expanded: Boolean,
-    onToggle: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onToggle() }
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(text = title, style = MaterialTheme.typography.bodyLarge)
-        Icon(
-            imageVector = if (expanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
-            contentDescription = if (expanded) "Collapse" else "Expand"
+    // App picker dialog
+    if (showAppPicker) {
+        AppPickerDialog(
+            apps = installedApps,
+            selectedApps = selectedApps,
+            onDismiss = { showAppPicker = false },
+            onConfirm = { newSelection ->
+                onSelectedAppsChange(newSelection)
+                showAppPicker = false
+            }
         )
     }
 }
-
-/**
- * Test script execution function
- */
-private fun testScriptExecution(scriptCode: String, context: android.content.Context) {
-    Log.i("ScriptTest", "Testing script: $scriptCode")
-
-    // Basic validation
-    if (scriptCode.trim().isEmpty()) {
-        Log.w("ScriptTest", "Empty script provided")
-        return
-    }
-
-    // Simple syntax checks
-    val basicChecks = listOf(
-        "log(" to "log function usage detected",
-        "notify(" to "notify function usage detected",
-        "httpGet(" to "httpGet function usage detected"
-    )
-
-    basicChecks.forEach { (pattern, message) ->
-        if (scriptCode.contains(pattern)) {
-            Log.i("ScriptTest", message)
-        }
-    }
-
-    Log.i("ScriptTest", "Script test completed")
-
-    // TODO: Implement actual script execution with ScriptExecutor when ready
-    // val scriptExecutor = ScriptExecutor(context)
-    // val result = scriptExecutor.executeScript(scriptCode)
-}
-
-/**
- * Validate script syntax function
- */
-private fun validateScript(scriptCode: String) {
-    Log.i("ScriptValidation", "Validating script syntax")
-
-    if (scriptCode.trim().isEmpty()) {
-        Log.w("ScriptValidation", "Empty script - validation failed")
-        return
-    }
-
-    // Basic JavaScript syntax validation
-    val errors = mutableListOf<String>()
-
-    // Check for balanced parentheses
-    var parenthesesCount = 0
-    var braceCount = 0
-
-    for (char in scriptCode) {
-        when (char) {
-            '(' -> parenthesesCount++
-            ')' -> parenthesesCount--
-            '{' -> braceCount++
-            '}' -> braceCount--
-        }
-    }
-
-    if (parenthesesCount != 0) {
-        errors.add("Unbalanced parentheses")
-    }
-
-    if (braceCount != 0) {
-        errors.add("Unbalanced braces")
-    }
-
-    // Check for common syntax issues
-    if (scriptCode.contains("function") && !scriptCode.contains("{")) {
-        errors.add("Function declaration missing opening brace")
-    }
-
-    if (errors.isEmpty()) {
-        Log.i("ScriptValidation", "Script validation passed")
-    } else {
-        Log.w("ScriptValidation", "Script validation errors: ${errors.joinToString(", ")}")
-    }
-}
-
-// Enhanced Location Trigger Section with real-time location
 @Composable
-fun LocationTriggerSection(
+private fun AppPickerDialog(
+    apps: List<AppInfo>,
+    selectedApps: List<String>,
+    onDismiss: () -> Unit,
+    onConfirm: (List<String>) -> Unit
+) {
+    var tempSelectedApps by remember { mutableStateOf(selectedApps) }
+    var searchQuery by remember { mutableStateOf("") }
+
+    val filteredApps = remember(apps, searchQuery) {
+        if (searchQuery.isEmpty()) {
+            apps
+        } else {
+            apps.filter {
+                it.appName.contains(searchQuery, ignoreCase = true) ||
+                        it.packageName.contains(searchQuery, ignoreCase = true)
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Apps to Block") },
+        text = {
+            Column {
+                // Search field
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("Search apps") },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "${tempSelectedApps.size} apps selected",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Apps list
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp)
+                ) {
+                    items(filteredApps) { app ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    tempSelectedApps = if (app.packageName in tempSelectedApps) {
+                                        tempSelectedApps - app.packageName
+                                    } else {
+                                        tempSelectedApps + app.packageName
+                                    }
+                                }
+                                .padding(8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Apps,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Column {
+                                    Text(
+                                        text = app.appName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = app.packageName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Checkbox(
+                                checked = app.packageName in tempSelectedApps,
+                                onCheckedChange = null
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(tempSelectedApps) }) {
+                Text("Confirm")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+// ========== UTILITY FUNCTIONS ==========
+
+private fun getInstalledApps(context: Context): List<AppInfo> {
+    return try {
+        val packageManager = context.packageManager
+        val packages = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
+
+        packages
+            .filter { it.flags and ApplicationInfo.FLAG_SYSTEM == 0 } // Filter non-system apps
+            .map { appInfo ->
+                AppInfo(
+                    packageName = appInfo.packageName,
+                    appName = packageManager.getApplicationLabel(appInfo).toString(),
+                    icon = packageManager.getApplicationIcon(appInfo)
+                )
+            }
+            .sortedBy { it.appName }
+    } catch (e: Exception) {
+        Log.e("AppPicker", "Error getting installed apps", e)
+        emptyList()
+    }
+}
+
+private fun getAppName(context: Context, packageName: String): String {
+    return try {
+        val packageManager = context.packageManager
+        val appInfo = packageManager.getApplicationInfo(packageName, 0)
+        packageManager.getApplicationLabel(appInfo).toString()
+    } catch (e: Exception) {
+        packageName
+    }
+}
+
+private val appBlockPresets = mapOf(
+    "Social Media" to listOf(
+        "com.facebook.katana",
+        "com.instagram.android",
+        "com.twitter.android",
+        "com.snapchat.android",
+        "com.zhiliaoapp.musically" // TikTok
+    ),
+    "Gaming" to listOf(
+        "com.pubg.imobile",
+        "com.supercell.clashofclans",
+        "com.king.candycrushsaga",
+        "com.roblox.client"
+    ),
+    "Streaming" to listOf(
+        "com.google.android.youtube",
+        "com.netflix.mediaclient",
+        "com.amazon.avod.thirdpartyclient",
+        "com.spotify.music"
+    ),
+    "Shopping" to listOf(
+        "com.amazon.mShop.android.shopping",
+        "com.ebay.mobile",
+        "com.shopify.mobile"
+    )
+)
+
+private fun getPresetIcon(presetName: String): ImageVector {
+    return when (presetName) {
+        "Social Media" -> Icons.Default.Group
+        "Gaming" -> Icons.Default.SportsEsports
+        "Streaming" -> Icons.Default.PlayCircle
+        "Shopping" -> Icons.Default.ShoppingCart
+        else -> Icons.Default.Apps
+    }
+}
+// ========== SUPPORTING COMPONENTS AND DATA CLASSES ==========
+
+data class SoundModeOption(
+    val name: String,
+    val icon: ImageVector,
+    val description: String
+)
+
+data class AppInfo(
+    val packageName: String,
+    val appName: String,
+    val icon: android.graphics.drawable.Drawable?
+)
+
+
+@Composable
+private fun SaveButtonsCard(
+    workflowId: Long?,
+    onSave: () -> Unit,
+    onBack: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(
+                onClick = onSave,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Icon(
+                    imageVector = if (workflowId != null) Icons.Default.Edit else Icons.Default.Save,
+                    contentDescription = null
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(if (workflowId != null) "Update Task" else "Save Task")
+            }
+
+            OutlinedButton(
+                onClick = onBack,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Cancel")
+            }
+        }
+    }
+}
+
+// ========== EXPANDABLE SECTIONS ==========
+
+@Composable
+private fun ExpandableTriggerSection(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    content: @Composable () -> Unit
+) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onExpandedChange(!expanded) }
+                .padding(vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(title, style = MaterialTheme.typography.titleMedium)
+            }
+            Icon(
+                imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = if (expanded) "Collapse" else "Expand"
+            )
+        }
+
+        if (expanded) {
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                thickness = DividerDefaults.Thickness,
+                color = DividerDefaults.color
+            )
+            content()
+        }
+    }
+}
+
+@Composable
+private fun ExpandableActionSection(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    content: @Composable () -> Unit
+) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onExpandedChange(!expanded) }
+                .padding(vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(title, style = MaterialTheme.typography.titleMedium)
+            }
+            Icon(
+                imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = if (expanded) "Collapse" else "Expand"
+            )
+        }
+
+        if (expanded) {
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                thickness = DividerDefaults.Thickness,
+                color = DividerDefaults.color
+            )
+            content()
+        }
+    }
+}
+
+// ========== TRIGGER CONTENT COMPONENTS ==========
+
+@Composable
+private fun LocationTriggerContent(
     locationName: String,
     onLocationNameChange: (String) -> Unit,
     locationDetailsInput: String,
@@ -1249,514 +1140,156 @@ fun LocationTriggerSection(
     triggerOnOption: String,
     onTriggerOptionChange: (String) -> Unit
 ) {
-    if (expanded) {
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Location name input
-        TextField(
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedTextField(
             value = locationName,
             onValueChange = onLocationNameChange,
             label = { Text("Location Name") },
-            modifier = Modifier.fillMaxWidth()
+            placeholder = { Text("Home, Office, etc.") },
+            modifier = Modifier.fillMaxWidth(),
+            leadingIcon = { Icon(Icons.Default.Home, null) }
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Current location vs manual entry toggle
-        var useCurrentLocation by remember { mutableStateOf(false) }
-        val locationState = rememberLocationState()
-
-        Row(
+        OutlinedTextField(
+            value = locationDetailsInput,
+            onValueChange = onLocationDetailsChange,
+            label = { Text("Coordinates (lat,lng)") },
+            placeholder = { Text("37.7749,-122.4194") },
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Use Current Location")
-            Switch(
-                checked = useCurrentLocation,
-                onCheckedChange = {
-                    useCurrentLocation = it
-                    if (it && locationState.location != null) {
-                        // Auto-fill coordinates when toggled on
-                        val location = locationState.location!!
-                        onLocationDetailsChange("${location.latitude},${location.longitude}")
-                    }
-                }
-            )
-        }
+            leadingIcon = { Icon(Icons.Default.MyLocation, null) }
+        )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (useCurrentLocation) {
-            // Current location section
-            CurrentLocationSection(
-                locationState = locationState,
-                onLocationReceived = { location ->
-                    onLocationDetailsChange("${location.latitude},${location.longitude}")
-                }
-            )
-        } else {
-            // Manual coordinate entry
-            TextField(
-                value = locationDetailsInput,
-                onValueChange = onLocationDetailsChange,
-                label = { Text("Coordinates (e.g., lat,lng)") },
-                placeholder = { Text("37.4220,-122.0840") },
-                modifier = Modifier.fillMaxWidth(),
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.LocationOn,
-                        contentDescription = "Location"
-                    )
-                }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Radius slider
-        Text("Radius: ${radiusValue.roundToInt()}m")
+        Text("Radius: ${radiusValue.roundToInt()}m", style = MaterialTheme.typography.bodyMedium)
         Slider(
             value = radiusValue,
             onValueChange = onRadiusChange,
             valueRange = 50f..500f,
-            steps = ((500f - 50f) / 10f - 1).toInt(),
+            steps = 44,
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Trigger options
-        Text("Trigger On:")
+        Text("Trigger On:", style = MaterialTheme.typography.labelLarge)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .selectableGroup(),
-            horizontalArrangement = Arrangement.Start
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            val radioOptions = listOf("Entry", "Exit", "Both")
-            radioOptions.forEach { option ->
-                Row(
-                    Modifier
-                        .clickable { onTriggerOptionChange(option) }
-                        .padding(end = 16.dp, top = 8.dp, bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(
-                        selected = (triggerOnOption == option),
-                        onClick = { onTriggerOptionChange(option) }
-                    )
-                    Text(option)
-                }
+            listOf("Entry", "Exit", "Both").forEach { option ->
+                FilterChip(
+                    selected = triggerOnOption == option,
+                    onClick = { onTriggerOptionChange(option) },
+                    label = { Text(option) }
+                )
             }
         }
     }
 }
 
-@Composable
-fun CurrentLocationSection(
-    locationState: LocationState,
-    onLocationReceived: (android.location.Location) -> Unit
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var isRefreshing by remember { mutableStateOf(false) }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            when {
-                !locationState.hasPermission -> {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LocationOn,
-                            contentDescription = "Location Permission",
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Location permission required",
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-
-                locationState.isLoading || isRefreshing -> {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Getting your location...")
-                    }
-                }
-
-                locationState.error != null -> {
-                    Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.LocationOn,
-                                contentDescription = "Location Error",
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = locationState.error,
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Button(
-                            onClick = {
-                                isRefreshing = true
-                                // Use the helper function for refresh
-                                refreshLocation(context, scope) { result ->
-                                    isRefreshing = false
-                                    // Note: In a real implementation, you'd need to properly
-                                    // propagate this result back to the parent state
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            if (isRefreshing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.MyLocation,
-                                    contentDescription = null
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Retry")
-                        }
-                    }
-                }
-
-                locationState.location != null -> {
-                    val location = locationState.location
-                    onLocationReceived(location)
-
-                    Column {
-                        Text(
-                            text = "Current Location:",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Latitude: ${"%.6f".format(location.latitude)}",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Text(
-                            text = "Longitude: ${"%.6f".format(location.longitude)}",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-
-                        if (location.hasAccuracy()) {
-                            Text(
-                                text = "Accuracy: ±${location.accuracy.roundToInt()}m",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                        }
-
-                        // Show location age
-                        val locationAge = (System.currentTimeMillis() - location.time) / 1000
-                        Text(
-                            text = "Updated: ${locationAge}s ago",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Button(
-                            onClick = {
-                                isRefreshing = true
-                                refreshLocation(context, scope) { result ->
-                                    isRefreshing = false
-                                    // Handle result update
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            )
-                        ) {
-                            if (isRefreshing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.MyLocation,
-                                    contentDescription = null
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Update Location")
-                        }
-                    }
-                }
-
-                else -> {
-                    Text("Initializing location services...")
-                }
-            }
-        }
-    }
-}
-
-
-
-// Enhanced Time Trigger Section with Date/Time Pickers
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TimeTriggerSection(
-    expanded: Boolean,
+private fun TimeTriggerContent(
     onTimeValueChange: (String) -> Unit
 ) {
-    if (expanded) {
-        var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
-        var selectedTime by remember { mutableStateOf<LocalTime?>(null) }
-        var showDatePicker by remember { mutableStateOf(false) }
-        var showTimePicker by remember { mutableStateOf(false) }
-        var showQuickOptions by remember { mutableStateOf(true) }
+    var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
+    var selectedTime by remember { mutableStateOf<LocalTime?>(null) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
 
-        val datePickerState = rememberDatePickerState()
-        val timePickerState = rememberTimePickerState()
+    val datePickerState = rememberDatePickerState()
+    val timePickerState = rememberTimePickerState()
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Quick time options toggle
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Quick Options")
-            Switch(
-                checked = showQuickOptions,
-                onCheckedChange = { showQuickOptions = it }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (showQuickOptions) {
-            // Quick time options
-            QuickTimeOptionsSection(
-                onTimeSelected = { minutes ->
-                    val futureTime = LocalDateTime.now().plusMinutes(minutes.toLong())
-                    val timestamp = TimeUtils.dateTimeToUnixTimestamp(futureTime)
-                    onTimeValueChange(timestamp.toString())
-                    selectedDate = futureTime.toLocalDate()
-                    selectedTime = futureTime.toLocalTime()
-                }
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "OR",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.fillMaxSize(),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        // Custom date and time selection
-        Text(
-            text = if (showQuickOptions) "Set Custom Date & Time:" else "Set Date & Time:",
-            style = MaterialTheme.typography.titleSmall
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Date selection
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedButton(
             onClick = { showDatePicker = true },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Icon(
-                imageVector = Icons.Default.DateRange,
-                contentDescription = "Select Date"
-            )
+            Icon(Icons.Default.DateRange, null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = selectedDate?.let { TimeUtils.formatDate(it) } ?: "Select Date"
-            )
+            Text(selectedDate?.toString() ?: "Select Date")
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Time selection
         OutlinedButton(
             onClick = { showTimePicker = true },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Icon(
-                imageVector = Icons.Default.Schedule,
-                contentDescription = "Select Time"
-            )
+            Icon(Icons.Default.Schedule, null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = selectedTime?.let { TimeUtils.formatTime(it) } ?: "Select Time"
-            )
+            Text(selectedTime?.toString() ?: "Select Time")
         }
 
-        // Display selected datetime and validation
         if (selectedDate != null && selectedTime != null) {
-            val selectedDateTime = LocalDateTime.of(selectedDate, selectedTime)
-            val isFuture = TimeUtils.isFutureTime(selectedDateTime)
-
-            Spacer(modifier = Modifier.height(16.dp))
+            val dateTime = LocalDateTime.of(selectedDate, selectedTime)
+            val timestamp = java.time.ZoneId.systemDefault().rules
+                .getOffset(dateTime).totalSeconds + dateTime.toEpochSecond(java.time.ZoneOffset.UTC)
+            onTimeValueChange(timestamp.toString())
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isFuture)
-                        MaterialTheme.colorScheme.primaryContainer
-                    else
-                        MaterialTheme.colorScheme.errorContainer
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "Scheduled for:",
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                    Text(
-                        text = TimeUtils.formatDateTime(selectedDateTime),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = if (isFuture)
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        else
-                            MaterialTheme.colorScheme.onErrorContainer
-                    )
-
-                    if (!isFuture) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "⚠️ Selected time is in the past",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            }
-
-            // Convert to Unix timestamp when both date and time are selected
-            if (isFuture) {
-                val timestamp = TimeUtils.dateAndTimeToUnixTimestamp(selectedDate!!, selectedTime!!)
-                onTimeValueChange(timestamp.toString())
-            }
-        }
-
-        // Date Picker Dialog
-        if (showDatePicker) {
-            DatePickerDialog(
-                onDismissRequest = { showDatePicker = false },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            datePickerState.selectedDateMillis?.let { millis ->
-                                selectedDate = LocalDate.ofEpochDay(millis / (24 * 60 * 60 * 1000))
-                            }
-                            showDatePicker = false
-                        }
-                    ) {
-                        Text("OK")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showDatePicker = false }) {
-                        Text("Cancel")
-                    }
-                }
-            ) {
-                DatePicker(state = datePickerState)
-            }
-        }
-
-        // Time Picker Dialog
-        if (showTimePicker) {
-            TimePickerDialog(
-                onDismissRequest = { showTimePicker = false },
-                onConfirm = {
-                    selectedTime = LocalTime.of(
-                        timePickerState.hour,
-                        timePickerState.minute
-                    )
-                    showTimePicker = false
-                },
-                onDismiss = { showTimePicker = false }
-            ) {
-                TimePicker(state = timePickerState)
-            }
-        }
-    }
-}
-
-@Composable
-fun QuickTimeOptionsSection(
-    onTimeSelected: (Int) -> Unit
-) {
-    Text(
-        text = "Quick Time Options:",
-        style = MaterialTheme.typography.titleSmall
-    )
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    val quickOptions = listOf(
-        "2 min" to 2,
-        "5 min" to 5,
-        "15 min" to 15,
-        "30 min" to 30,
-        "1 hour" to 60,
-        "2 hours" to 120,
-        "1 day" to 1440
-    )
-
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.height(120.dp)
-    ) {
-        items(quickOptions) { (label, minutes) ->
-            OutlinedButton(
-                onClick = { onTimeSelected(minutes) },
-                modifier = Modifier.fillMaxWidth()
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
             ) {
                 Text(
-                    text = label,
-                    style = MaterialTheme.typography.bodySmall
+                    "Scheduled: ${dateTime}",
+                    modifier = Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
+
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let {
+                        selectedDate = java.time.Instant.ofEpochMilli(it)
+                            .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                    }
+                    showDatePicker = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    if (showTimePicker) {
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    selectedTime = LocalTime.of(timePickerState.hour, timePickerState.minute)
+                    showTimePicker = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("Cancel") } },
+            text = { TimePicker(state = timePickerState) }
+        )
+    }
+}
+
+@Composable
+private fun WiFiTriggerContent(
+    wifiState: String,
+    onWifiStateChange: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Target State:", style = MaterialTheme.typography.labelLarge)
+        Row(
+            modifier = Modifier.fillMaxWidth().selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("On", "Off").forEach { state ->
+                FilterChip(
+                    selected = wifiState == state,
+                    onClick = { onWifiStateChange(state) },
+                    label = { Text(state) }
                 )
             }
         }
@@ -1764,187 +1297,425 @@ fun QuickTimeOptionsSection(
 }
 
 @Composable
-fun TimePickerDialog(
-    onDismissRequest: () -> Unit,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-    content: @Composable () -> Unit
+private fun BluetoothTriggerContent(
+    bluetoothDeviceAddress: String,
+    onBluetoothAddressChange: (String) -> Unit
+) {
+    val context = LocalContext.current
+    var showDevicePicker by remember { mutableStateOf(false) }
+    var pairedDevices by remember { mutableStateOf<List<BluetoothDeviceInfo>>(emptyList()) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedButton(
+            onClick = {
+                try {
+                    pairedDevices = getPairedBluetoothDevices(context)
+                    showDevicePicker = true
+                } catch (e: Exception) {
+                    Log.e("Bluetooth", "Error fetching devices", e)
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.Bluetooth, null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Select Paired Device")
+        }
+
+        OutlinedTextField(
+            value = bluetoothDeviceAddress,
+            onValueChange = onBluetoothAddressChange,
+            label = { Text("Device MAC Address") },
+            placeholder = { Text("XX:XX:XX:XX:XX:XX") },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    if (showDevicePicker) {
+        AlertDialog(
+            onDismissRequest = { showDevicePicker = false },
+            confirmButton = { TextButton(onClick = { showDevicePicker = false }) { Text("Cancel") } },
+            title = { Text("Paired Bluetooth Devices") },
+            text = {
+                if (pairedDevices.isEmpty()) {
+                    Text("No paired devices found")
+                } else {
+                    LazyColumn {
+                        items(pairedDevices) { device ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .clickable {
+                                        onBluetoothAddressChange(device.address)
+                                        showDevicePicker = false
+                                    }
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(device.name, fontWeight = FontWeight.Bold)
+                                    Text(device.address, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        )
+    }
+}
+
+// ========== ACTION CONTENT COMPONENTS ==========
+
+@Composable
+private fun NotificationActionContent(
+    notificationTitle: String,
+    onNotificationTitleChange: (String) -> Unit,
+    notificationMessage: String,
+    onNotificationMessageChange: (String) -> Unit,
+    notificationPriority: String,
+    onNotificationPriorityChange: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedTextField(
+            value = notificationTitle,
+            onValueChange = onNotificationTitleChange,
+            label = { Text("Title") },
+            placeholder = { Text("Notification title") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+            value = notificationMessage,
+            onValueChange = onNotificationMessageChange,
+            label = { Text("Message") },
+            placeholder = { Text("Notification message") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2
+        )
+
+        Text("Priority:", style = MaterialTheme.typography.labelLarge)
+        Row(
+            modifier = Modifier.fillMaxWidth().selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("Low", "Normal", "High").forEach { priority ->
+                FilterChip(
+                    selected = notificationPriority == priority,
+                    onClick = { onNotificationPriorityChange(priority) },
+                    label = { Text(priority) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToggleSettingsContent(
+    toggleSetting: String,
+    onToggleSettingChange: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Setting to Toggle:", style = MaterialTheme.typography.labelLarge)
+        Row(
+            modifier = Modifier.fillMaxWidth().selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("WiFi", "Bluetooth").forEach { setting ->
+                FilterChip(
+                    selected = toggleSetting == setting,
+                    onClick = { onToggleSettingChange(setting) },
+                    label = { Text(setting) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RunScriptContent(
+    scriptText: String,
+    onScriptTextChange: (String) -> Unit
+) {
+    val context = LocalContext.current
+    var selectedTemplate by remember { mutableStateOf("Custom") }
+
+    val templates = mapOf(
+        "Custom" to "",
+        "Log Message" to "log('Hello from AutoFlow!');",
+        "Send Notification" to "notify('Alert', 'Script executed!');",
+        "HTTP Request" to "var response = httpGet('https://api.example.com');"
+    )
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Templates:", style = MaterialTheme.typography.labelLarge)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(templates.keys.toList()) { template ->
+                FilterChip(
+                    selected = selectedTemplate == template,
+                    onClick = {
+                        selectedTemplate = template
+                        onScriptTextChange(templates[template] ?: "")
+                    },
+                    label = { Text(template) }
+                )
+            }
+        }
+
+        OutlinedTextField(
+            value = scriptText,
+            onValueChange = onScriptTextChange,
+            label = { Text("JavaScript Code") },
+            placeholder = { Text("Enter code here...") },
+            modifier = Modifier.fillMaxWidth().height(150.dp),
+            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = { validateScript(scriptText) },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Validate")
+            }
+            Button(
+                onClick = { testScriptExecution(scriptText, context) },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Test")
+            }
+        }
+    }
+}
+
+// ========== ERROR DIALOG ==========
+
+@Composable
+private fun ErrorDialog(
+    errorMessage: String,
+    onDismiss: () -> Unit
 ) {
     AlertDialog(
-        onDismissRequest = onDismissRequest,
+        onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = onConfirm) {
+            TextButton(onClick = onDismiss) {
                 Text("OK")
             }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        },
-        text = { content() }
+        title = { Text("Error") },
+        text = { Text(errorMessage) },
+        icon = { Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error) }
     )
 }
-// Data class for Bluetooth device info
-data class BluetoothDeviceInfo(
-    val name: String,
-    val address: String
-)
 
-// Function to get paired Bluetooth devices
-@SuppressLint("MissingPermission")
-fun getPairedBluetoothDevices(context: Context): List<BluetoothDeviceInfo> {
-    val deviceList = mutableListOf<BluetoothDeviceInfo>()
+// ========== SAVE HANDLER ==========
 
-    try {
-        // Check for Bluetooth permissions
-        if (!hasBluetoothPermissions(context)) {
-            Log.w("Bluetooth", "Missing Bluetooth permissions")
-            return emptyList()
-        }
-
-        // Get Bluetooth adapter
-        val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-        val bluetoothAdapter = bluetoothManager?.adapter
-
-        if (bluetoothAdapter == null) {
-            Log.w("Bluetooth", "Bluetooth adapter not available")
-            return emptyList()
-        }
-
-        if (!bluetoothAdapter.isEnabled) {
-            Log.w("Bluetooth", "Bluetooth is not enabled")
-            return emptyList()
-        }
-
-        // Get bonded (paired) devices
-        val pairedDevices = bluetoothAdapter.bondedDevices
-
-        if (pairedDevices.isNotEmpty()) {
-            for (device in pairedDevices) {
-                val deviceName = device.name ?: "Unknown Device"
-                val deviceAddress = device.address // MAC address
-
-                deviceList.add(BluetoothDeviceInfo(deviceName, deviceAddress))
-                Log.d("Bluetooth", "Found paired device: $deviceName at $deviceAddress")
-            }
-        } else {
-            Log.d("Bluetooth", "No paired devices found")
-        }
-
-    } catch (e: SecurityException) {
-        Log.e("Bluetooth", "Permission error: ${e.message}")
-    } catch (e: Exception) {
-        Log.e("Bluetooth", "Error getting paired devices: ${e.message}")
-    }
-
-    return deviceList
-}
-
-// Check if app has Bluetooth permissions
-fun hasBluetoothPermissions(context: Context): Boolean {
-    return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-        // Android 12+
-        androidx.core.content.ContextCompat.checkSelfPermission(
-            context, android.Manifest.permission.BLUETOOTH_CONNECT
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-    } else {
-        // Android 11 and below
-        androidx.core.content.ContextCompat.checkSelfPermission(
-            context, android.Manifest.permission.BLUETOOTH
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-    }
-}
-
-@Composable
-fun DynamicContextTriggerSection(
-    expanded: Boolean,
-    conditions: List<Condition>,
-    onAddConditionClicked: () -> Unit,
-    onRemoveCondition: (Condition) -> Unit
+private suspend fun handleSaveTask(
+    context: Context,
+    viewModel: WorkflowViewModel,
+    workflowId: Long?,
+    taskName: String,
+    locationTriggerExpanded: Boolean,
+    locationName: String,
+    locationDetailsInput: String,
+    radiusValue: Float,
+    triggerOnOption: String,
+    wifiTriggerExpanded: Boolean,
+    wifiState: String,
+    timeTriggerExpanded: Boolean,
+    timeValue: String,
+    bluetoothDeviceTriggerExpanded: Boolean,
+    bluetoothDeviceAddress: String,
+    sendNotificationActionExpanded: Boolean,
+    notificationTitle: String,
+    notificationMessage: String,
+    notificationPriority: String,
+    toggleSettingsActionExpanded: Boolean,
+    toggleSetting: String,
+    runScriptActionExpanded: Boolean,
+    scriptText: String,
+    onSuccess: () -> Unit,
+    onError: (String) -> Unit
 ) {
-    if (expanded) {
-        Spacer(modifier = Modifier.height(8.dp))
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (conditions.isEmpty()) {
-                    Text(
-                        "No conditions added. Add at least two conditions (e.g., At Work AND Phone Charging) to create a context.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center
-                    )
-                } else {
-                    Text("This workflow will run when ALL of these conditions are met:", style = MaterialTheme.typography.labelMedium)
-                    conditions.forEach { condition ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(condition.summary, modifier = Modifier.weight(1f))
-                            IconButton(onClick = { onRemoveCondition(condition) }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Remove Condition")
-                            }
-                        }
+    try {
+        // Validate task name
+        if (taskName.isBlank()) {
+            onError("Task name cannot be empty")
+            return
+        }
+
+        // Create trigger
+        val trigger = when {
+            locationTriggerExpanded && locationDetailsInput.isNotBlank() -> {
+                val parts = locationDetailsInput.split(",").map { it.trim() }
+                if (parts.size != 2) {
+                    onError("Invalid coordinate format. Use: lat,lng")
+                    return
+                }
+
+                val lat = parts[0].toDoubleOrNull()
+                val lng = parts[1].toDoubleOrNull()
+
+                if (lat == null || lng == null) {
+                    onError("Invalid coordinate values")
+                    return
+                }
+
+                val json = JSONObject().apply {
+                    put("locationName", locationName.ifEmpty { "Unnamed" })
+                    put("coordinates", locationDetailsInput)
+                    put("latitude", lat)
+                    put("longitude", lng)
+                    put("radius", radiusValue.roundToInt())
+                    put("triggerOnEntry", triggerOnOption in listOf("Entry", "Both"))
+                    put("triggerOnExit", triggerOnOption in listOf("Exit", "Both"))
+                }.toString()
+
+                Trigger(0, 0, Constants.TRIGGER_LOCATION, json)
+            }
+            wifiTriggerExpanded -> Trigger(0, 0, Constants.TRIGGER_WIFI, wifiState)
+            timeTriggerExpanded && timeValue.isNotBlank() -> Trigger(0, 0, Constants.TRIGGER_TIME, timeValue)
+            bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank() ->
+                Trigger(0, 0, Constants.TRIGGER_BLE, bluetoothDeviceAddress)
+            else -> {
+                onError("Please configure at least one trigger")
+                return
+            }
+        }
+
+        // Create action
+        val action = when {
+            sendNotificationActionExpanded && notificationTitle.isNotBlank() ->
+                Action(Constants.ACTION_SEND_NOTIFICATION, notificationTitle, notificationMessage, notificationPriority)
+            toggleSettingsActionExpanded ->
+                Action(Constants.ACTION_TOGGLE_WIFI, null, null, "Normal").apply { setValue(toggleSetting) }
+            runScriptActionExpanded && scriptText.isNotBlank() ->
+                Action("RUN_SCRIPT", null, null, null).apply { setValue(scriptText) }
+            else -> {
+                onError("Please configure at least one action")
+                return
+            }
+        }
+
+        // Save workflow
+        if (workflowId != null) {
+            viewModel.updateWorkflow(
+                workflowId,
+                taskName,
+                trigger,
+                action,
+                object : WorkflowViewModel.WorkflowOperationCallback {
+                    override fun onSuccess(message: String) {
+                        Log.d("TaskCreation", "Update successful: $message")
+                        onSuccess()
+                    }
+                    override fun onError(error: String) {
+                        Log.e("TaskCreation", "Update failed: $error")
+                        onError(error)
                     }
                 }
-                Button(
-                    onClick = onAddConditionClicked,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Add Condition")
+            )
+        } else {
+            viewModel.addWorkflow(
+                trigger,
+                action,
+                object : WorkflowViewModel.WorkflowOperationCallback {
+                    override fun onSuccess(message: String) {
+                        Log.d("TaskCreation", "Creation successful: $message")
+
+                        // Schedule alarm if time trigger
+                        if (trigger.type == Constants.TRIGGER_TIME) {
+                            try {
+                                val triggerTime = timeValue.toLongOrNull()
+                                if (triggerTime != null) {
+                                    AlarmScheduler.scheduleNotification(
+                                        context,
+                                        0L,
+                                        triggerTime,
+                                        action.title ?: "AutoFlow Alert",
+                                        action.message ?: "Trigger activated"
+                                    )
+                                }
+                            } catch (e: Exception) {
+                                Log.e("TaskCreation", "Failed to schedule alarm", e)
+                            }
+                        }
+
+                        onSuccess()
+                    }
+                    override fun onError(error: String) {
+                        Log.e("TaskCreation", "Creation failed: $error")
+                        onError(error)
+                    }
                 }
-            }
+            )
         }
+    } catch (e: Exception) {
+        Log.e("TaskCreation", "Error saving task", e)
+        onError("Unexpected error: ${e.message}")
     }
 }
 
-@Composable
-fun AddConditionDialog(
-    onDismiss: () -> Unit,
-    onConditionSelected: (String) -> Unit
-) {
-    // In the future, you can get these from your Constants file
-    val conditionTypes = listOf("Location", "WiFi", "Bluetooth Device", "Charging State", "Movement Speed", "Time of Day")
+// ========== UTILITY FUNCTIONS ==========
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add a Condition") },
-        text = {
-            LazyColumn {
-                items(conditionTypes) { type ->
-                    Text(
-                        text = type,
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onConditionSelected(type) }
-                            .padding(vertical = 12.dp)
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
+data class BluetoothDeviceInfo(val name: String, val address: String)
+
+@SuppressLint("MissingPermission")
+fun getPairedBluetoothDevices(context: Context): List<BluetoothDeviceInfo> {
+    return try {
+        val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        val adapter = bluetoothManager?.adapter
+
+        if (adapter == null || !adapter.isEnabled) {
+            emptyList()
+        } else {
+            adapter.bondedDevices?.map {
+                BluetoothDeviceInfo(it.name ?: "Unknown", it.address)
+            } ?: emptyList()
         }
-    )
+    } catch (e: Exception) {
+        Log.e("Bluetooth", "Error getting devices", e)
+        emptyList()
+    }
 }
 
+private fun testScriptExecution(scriptCode: String, context: Context) {
+    Log.i("ScriptTest", "Testing: $scriptCode")
+    // Add actual script execution logic here
+}
 
-@Preview(showBackground = true, name = "Task Creation Screen Preview")
+private fun validateScript(scriptCode: String) {
+    if (scriptCode.trim().isEmpty()) {
+        Log.w("ScriptValidation", "Empty script")
+        return
+    }
+
+    var parenCount = 0
+    var braceCount = 0
+    scriptCode.forEach { char ->
+        when (char) {
+            '(' -> parenCount++
+            ')' -> parenCount--
+            '{' -> braceCount++
+            '}' -> braceCount--
+        }
+    }
+
+    if (parenCount != 0 || braceCount != 0) {
+        Log.w("ScriptValidation", "Unbalanced brackets")
+    } else {
+        Log.i("ScriptValidation", "Validation passed")
+    }
+}
+
+// ========== PREVIEW ==========
+
+@Preview(showBackground = true)
 @Composable
 fun TaskCreationScreenPreview() {
     AutoFlowTheme {
-        TaskCreationScreen(
-            onBack = { println("Preview: Back clicked") },
-            onSaveTask = { taskName -> println("Preview: Save Task clicked with name: $taskName") }
-        )
+        TaskCreationScreen()
     }
 }
