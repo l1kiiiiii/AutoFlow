@@ -97,7 +97,10 @@ public class WorkflowEntity {
                                                       @Nullable com.example.autoflow.model.Trigger trigger,
                                                       @Nullable com.example.autoflow.model.Action actionInput) {
         // Null-safe handling for workflowName
-        String safeName = workflowName != null && !workflowName.trim().isEmpty() ? workflowName : "Unnamed Workflow";
+        String safeName = workflowName != null && !workflowName.trim().isEmpty()
+                ? workflowName
+                : "Workflow_" + System.currentTimeMillis();
+
 
         JSONObject triggerJson = new JSONObject();
         if (trigger != null) {

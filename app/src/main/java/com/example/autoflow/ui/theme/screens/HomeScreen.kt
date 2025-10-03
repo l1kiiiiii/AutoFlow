@@ -13,14 +13,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.autoflow.data.WorkflowEntity
-import com.example.autoflow.ui.components.WorkflowItem
-import com.example.autoflow.data.WorkflowViewModel
 import com.example.autoflow.util.Constants
+import com.example.autoflow.viewmodel.WorkflowViewModel
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*

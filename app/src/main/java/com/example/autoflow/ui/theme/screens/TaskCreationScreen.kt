@@ -1,6 +1,5 @@
 package com.example.autoflow.ui.theme.screens
 
-import android.R.attr.action
 import com.example.autoflow.util.AlarmScheduler
 import androidx.compose.ui.platform.LocalContext
 import android.annotation.SuppressLint
@@ -43,8 +42,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -56,15 +53,14 @@ import com.example.autoflow.util.LocationState
 import com.example.autoflow.util.TimeUtils
 import com.example.autoflow.util.refreshLocation
 import com.example.autoflow.util.rememberLocationState
-import com.example.autoflow.data.WorkflowViewModel
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
-import java.util.jar.Manifest
 import kotlin.math.roundToInt
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
@@ -75,6 +71,15 @@ import org.json.JSONObject
 import org.json.JSONArray // Added this import
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Checkbox
+import androidx.compose.ui.text.style.TextAlign
+import com.example.autoflow.viewmodel.WorkflowViewModel
+
+
+data class Condition(
+    val type: String,
+    val parameters: JSONObject,
+    val summary: String
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -136,6 +141,10 @@ fun TaskCreationScreen(
     var blockingRadius by remember { mutableFloatStateOf(100f) }
     var useLocationTriggerForBlocking by remember { mutableStateOf(true) } // Link to location trigger
 
+    // Add with other state variables near the top of TaskCreationScreen
+    var contextTriggerExpanded by remember { mutableStateOf(false) }
+    var conditionsList by remember { mutableStateOf<List<Condition>>(emptyList()) }
+    var showAddConditionDialog by remember { mutableStateOf(false) }
 
     // Pre-populate fields if editing
     LaunchedEffect(existingWorkflow) {
@@ -212,6 +221,7 @@ fun TaskCreationScreen(
                     }
                 }
             }
+
         }
     }
 
@@ -243,16 +253,18 @@ fun TaskCreationScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 Column(modifier = Modifier.fillMaxWidth()) {
                     val triggerOptions = listOf(
-                        "Location", "WiFi", "Time", "Bluetooth Device"
+                        "Dynamic Context","Location", "WiFi", "Time", "Bluetooth Device"
                     )
 
                     triggerOptions.forEach { triggerName ->
-                        var expandedState by remember { mutableStateOf(false) }
-                        when (triggerName) {
-                            "Location" -> expandedState = locationTriggerExpanded
-                            "WiFi" -> expandedState = wifiTriggerExpanded
-                            "Time" -> expandedState = timeTriggerExpanded
-                            "Bluetooth Device" -> expandedState = bluetoothDeviceTriggerExpanded
+                        // Determine the expanded state for the current trigger
+                        val isExpanded = when (triggerName) {
+                            "Dynamic Context" -> contextTriggerExpanded
+                            "Location" -> locationTriggerExpanded
+                            "WiFi" -> wifiTriggerExpanded
+                            "Time" -> timeTriggerExpanded
+                            "Bluetooth Device" -> bluetoothDeviceTriggerExpanded
+                            else -> false
                         }
 
                         Column {
@@ -261,6 +273,7 @@ fun TaskCreationScreen(
                                     .fillMaxWidth()
                                     .clickable {
                                         when (triggerName) {
+                                            "Dynamic Context" -> contextTriggerExpanded = !contextTriggerExpanded
                                             "Location" -> locationTriggerExpanded = !locationTriggerExpanded
                                             "WiFi" -> wifiTriggerExpanded = !wifiTriggerExpanded
                                             "Time" -> timeTriggerExpanded = !timeTriggerExpanded
@@ -273,12 +286,23 @@ fun TaskCreationScreen(
                             ) {
                                 Text(triggerName, style = MaterialTheme.typography.bodyLarge)
                                 Icon(
-                                    imageVector = if (expandedState) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
-                                    contentDescription = if (expandedState) "Collapse" else "Expand"
+                                    imageVector = if (isExpanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
+                                    contentDescription = if (isExpanded) "Collapse" else "Expand"
                                 )
                             }
 
                             when (triggerName) {
+                                // NEW: Case for Dynamic Context
+                                "Dynamic Context" -> {
+                                    DynamicContextTriggerSection(
+                                        expanded = contextTriggerExpanded,
+                                        conditions = conditionsList,
+                                        onAddConditionClicked = { showAddConditionDialog = true },
+                                        onRemoveCondition = { condition ->
+                                            conditionsList = conditionsList.filter { it != condition }
+                                        }
+                                    )
+                                }
                                 "Location" -> {
                                     LocationTriggerSection(
                                         expanded = locationTriggerExpanded,
@@ -421,7 +445,7 @@ fun TaskCreationScreen(
                                         }
                                     }
                                 }
-
+                                    // entry pont
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                         }
@@ -641,7 +665,6 @@ fun TaskCreationScreen(
                             // Predefined popular apps
                             val popularApps = listOf(
                                 "Instagram" to "com.instagram.android",
-                                "TikTok" to "com.zhiliaoapp.musically",
                                 "Facebook" to "com.facebook.katana",
                                 "Snapchat" to "com.snapchat.android",
                                 "Twitter/X" to "com.twitter.android",
@@ -873,6 +896,24 @@ fun TaskCreationScreen(
 
                             // Create trigger based on expanded sections
                             val trigger = when {
+
+                                contextTriggerExpanded && conditionsList.isNotEmpty() -> {
+                                    Log.d("TaskCreation", "Creating context trigger with ${conditionsList.size} conditions")
+                                    val conditionsJsonArray = JSONArray()
+                                    conditionsList.forEach { condition ->
+                                        val conditionJson = JSONObject().apply {
+                                            put("type", condition.type)
+                                            // The 'parameters' object would be populated with real data
+                                            // from a configuration step that is currently a TODO
+                                            put("parameters", condition.parameters)
+                                            put("summary", condition.summary)
+                                        }
+                                        conditionsJsonArray.put(conditionJson)
+                                    }
+                                    // You should define TRIGGER_CONTEXT in your Constants file
+                                    Trigger(0, 0, "CONTEXT", conditionsJsonArray.toString())
+                                }
+
                                 locationTriggerExpanded && locationDetailsInput.isNotBlank() -> {
                                     Log.d("TaskCreation", "Creating location trigger")
                                     Log.d("TaskCreation", "Location details: $locationDetailsInput")
@@ -935,6 +976,7 @@ fun TaskCreationScreen(
 
                             // Create action based on expanded sections
                             val action = when {
+                                sendNotificationActionExpanded -> Action(Constants.ACTION_SEND_NOTIFICATION, notificationTitle, notificationMessage, notificationPriority)
                                 sendNotificationActionExpanded && notificationTitle.isNotBlank() -> {
                                     Log.d("TaskCreation", "Creating notification action")
                                     Action(
@@ -995,7 +1037,7 @@ fun TaskCreationScreen(
                                         taskName,
                                         trigger,
                                         action,
-                                        object : com.example.autoflow.data.WorkflowViewModel.WorkflowOperationCallback {
+                                        object :  WorkflowViewModel.WorkflowOperationCallback {
                                             override fun onSuccess(message: String) {
                                                 Log.d("TaskCreation", "Update success: $message")
                                                 onSaveTask(taskName)
@@ -1010,6 +1052,7 @@ fun TaskCreationScreen(
                                     // CREATING new workflow
                                     Log.d("TaskCreation", "Creating new workflow")
                                     viewModel.addWorkflow(
+                                        taskName,
                                         trigger,
                                         action,
                                         object : WorkflowViewModel.WorkflowOperationCallback {
@@ -1064,6 +1107,7 @@ fun TaskCreationScreen(
                                 }
                             }
                         } else {
+                            null
                             Log.w("TaskCreation", "Task name is blank")
                         }
                     },
@@ -1812,6 +1856,86 @@ fun hasBluetoothPermissions(context: Context): Boolean {
     }
 }
 
+@Composable
+fun DynamicContextTriggerSection(
+    expanded: Boolean,
+    conditions: List<Condition>,
+    onAddConditionClicked: () -> Unit,
+    onRemoveCondition: (Condition) -> Unit
+) {
+    if (expanded) {
+        Spacer(modifier = Modifier.height(8.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (conditions.isEmpty()) {
+                    Text(
+                        "No conditions added. Add at least two conditions (e.g., At Work AND Phone Charging) to create a context.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center
+                    )
+                } else {
+                    Text("This workflow will run when ALL of these conditions are met:", style = MaterialTheme.typography.labelMedium)
+                    conditions.forEach { condition ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(condition.summary, modifier = Modifier.weight(1f))
+                            IconButton(onClick = { onRemoveCondition(condition) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Remove Condition")
+                            }
+                        }
+                    }
+                }
+                Button(
+                    onClick = onAddConditionClicked,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add Condition")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AddConditionDialog(
+    onDismiss: () -> Unit,
+    onConditionSelected: (String) -> Unit
+) {
+    // In the future, you can get these from your Constants file
+    val conditionTypes = listOf("Location", "WiFi", "Bluetooth Device", "Charging State", "Movement Speed", "Time of Day")
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add a Condition") },
+        text = {
+            LazyColumn {
+                items(conditionTypes) { type ->
+                    Text(
+                        text = type,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onConditionSelected(type) }
+                            .padding(vertical = 12.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
 
 
 @Preview(showBackground = true, name = "Task Creation Screen Preview")

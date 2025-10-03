@@ -25,6 +25,11 @@ public class WiFiManager {
     private WiFiCallback callback;
     private boolean isReceiverRegistered = false;
 
+    public boolean isWifiEnabled() {
+        WifiManager wifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
+        return wifiManager.isWifiEnabled();
+    }
+
     public interface WiFiCallback {
         void onWifiStateChanged(boolean isEnabled);
         void onWifiConnected(@NonNull String ssid);
