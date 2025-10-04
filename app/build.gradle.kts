@@ -62,6 +62,7 @@
 
         implementation(libs.androidx.room.common.jvm)
         implementation(libs.androidx.room.runtime)
+        implementation(libs.androidx.compose.ui.text)
         annotationProcessor(libs.androidx.room.compiler) // Using libs.androidx.room.compiler
 
         implementation(libs.androidx.work.runtime)

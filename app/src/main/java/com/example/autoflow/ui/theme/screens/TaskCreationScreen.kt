@@ -1,51 +1,140 @@
 package com.example.autoflow.ui.screens
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.location.Geocoder
 import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.DoNotDisturb
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Login
+import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.Divider
+import androidx.compose.material3.DividerDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.runtime.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.autoflow.viewmodel.WorkflowViewModel
 import com.example.autoflow.model.Action
 import com.example.autoflow.model.Trigger
 import com.example.autoflow.ui.theme.AutoFlowTheme
-import com.example.autoflow.util.*
+import com.example.autoflow.util.AlarmScheduler
+import com.example.autoflow.util.Constants
+import com.example.autoflow.viewmodel.WorkflowViewModel
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationToken
+import com.google.android.gms.tasks.CancellationTokenSource
+import com.google.android.gms.tasks.OnTokenCanceledListener
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.util.Locale
 import kotlin.math.roundToInt
+
+// Note: You will also need imports for your 'fetchCurrentLocation' function,
+// which is called but not defined in the provided snippet. For example:
+// import com.google.android.gms.location.FusedLocationProviderClient
 
 /**
  * Production-ready Task Creation Screen with comprehensive error handling
@@ -1127,7 +1216,7 @@ private fun ExpandableActionSection(
     }
 }
 
-// ========== TRIGGER CONTENT COMPONENTS ==========
+// Add to your LocationTriggerContent composable
 
 @Composable
 private fun LocationTriggerContent(
@@ -1140,51 +1229,573 @@ private fun LocationTriggerContent(
     triggerOnOption: String,
     onTriggerOptionChange: (String) -> Unit
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // Location client
+    val fusedLocationClient = remember {
+        LocationServices.getFusedLocationProviderClient(context)
+    }
+
+    // Location states
+    var isLoadingLocation by remember { mutableStateOf(false) }
+    var locationError by remember { mutableStateOf<String?>(null) }
+    var currentAddress by remember { mutableStateOf<String?>(null) }
+    var showLocationPermissionDialog by remember { mutableStateOf(false) }
+
+    // Radius text field state
+    var radiusText by remember { mutableStateOf(radiusValue.roundToInt().toString()) }
+    var radiusError by remember { mutableStateOf<String?>(null) }
+
+    // Update text when slider changes
+    LaunchedEffect(radiusValue) {
+        radiusText = radiusValue.roundToInt().toString()
+    }
+
+    // Permission launcher
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+
+        if (fineLocationGranted || coarseLocationGranted) {
+            fetchCurrentLocation(
+                context = context,
+                fusedLocationClient = fusedLocationClient,
+                onLocationReceived = { lat, lng, address ->
+                    onLocationDetailsChange("$lat,$lng")
+                    currentAddress = address
+                    if (locationName.isEmpty()) {
+                        onLocationNameChange(address ?: "Current Location")
+                    }
+                    isLoadingLocation = false
+                },
+                onError = { error ->
+                    locationError = error
+                    isLoadingLocation = false
+                }
+            )
+        } else {
+            locationError = "Location permission denied"
+            isLoadingLocation = false
+            showLocationPermissionDialog = true
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Location Name Field
         OutlinedTextField(
             value = locationName,
             onValueChange = onLocationNameChange,
             label = { Text("Location Name") },
             placeholder = { Text("Home, Office, etc.") },
             modifier = Modifier.fillMaxWidth(),
-            leadingIcon = { Icon(Icons.Default.Home, null) }
+            leadingIcon = { Icon(Icons.Default.Home, null) },
+            supportingText = {
+                if (currentAddress != null) {
+                    Text(
+                        "Detected: $currentAddress",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
         )
 
-        OutlinedTextField(
-            value = locationDetailsInput,
-            onValueChange = onLocationDetailsChange,
-            label = { Text("Coordinates (lat,lng)") },
-            placeholder = { Text("37.7749,-122.4194") },
-            modifier = Modifier.fillMaxWidth(),
-            leadingIcon = { Icon(Icons.Default.MyLocation, null) }
-        )
-
-        Text("Radius: ${radiusValue.roundToInt()}m", style = MaterialTheme.typography.bodyMedium)
-        Slider(
-            value = radiusValue,
-            onValueChange = onRadiusChange,
-            valueRange = 50f..500f,
-            steps = 44,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Text("Trigger On:", style = MaterialTheme.typography.labelLarge)
+        // Coordinates Field with Auto-Detect Button
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .selectableGroup(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            listOf("Entry", "Exit", "Both").forEach { option ->
-                FilterChip(
-                    selected = triggerOnOption == option,
-                    onClick = { onTriggerOptionChange(option) },
-                    label = { Text(option) }
+            OutlinedTextField(
+                value = locationDetailsInput,
+                onValueChange = onLocationDetailsChange,
+                label = { Text("Coordinates") },
+                placeholder = { Text("37.7749,-122.4194") },
+                modifier = Modifier.weight(1f),
+                leadingIcon = { Icon(Icons.Default.LocationOn, null) },
+                isError = locationError != null,
+                supportingText = locationError?.let {
+                    { Text(it, color = MaterialTheme.colorScheme.error) }
+                },
+                enabled = !isLoadingLocation
+            )
+
+            // Auto-Detect Location Button
+            Button(
+                onClick = {
+                    locationError = null
+                    isLoadingLocation = true
+
+                    val hasPermission = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED ||
+                            ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
+                            ) == PackageManager.PERMISSION_GRANTED
+
+                    if (hasPermission) {
+                        fetchCurrentLocation(
+                            context = context,
+                            fusedLocationClient = fusedLocationClient,
+                            onLocationReceived = { lat, lng, address ->
+                                onLocationDetailsChange("$lat,$lng")
+                                currentAddress = address
+                                if (locationName.isEmpty()) {
+                                    onLocationNameChange(address ?: "Current Location")
+                                }
+                                isLoadingLocation = false
+                            },
+                            onError = { error ->
+                                locationError = error
+                                isLoadingLocation = false
+                            }
+                        )
+                    } else {
+                        locationPermissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
+                            )
+                        )
+                    }
+                },
+                enabled = !isLoadingLocation,
+                modifier = Modifier.height(56.dp)
+            ) {
+                if (isLoadingLocation) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Icon(Icons.Default.MyLocation, "Detect Location")
+                }
+            }
+        }
+
+        // Location Preview Card
+        if (locationDetailsInput.isNotBlank()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Column {
+                        Text(
+                            "Location Set",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            locationDetailsInput,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // ========== NEW: Radius Input with Text Field ==========
+
+        Text(
+            "Trigger Radius",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            // Text Input for precise value
+            OutlinedTextField(
+                value = radiusText,
+                onValueChange = { newValue ->
+                    radiusText = newValue
+                    // Validate and update radius
+                    val parsedValue = newValue.toIntOrNull()
+                    when {
+                        newValue.isEmpty() -> {
+                            radiusError = null
+                        }
+                        parsedValue == null -> {
+                            radiusError = "Enter a valid number"
+                        }
+                        parsedValue < 10 -> {
+                            radiusError = "Minimum 10 meters"
+                        }
+                        parsedValue > 5000 -> {
+                            radiusError = "Maximum 5000 meters"
+                        }
+                        else -> {
+                            radiusError = null
+                            onRadiusChange(parsedValue.toFloat())
+                        }
+                    }
+                },
+                label = { Text("Radius (meters)") },
+                placeholder = { Text("100") },
+                modifier = Modifier.width(140.dp),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        // Validate on done
+                        val parsedValue = radiusText.toIntOrNull()
+                        if (parsedValue != null && parsedValue in 10..5000) {
+                            onRadiusChange(parsedValue.toFloat())
+                        }
+                    }
+                ),
+                isError = radiusError != null,
+                supportingText = radiusError?.let {
+                    { Text(it, color = MaterialTheme.colorScheme.error) }
+                },
+                trailingIcon = {
+                    Text(
+                        "m",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                singleLine = true
+            )
+
+            // Quick preset buttons
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    "Quick Presets:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    listOf(50, 100, 200, 500, 1000).forEach { preset ->
+                        FilterChip(
+                            selected = radiusValue.roundToInt() == preset,
+                            onClick = {
+                                onRadiusChange(preset.toFloat())
+                                radiusText = preset.toString()
+                                radiusError = null
+                            },
+                            label = {
+                                Text(
+                                    when {
+                                        preset >= 1000 -> "${preset / 1000}km"
+                                        else -> "${preset}m"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Fine-tuned Slider for visual adjustment
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                "Fine-tune: ${radiusValue.roundToInt()} meters",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Slider(
+                value = radiusValue,
+                onValueChange = { newValue ->
+                    onRadiusChange(newValue)
+                    radiusText = newValue.roundToInt().toString()
+                    radiusError = null
+                },
+                valueRange = 10f..5000f,
+                steps = 498, // More granular steps (10m increments)
+                modifier = Modifier.fillMaxWidth(),
+                colors = SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            )
+
+            // Range indicators
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "10m",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "1km",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "2.5km",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "5km",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
+
+        // Visual radius representation
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
+            )
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier.size(20.dp)
+                )
+                Column {
+                    Text(
+                        getRadiusDescription(radiusValue.roundToInt()),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    Text(
+                        "Recommended for ${getRadiusUseCase(radiusValue.roundToInt())}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Trigger Options
+        Text(
+            "Trigger When:",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Medium
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(
+                Triple("Entry", Icons.Default.Login, "Trigger when entering the location area"),
+                Triple("Exit", Icons.Default.Logout, "Trigger when leaving the location area"),
+                Triple("Both", Icons.Default.SwapHoriz, "Trigger on both entry and exit")
+            ).forEach { (option, icon, description) ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onTriggerOptionChange(option) },
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (triggerOnOption == option)
+                            MaterialTheme.colorScheme.primaryContainer
+                        else
+                            MaterialTheme.colorScheme.surface
+                    ),
+                    border = if (triggerOnOption == option)
+                        BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                    else
+                        BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = if (triggerOnOption == option)
+                                MaterialTheme.colorScheme.primary
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                option,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = if (triggerOnOption == option) FontWeight.Bold else FontWeight.Medium,
+                                color = if (triggerOnOption == option)
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                else
+                                    MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (triggerOnOption == option) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Selected",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Permission Dialog (same as before)...
+}
+
+// ========== HELPER FUNCTIONS ==========
+
+private fun getRadiusDescription(radius: Int): String {
+    return when {
+        radius < 50 -> "Very small area - ${radius}m radius"
+        radius < 150 -> "Small area - ${radius}m radius"
+        radius < 500 -> "Medium area - ${radius}m radius"
+        radius < 1000 -> "Large area - ${radius}m radius"
+        else -> "Very large area - ${radius}m (${radius / 1000}km) radius"
     }
 }
+
+private fun getRadiusUseCase(radius: Int): String {
+    return when {
+        radius < 50 -> "specific rooms or small buildings"
+        radius < 150 -> "homes, offices, or parking lots"
+        radius < 500 -> "neighborhoods or large buildings"
+        radius < 1000 -> "districts or large complexes"
+        else -> "cities or wide areas"
+    }
+}
+
+
+// ========== LOCATION FETCHING FUNCTION ==========
+
+@SuppressLint("MissingPermission")
+private fun fetchCurrentLocation(
+    context: Context,
+    fusedLocationClient: FusedLocationProviderClient,
+    onLocationReceived: (latitude: Double, longitude: Double, address: String?) -> Unit,
+    onError: (String) -> Unit
+) {
+    try {
+        // Use getCurrentLocation for fresh, accurate location
+        fusedLocationClient.getCurrentLocation(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            object : CancellationToken() {
+                override fun onCanceledRequested(listener: OnTokenCanceledListener) =
+                    CancellationTokenSource().token
+
+                override fun isCancellationRequested() = false
+            }
+        ).addOnSuccessListener { location ->
+            if (location != null) {
+                val latitude = location.latitude
+                val longitude = location.longitude
+
+                // Get address from coordinates (Reverse Geocoding)
+                val address = getAddressFromCoordinates(context, latitude, longitude)
+
+                onLocationReceived(latitude, longitude, address)
+            } else {
+                // Fallback to last known location
+                fusedLocationClient.lastLocation.addOnSuccessListener { lastLocation ->
+                    if (lastLocation != null) {
+                        val address = getAddressFromCoordinates(
+                            context,
+                            lastLocation.latitude,
+                            lastLocation.longitude
+                        )
+                        onLocationReceived(lastLocation.latitude, lastLocation.longitude, address)
+                    } else {
+                        onError("Unable to get location. Please enable GPS")
+                    }
+                }.addOnFailureListener { e ->
+                    onError("Location error: ${e.message}")
+                }
+            }
+        }.addOnFailureListener { e ->
+            onError("Failed to get location: ${e.message}")
+        }
+    } catch (e: SecurityException) {
+        onError("Location permission not granted")
+    } catch (e: Exception) {
+        onError("Error: ${e.message}")
+    }
+}
+
+// ========== REVERSE GEOCODING ==========
+
+private fun getAddressFromCoordinates(
+    context: Context,
+    latitude: Double,
+    longitude: Double
+): String? {
+    return try {
+        val geocoder = Geocoder(context, Locale.getDefault())
+        val addresses = geocoder.getFromLocation(latitude, longitude, 1)
+
+        if (!addresses.isNullOrEmpty()) {
+            val address = addresses[0]
+            // Build readable address
+            buildString {
+                address.featureName?.let { append("$it, ") }
+                address.locality?.let { append("$it, ") }
+                address.adminArea?.let { append(it) }
+            }.takeIf { it.isNotBlank() } ?: "Unknown Location"
+        } else {
+            null
+        }
+    } catch (e: Exception) {
+        Log.e("Geocoding", "Error getting address", e)
+        null
+    }
+}
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1619,6 +2230,7 @@ private suspend fun handleSaveTask(
             )
         } else {
             viewModel.addWorkflow(
+                taskName,
                 trigger,
                 action,
                 object : WorkflowViewModel.WorkflowOperationCallback {

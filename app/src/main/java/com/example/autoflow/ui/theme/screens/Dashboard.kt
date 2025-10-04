@@ -1,12 +1,22 @@
 package com.example.autoflow.ui.theme.screens
 
+import android.util.Log
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -16,15 +26,11 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.autoflow.ui.screens.TaskCreationScreen
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Production-ready Dashboard with:
- * - Proper navigation state management
- * - Error handling for navigation
- * - Memory leak prevention
- * - Bottom navigation with Material Design 3
- * - Top app bar with notifications
+ * Enhanced Dashboard with smooth navigation and success feedback
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,8 +41,10 @@ fun Dashboard(modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Track navigation errors
+    // Track navigation errors and success
     var navigationError by remember { mutableStateOf<String?>(null) }
+    var showSuccessAnimation by remember { mutableStateOf(false) }
+    var successMessage by remember { mutableStateOf("") }
 
     // Bottom navigation items
     val bottomNavItems = remember {
@@ -84,7 +92,6 @@ fun Dashboard(modifier: Modifier = Modifier) {
                     titleContentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 actions = {
-                    // Notifications button
                     IconButton(
                         onClick = {
                             scope.launch {
@@ -97,8 +104,7 @@ fun Dashboard(modifier: Modifier = Modifier) {
                     ) {
                         BadgedBox(
                             badge = {
-                                // Show badge only if there are notifications
-                                val notificationCount = 0 // TODO: Connect to notification system
+                                val notificationCount = 0
                                 if (notificationCount > 0) {
                                     Badge {
                                         Text(
@@ -138,14 +144,10 @@ fun Dashboard(modifier: Modifier = Modifier) {
                             try {
                                 if (currentDestination?.route != item.route) {
                                     navController.navigate(item.route) {
-                                        // Pop up to the start destination of the graph to
-                                        // avoid building up a large stack of destinations
                                         popUpTo(navController.graph.findStartDestination().id) {
                                             saveState = true
                                         }
-                                        // Avoid multiple copies of the same destination
                                         launchSingleTop = true
-                                        // Restore state when reselecting a previously selected item
                                         restoreState = true
                                     }
                                 }
@@ -174,7 +176,31 @@ fun Dashboard(modifier: Modifier = Modifier) {
         NavHost(
             navController = navController,
             startDestination = "home",
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(innerPadding),
+            enterTransition = {
+                slideIntoContainer(
+                    towards = AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(300, easing = EaseInOut)
+                ) + fadeIn(animationSpec = tween(300))
+            },
+            exitTransition = {
+                slideOutOfContainer(
+                    towards = AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(300, easing = EaseInOut)
+                ) + fadeOut(animationSpec = tween(300))
+            },
+            popEnterTransition = {
+                slideIntoContainer(
+                    towards = AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(300, easing = EaseInOut)
+                ) + fadeIn(animationSpec = tween(300))
+            },
+            popExitTransition = {
+                slideOutOfContainer(
+                    towards = AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(300, easing = EaseInOut)
+                ) + fadeOut(animationSpec = tween(300))
+            }
         ) {
             // Home screen
             composable("home") {
@@ -239,15 +265,38 @@ fun Dashboard(modifier: Modifier = Modifier) {
                     onSaveTask = { taskName ->
                         scope.launch {
                             try {
-                                snackbarHostState.showSnackbar(
-                                    message = "Task '$taskName' saved successfully!",
-                                    duration = SnackbarDuration.Short
+                                // Show success message
+                                successMessage = "Task '$taskName' created successfully!"
+                                showSuccessAnimation = true
+
+                                // Show snackbar with action
+                                val result = snackbarHostState.showSnackbar(
+                                    message = "✓ Task '$taskName' created!",
+                                    actionLabel = "View",
+                                    duration = SnackbarDuration.Short,
+                                    withDismissAction = true
                                 )
+
+                                // Small delay for UX smoothness
+                                delay(300)
+
+                                // Navigate to home and clear back stack
                                 navController.navigate("home") {
-                                    popUpTo("home") { inclusive = true }
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        inclusive = true
+                                    }
+                                    launchSingleTop = true
+                                }
+
+                                showSuccessAnimation = false
+
+                                // If user clicked "View", highlight the new task
+                                if (result == SnackbarResult.ActionPerformed) {
+                                    Log.d("Dashboard", "User wants to view the task")
                                 }
                             } catch (e: Exception) {
-                                snackbarHostState.showSnackbar("Error saving task")
+                                Log.e("Dashboard", "Error after saving task", e)
+                                snackbarHostState.showSnackbar("Error saving task: ${e.message}")
                             }
                         }
                     }
@@ -271,7 +320,6 @@ fun Dashboard(modifier: Modifier = Modifier) {
                 }
 
                 if (workflowId == 0L) {
-                    // Invalid workflow ID, navigate back
                     LaunchedEffect(Unit) {
                         snackbarHostState.showSnackbar("Invalid workflow ID")
                         navController.popBackStack()
@@ -295,14 +343,29 @@ fun Dashboard(modifier: Modifier = Modifier) {
                         onSaveTask = { taskName ->
                             scope.launch {
                                 try {
+                                    // Show success message for update
+                                    successMessage = "Task '$taskName' updated!"
+                                    showSuccessAnimation = true
+
                                     snackbarHostState.showSnackbar(
-                                        message = "Task '$taskName' updated successfully!",
-                                        duration = SnackbarDuration.Short
+                                        message = "✓ Task '$taskName' updated successfully!",
+                                        duration = SnackbarDuration.Short,
+                                        withDismissAction = true
                                     )
+
+                                    delay(300)
+
+                                    // Navigate back to home
                                     navController.navigate("home") {
-                                        popUpTo("home") { inclusive = true }
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            inclusive = true
+                                        }
+                                        launchSingleTop = true
                                     }
+
+                                    showSuccessAnimation = false
                                 } catch (e: Exception) {
+                                    Log.e("Dashboard", "Error after updating task", e)
                                     snackbarHostState.showSnackbar("Error updating task")
                                 }
                             }
@@ -311,14 +374,80 @@ fun Dashboard(modifier: Modifier = Modifier) {
                 }
             }
 
-            // Profile screen - NO onBack parameter
+            // Profile screen
             composable("profile") {
                 ProfileManagment()
             }
 
-            // Settings screen - NO onBack parameter
+            // Settings screen
             composable("settings") {
                 Settings()
+            }
+        }
+    }
+
+    // Success animation overlay
+    if (showSuccessAnimation) {
+        SuccessAnimationOverlay(message = successMessage)
+    }
+}
+
+// ========== SUCCESS ANIMATION OVERLAY ==========
+
+@Composable
+fun SuccessAnimationOverlay(message: String) {
+    var visible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        visible = true
+        delay(1500)
+        visible = false
+    }
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = scaleIn(
+            initialScale = 0.5f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessLow
+            )
+        ) + fadeIn(),
+        exit = scaleOut(targetScale = 0.8f) + fadeOut()
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.4f)
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "Success",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
             }
         }
     }
@@ -326,9 +455,6 @@ fun Dashboard(modifier: Modifier = Modifier) {
 
 // ========== DATA CLASSES ==========
 
-/**
- * Data class for bottom navigation items
- */
 data class BottomNavItem(
     val route: String,
     val label: String,
@@ -339,9 +465,6 @@ data class BottomNavItem(
 
 // ========== HELPER FUNCTIONS ==========
 
-/**
- * Get screen title based on current route
- */
 private fun getScreenTitle(route: String): String {
     return when {
         route.startsWith("home") -> "AutoFlow"
