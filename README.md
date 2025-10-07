@@ -442,6 +442,6 @@ AutoFlow aims to become the **most powerful and user-friendly automation app** f
 
 ---
 
-**Last Updated**: 2024
+**Last Updated**: 2025
 **Version**: 1.0 (l1kiii-1 branch)
 **Status**: Active Development 🚀
