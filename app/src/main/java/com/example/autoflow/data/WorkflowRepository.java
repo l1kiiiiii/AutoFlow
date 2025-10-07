@@ -2,6 +2,8 @@ package com.example.autoflow.data;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import java.util.List;
@@ -50,22 +52,20 @@ public class WorkflowRepository {
 
     /**
      * Insert workflow entity with callback (required by WorkflowViewModel)
-     * @param workflowEntity The workflow to insert
+     * @param workflow The workflow to insert
      * @param callback Callback to receive insert result
      */
-    public void insert(@NonNull final WorkflowEntity workflowEntity, @Nullable final InsertCallback callback) {
-        executorService.execute(() -> {
+    public void insert(WorkflowEntity workflow, InsertCallback callback) {
+        new Thread(() -> {
             try {
-                long insertedId = workflowDao.insert(workflowEntity);
-                if (callback != null) {
-                    mainThreadHandler.post(() -> callback.onInsertComplete(insertedId));
-                }
+                long id = workflowDao.insert(workflow);
+                Log.d("WorkflowRepository", "✅ Inserted workflow with ID: " + id);
+                callback.onInsertComplete(id);
             } catch (Exception e) {
-                if (callback != null) {
-                    mainThreadHandler.post(() -> callback.onInsertError(e.getMessage()));
-                }
+                Log.e("WorkflowRepository", "❌ Insert failed", e);
+                callback.onInsertError(e.getMessage());
             }
-        });
+        }).start();
     }
 
     // ========== UPDATE OPERATIONS ==========

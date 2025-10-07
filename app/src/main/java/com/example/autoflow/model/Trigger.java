@@ -9,10 +9,10 @@ import org.json.JSONException;
 import java.util.regex.Pattern;
 
 public class Trigger {
-    private final long id;
-    private final long workflowId;
-    public final String type;
-    public final String value;
+    public long id;
+    public long workflowId;
+    public String type;
+    public String value;
 
     // Validation patterns
     private static final Pattern MAC_ADDRESS_PATTERN =
@@ -29,9 +29,6 @@ public class Trigger {
     }
 
     // Constructor without ID (for creating new triggers)
-    public Trigger(long workflowId, @NonNull String type, @NonNull String value) {
-        this(0, workflowId, type, value);
-    }
 
     // Getters
     public long getId() {

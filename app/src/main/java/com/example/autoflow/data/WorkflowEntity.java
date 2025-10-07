@@ -1,5 +1,7 @@
 package com.example.autoflow.data;
 
+import android.util.Log;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.room.ColumnInfo;
@@ -8,6 +10,9 @@ import androidx.room.Ignore;
 import androidx.room.PrimaryKey;
 import org.json.JSONException;
 import org.json.JSONObject;
+
+import com.example.autoflow.model.Action;
+import com.example.autoflow.model.Trigger;
 import com.example.autoflow.util.Constants;
 import java.util.Objects;
 
@@ -91,61 +96,47 @@ public class WorkflowEntity {
         this.actionDetails = actionDetails != null ? actionDetails : "";
     }
 
-    @NonNull
-    public static WorkflowEntity fromTriggerAndAction(@Nullable String workflowName,
-                                                      boolean isEnabled,
-                                                      @Nullable com.example.autoflow.model.Trigger trigger,
-                                                      @Nullable com.example.autoflow.model.Action actionInput) {
-        // Null-safe handling for workflowName
-        String safeName = workflowName != null && !workflowName.trim().isEmpty()
-                ? workflowName
-                : "Workflow_" + System.currentTimeMillis();
+    // In WorkflowEntity.java
+    public static WorkflowEntity fromTriggerAndAction(
+            @NonNull String workflowName,
+            boolean isEnabled,
+            @NonNull com.example.autoflow.model.Trigger trigger,  // ← Full package name
+            @NonNull com.example.autoflow.model.Action action) {   // ← Full package name
 
+        try {
+            Log.d("WorkflowEntity", "🔵 fromTriggerAndAction called");
 
-        JSONObject triggerJson = new JSONObject();
-        if (trigger != null) {
-            try {
-                triggerJson.put("id", trigger.getId());
-                triggerJson.put("workflowId", trigger.getWorkflowId());
-                triggerJson.put("type", trigger.getType() != null ? trigger.getType() : "");
-                triggerJson.put("value", trigger.getValue() != null ? trigger.getValue() : "");
-            } catch (JSONException e) {
-                // Log error but don't throw - create empty JSON object instead
-                System.err.println("Error creating trigger JSON: " + e.getMessage());
-                triggerJson = new JSONObject();
-            }
+            // Convert Trigger to JSON
+            JSONObject triggerJson = new JSONObject();
+            triggerJson.put("type", trigger.type);
+            triggerJson.put("value", trigger.value);
+            String triggerDetails = triggerJson.toString();
+
+            // Convert Action to JSON
+            JSONObject actionJson = new JSONObject();
+            actionJson.put("type", action.type);
+            if (action.title != null) actionJson.put("title", action.title);
+            if (action.message != null) actionJson.put("message", action.message);
+            if (action.priority != null) actionJson.put("priority", action.priority);
+            if (action.getValue() != null) actionJson.put("value", action.getValue());
+            String actionDetails = actionJson.toString();
+
+            // Create entity
+            WorkflowEntity entity = new WorkflowEntity();
+            entity.setWorkflowName(workflowName);
+            entity.setTriggerDetails(triggerDetails);
+            entity.setActionDetails(actionDetails);
+            entity.setEnabled(isEnabled);
+
+            Log.d("WorkflowEntity", "✅ WorkflowEntity created");
+            return entity;
+
+        } catch (Exception e) {
+            Log.e("WorkflowEntity", "❌ Error", e);
+            return null;
         }
-
-        JSONObject actionJson = new JSONObject();
-        if (actionInput != null) {
-            try {
-                String actionType = actionInput.getType() != null ? actionInput.getType() : "";
-                actionJson.put("type", actionType);
-
-                // Only add non-null values to JSON
-                if (actionInput.getTitle() != null && !actionInput.getTitle().isEmpty()) {
-                    actionJson.put(Constants.JSON_KEY_NOTIFICATION_TITLE, actionInput.getTitle());
-                }
-                if (actionInput.getMessage() != null && !actionInput.getMessage().isEmpty()) {
-                    actionJson.put(Constants.JSON_KEY_NOTIFICATION_MESSAGE, actionInput.getMessage());
-                }
-                if (actionInput.getPriority() != null && !actionInput.getPriority().isEmpty()) {
-                    actionJson.put(Constants.JSON_KEY_NOTIFICATION_PRIORITY, actionInput.getPriority());
-                }
-                if (actionInput.getValue() != null && !actionInput.getValue().isEmpty()) {
-                    actionJson.put("value", actionInput.getValue());
-                }
-            } catch (JSONException e) {
-                // Log error but don't throw - create empty JSON object instead
-                System.err.println("Error creating action JSON: " + e.getMessage());
-                actionJson = new JSONObject();
-            }
-        }
-
-        return new WorkflowEntity(safeName, isEnabled,
-                triggerJson.toString(),
-                actionJson.toString());
     }
+
 
     @Nullable
     public com.example.autoflow.model.Trigger toTrigger() {

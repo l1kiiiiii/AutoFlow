@@ -1,5 +1,6 @@
 package com.example.autoflow.ui.theme.screens
 
+import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeOut
@@ -47,6 +48,12 @@ fun HomeScreen(
 ) {
     val scrollState = rememberScrollState()
     val workflows: List<WorkflowEntity>? by viewModel.getWorkflows().observeAsState(null)
+    LaunchedEffect(workflows) {
+        Log.d("HomeScreen", "📊 Workflows updated: ${workflows?.size ?: 0} tasks")
+        workflows?.forEach { workflow ->
+            Log.d("HomeScreen", "  - ${workflow.workflowName} (ID: ${workflow.id}, Enabled: ${workflow.isEnabled()})")
+        }
+    }
     val activeWorkflows = workflows?.filter { it.isEnabled } ?: emptyList()
     val totalWorkflows = workflows?.size ?: 0
     val scope = rememberCoroutineScope()
@@ -55,6 +62,7 @@ fun HomeScreen(
     // Delete confirmation dialog state
     var workflowToDelete by remember { mutableStateOf<WorkflowEntity?>(null) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+
 
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
@@ -569,7 +577,7 @@ private fun getWorkflowIcon(workflow: WorkflowEntity): Pair<ImageVector, Color> 
         Pair(Icons.Default.Work, Color(0xFF5C6BC0))
     }
 }
-
+// need improvement
 private fun getTriggerDescription(workflow: WorkflowEntity): String {
     return try {
         val triggerDetails = workflow.triggerDetails

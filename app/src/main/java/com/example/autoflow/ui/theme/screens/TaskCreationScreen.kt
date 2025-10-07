@@ -112,6 +112,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.model.Action
 import com.example.autoflow.model.Trigger
 import com.example.autoflow.ui.theme.AutoFlowTheme
@@ -125,6 +126,7 @@ import com.google.android.gms.tasks.CancellationToken
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.gms.tasks.OnTokenCanceledListener
 import kotlinx.coroutines.launch
+import org.json.JSONException
 import org.json.JSONObject
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -394,7 +396,6 @@ fun TaskCreationScreen(
         // Success Snackbar
         if (showSuccessSnackbar) {
             LaunchedEffect(Unit) {
-                kotlinx.coroutines.delay(2000)
                 showSuccessSnackbar = false
             }
         }
@@ -1162,6 +1163,7 @@ private fun ExpandableTriggerSection(
             )
         }
 
+        // NO ANIMATION - Direct show/hide
         if (expanded) {
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 8.dp),
@@ -1205,6 +1207,7 @@ private fun ExpandableActionSection(
             )
         }
 
+        // NO ANIMATION - Direct show/hide
         if (expanded) {
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 8.dp),
@@ -1215,6 +1218,7 @@ private fun ExpandableActionSection(
         }
     }
 }
+
 
 // Add to your LocationTriggerContent composable
 
@@ -1808,9 +1812,19 @@ private fun TimeTriggerContent(
     var showTimePicker by remember { mutableStateOf(false) }
 
     val datePickerState = rememberDatePickerState()
-    val timePickerState = rememberTimePickerState()
+
+    // ✅ AUTOMATICALLY DETECTS USER'S SYSTEM PREFERENCE (12hr or 24hr)
+    val context = LocalContext.current
+    val is24HourFormat = android.text.format.DateFormat.is24HourFormat(context)
+
+    val timePickerState = rememberTimePickerState(
+        initialHour = LocalTime.now().hour,
+        initialMinute = LocalTime.now().minute,
+        is24Hour = is24HourFormat  // ← Auto-detects from system settings!
+    )
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Date picker button
         OutlinedButton(
             onClick = { showDatePicker = true },
             modifier = Modifier.fillMaxWidth()
@@ -1820,34 +1834,77 @@ private fun TimeTriggerContent(
             Text(selectedDate?.toString() ?: "Select Date")
         }
 
+        // Time picker button
         OutlinedButton(
             onClick = { showTimePicker = true },
             modifier = Modifier.fillMaxWidth()
         ) {
             Icon(Icons.Default.Schedule, null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text(selectedTime?.toString() ?: "Select Time")
+            Text(
+                selectedTime?.let {
+                    // ✅ Display in user's preferred format
+                    if (is24HourFormat) {
+                        String.format("%02d:%02d", it.hour, it.minute)
+                    } else {
+                        val hour12 = if (it.hour == 0) 12 else if (it.hour > 12) it.hour - 12 else it.hour
+                        val amPm = if (it.hour < 12) "AM" else "PM"
+                        String.format("%d:%02d %s", hour12, it.minute, amPm)
+                    }
+                } ?: "Select Time"
+            )
         }
 
+        // Show scheduled time
         if (selectedDate != null && selectedTime != null) {
             val dateTime = LocalDateTime.of(selectedDate, selectedTime)
-            val timestamp = java.time.ZoneId.systemDefault().rules
-                .getOffset(dateTime).totalSeconds + dateTime.toEpochSecond(java.time.ZoneOffset.UTC)
+
+            // ✅ CORRECT: Proper timezone conversion
+            val timestamp = dateTime
+                .atZone(java.time.ZoneId.systemDefault())
+                .toEpochSecond()
+
+            // Save the timestamp
             onTimeValueChange(timestamp.toString())
+
+            // Log for debugging
+            Log.d("TimeTriggerContent", "Is24Hour: $is24HourFormat")
+            Log.d("TimeTriggerContent", "Selected DateTime: $dateTime")
+            Log.d("TimeTriggerContent", "Timestamp (seconds): $timestamp")
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
-            ) {
-                Text(
-                    "Scheduled: ${dateTime}",
-                    modifier = Modifier.padding(16.dp),
-                    style = MaterialTheme.typography.bodyMedium
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
                 )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "Scheduled for:",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        // ✅ Display in user's preferred format
+                        if (is24HourFormat) {
+                            dateTime.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+                        } else {
+                            dateTime.format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, yyyy h:mm a"))
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        "Format: ${if (is24HourFormat) "24-hour" else "12-hour"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
 
+    // Date picker dialog
     if (showDatePicker) {
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
@@ -1855,35 +1912,56 @@ private fun TimeTriggerContent(
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let {
                         selectedDate = java.time.Instant.ofEpochMilli(it)
-                            .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                            .atZone(java.time.ZoneId.systemDefault())
+                            .toLocalDate()
                     }
                     showDatePicker = false
                 }) {
                     Text("OK")
                 }
             },
-            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } }
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Cancel")
+                }
+            }
         ) {
             DatePicker(state = datePickerState)
         }
     }
 
+    // Time picker dialog
     if (showTimePicker) {
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    selectedTime = LocalTime.of(timePickerState.hour, timePickerState.minute)
+                    // ✅ TimePickerState.hour is ALWAYS in 24-hour format (0-23)
+                    // No conversion needed - it handles 12hr/24hr automatically!
+                    selectedTime = LocalTime.of(
+                        timePickerState.hour,    // Always 0-23
+                        timePickerState.minute
+                    )
                     showTimePicker = false
+
+                    Log.d("TimePicker", "Selected: ${timePickerState.hour}:${timePickerState.minute} (24hr format)")
                 }) {
                     Text("OK")
                 }
             },
-            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("Cancel") } },
-            text = { TimePicker(state = timePickerState) }
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) {
+                    Text("Cancel")
+                }
+            },
+            text = {
+                TimePicker(state = timePickerState)
+            }
         )
     }
 }
+
+
 
 @Composable
 private fun WiFiTriggerContent(
@@ -2120,10 +2198,10 @@ private fun ErrorDialog(
         icon = { Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error) }
     )
 }
-
 // ========== SAVE HANDLER ==========
+// ========== COMPLETE handleSaveTask FUNCTION ==========
 
-private suspend fun handleSaveTask(
+private suspend fun handleSaveTask(  // ← NO @Composable annotation!
     context: Context,
     viewModel: WorkflowViewModel,
     workflowId: Long?,
@@ -2151,18 +2229,61 @@ private suspend fun handleSaveTask(
     onError: (String) -> Unit
 ) {
     try {
-        // Validate task name
+        Log.d("TaskCreation", "🔵 handleSaveTask started")
+
+        // 1. VALIDATE TASK NAME
         if (taskName.isBlank()) {
+            Log.e("TaskCreation", "❌ Task name is blank")
             onError("Task name cannot be empty")
             return
         }
+        Log.d("TaskCreation", "✅ Task name valid: $taskName")
 
-        // Create trigger
+        // 2. CHECK WHICH TRIGGERS ARE CONFIGURED
+        val hasLocationTrigger = locationTriggerExpanded && locationDetailsInput.isNotBlank()
+        val hasWifiTrigger = wifiTriggerExpanded
+        val hasTimeTrigger = timeTriggerExpanded && timeValue.isNotBlank()
+        val hasBluetoothTrigger = bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank()
+
+        Log.d("TaskCreation", "=== TRIGGER CHECK ===")
+        Log.d("TaskCreation", "Location: $hasLocationTrigger")
+        Log.d("TaskCreation", "WiFi: $hasWifiTrigger")
+        Log.d("TaskCreation", "Time: $hasTimeTrigger")
+        Log.d("TaskCreation", "Bluetooth: $hasBluetoothTrigger")
+
+        // 3. VALIDATE AT LEAST ONE TRIGGER IS CONFIGURED
+        if (!hasLocationTrigger && !hasWifiTrigger && !hasTimeTrigger && !hasBluetoothTrigger) {
+            Log.e("TaskCreation", "❌ No trigger configured")
+            onError("Please configure at least ONE trigger (Location, WiFi, Time, or Bluetooth)")
+            return
+        }
+        Log.d("TaskCreation", "✅ At least one trigger is configured")
+
+        // 4. CREATE TRIGGER (Priority: Time > WiFi > Bluetooth > Location)
         val trigger = when {
-            locationTriggerExpanded && locationDetailsInput.isNotBlank() -> {
+            hasTimeTrigger -> {
+                Log.d("TaskCreation", "→ Creating TIME trigger: $timeValue")
+                Trigger(0, 0, Constants.TRIGGER_TIME, timeValue)
+            }
+
+            hasWifiTrigger -> {
+                Log.d("TaskCreation", "→ Creating WIFI trigger: $wifiState")
+                Trigger(0, 0, Constants.TRIGGER_WIFI, wifiState)
+            }
+
+            hasBluetoothTrigger -> {
+                Log.d("TaskCreation", "→ Creating BLUETOOTH trigger: $bluetoothDeviceAddress")
+                Trigger(0, 0, Constants.TRIGGER_BLE, bluetoothDeviceAddress)
+            }
+
+            hasLocationTrigger -> {
+                Log.d("TaskCreation", "→ Creating LOCATION trigger")
+
+                // Parse coordinates
                 val parts = locationDetailsInput.split(",").map { it.trim() }
                 if (parts.size != 2) {
-                    onError("Invalid coordinate format. Use: lat,lng")
+                    Log.e("TaskCreation", "❌ Invalid coordinate format")
+                    onError("Invalid coordinates. Use format: latitude,longitude (e.g., 37.7749,-122.4194)")
                     return
                 }
 
@@ -2170,105 +2291,180 @@ private suspend fun handleSaveTask(
                 val lng = parts[1].toDoubleOrNull()
 
                 if (lat == null || lng == null) {
-                    onError("Invalid coordinate values")
+                    Log.e("TaskCreation", "❌ Invalid coordinate values")
+                    onError("Invalid coordinate values. Please enter valid numbers.")
                     return
                 }
 
+                // Create location JSON
                 val json = JSONObject().apply {
-                    put("locationName", locationName.ifEmpty { "Unnamed" })
+                    put("locationName", locationName.ifEmpty { "Unnamed Location" })
                     put("coordinates", locationDetailsInput)
                     put("latitude", lat)
                     put("longitude", lng)
                     put("radius", radiusValue.roundToInt())
-                    put("triggerOnEntry", triggerOnOption in listOf("Entry", "Both"))
-                    put("triggerOnExit", triggerOnOption in listOf("Exit", "Both"))
-                }.toString()
+                    put("triggerOnEntry", triggerOnOption == "Entry" || triggerOnOption == "Both")
+                    put("triggerOnExit", triggerOnOption == "Exit" || triggerOnOption == "Both")
+                }
 
-                Trigger(0, 0, Constants.TRIGGER_LOCATION, json)
+                Log.d("TaskCreation", "Location JSON: ${json.toString()}")
+                Trigger(0, 0, Constants.TRIGGER_LOCATION, json.toString())
             }
-            wifiTriggerExpanded -> Trigger(0, 0, Constants.TRIGGER_WIFI, wifiState)
-            timeTriggerExpanded && timeValue.isNotBlank() -> Trigger(0, 0, Constants.TRIGGER_TIME, timeValue)
-            bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank() ->
-                Trigger(0, 0, Constants.TRIGGER_BLE, bluetoothDeviceAddress)
+
             else -> {
-                onError("Please configure at least one trigger")
+                Log.e("TaskCreation", "❌ Failed to create trigger")
+                onError("Failed to create trigger. Please try again.")
                 return
             }
         }
 
-        // Create action
+        Log.d("TaskCreation", "✅ Trigger created successfully: ${trigger.type}")
+
+        // 5. CHECK WHICH ACTIONS ARE CONFIGURED
+        val hasNotificationAction = sendNotificationActionExpanded && notificationTitle.isNotBlank()
+        val hasToggleAction = toggleSettingsActionExpanded
+        val hasScriptAction = runScriptActionExpanded && scriptText.isNotBlank()
+
+        Log.d("TaskCreation", "=== ACTION CHECK ===")
+        Log.d("TaskCreation", "Notification: $hasNotificationAction")
+        Log.d("TaskCreation", "Toggle: $hasToggleAction")
+        Log.d("TaskCreation", "Script: $hasScriptAction")
+
+        // 6. VALIDATE AT LEAST ONE ACTION IS CONFIGURED
+        if (!hasNotificationAction && !hasToggleAction && !hasScriptAction) {
+            Log.e("TaskCreation", "❌ No action configured")
+            onError("Please configure at least ONE action (Notification, Toggle Settings, or Script)")
+            return
+        }
+        Log.d("TaskCreation", "✅ At least one action is configured")
+
+        // 7. CREATE ACTION (Priority: Notification > Toggle > Script)
         val action = when {
-            sendNotificationActionExpanded && notificationTitle.isNotBlank() ->
-                Action(Constants.ACTION_SEND_NOTIFICATION, notificationTitle, notificationMessage, notificationPriority)
-            toggleSettingsActionExpanded ->
-                Action(Constants.ACTION_TOGGLE_WIFI, null, null, "Normal").apply { setValue(toggleSetting) }
-            runScriptActionExpanded && scriptText.isNotBlank() ->
-                Action("RUN_SCRIPT", null, null, null).apply { setValue(scriptText) }
+            hasNotificationAction -> {
+                Log.d("TaskCreation", "→ Creating NOTIFICATION action")
+                Action(
+                    Constants.ACTION_SEND_NOTIFICATION,
+                    notificationTitle,
+                    notificationMessage,
+                    notificationPriority
+                )
+            }
+
+            hasToggleAction -> {
+                Log.d("TaskCreation", "→ Creating TOGGLE action: $toggleSetting")
+                Action(Constants.ACTION_TOGGLE_WIFI, null, null, null).apply {
+                    setValue(toggleSetting)
+                }
+            }
+
+            hasScriptAction -> {
+                Log.d("TaskCreation", "→ Creating SCRIPT action")
+                Action(Constants.ACTION_RUN_SCRIPT, null, null, null).apply {
+                    setValue(scriptText)
+                }
+            }
+
             else -> {
-                onError("Please configure at least one action")
+                Log.e("TaskCreation", "❌ Failed to create action")
+                onError("Failed to create action. Please try again.")
                 return
             }
         }
 
-        // Save workflow
+        Log.d("TaskCreation", "✅ Action created successfully: ${action.type}")
+
+        // 8. SAVE TO DATABASE
+        Log.d("TaskCreation", "💾 Saving workflow to database...")
+
         if (workflowId != null) {
-            viewModel.updateWorkflow(
-                workflowId,
-                taskName,
-                trigger,
-                action,
-                object : WorkflowViewModel.WorkflowOperationCallback {
-                    override fun onSuccess(message: String) {
-                        Log.d("TaskCreation", "Update successful: $message")
-                        onSuccess()
-                    }
-                    override fun onError(error: String) {
-                        Log.e("TaskCreation", "Update failed: $error")
-                        onError(error)
-                    }
-                }
-            )
+            // UPDATE existing workflow
+            Log.d("TaskCreation", "→ Updating existing workflow ID: $workflowId")
+            viewModel.updateWorkflow(workflowId, taskName, trigger, action, null)
+            Log.d("TaskCreation", "✅ Update command sent")
         } else {
-            viewModel.addWorkflow(
-                taskName,
-                trigger,
-                action,
-                object : WorkflowViewModel.WorkflowOperationCallback {
-                    override fun onSuccess(message: String) {
-                        Log.d("TaskCreation", "Creation successful: $message")
-
-                        // Schedule alarm if time trigger
-                        if (trigger.type == Constants.TRIGGER_TIME) {
-                            try {
-                                val triggerTime = timeValue.toLongOrNull()
-                                if (triggerTime != null) {
-                                    AlarmScheduler.scheduleNotification(
-                                        context,
-                                        0L,
-                                        triggerTime,
-                                        action.title ?: "AutoFlow Alert",
-                                        action.message ?: "Trigger activated"
-                                    )
-                                }
-                            } catch (e: Exception) {
-                                Log.e("TaskCreation", "Failed to schedule alarm", e)
-                            }
-                        }
-
-                        onSuccess()
-                    }
-                    override fun onError(error: String) {
-                        Log.e("TaskCreation", "Creation failed: $error")
-                        onError(error)
+            // CREATE new workflow
+            Log.d("TaskCreation", "→ Creating new workflow")
+            viewModel.addWorkflow(taskName, trigger, action)
+            Log.d("TaskCreation", "✅ Create command sent")
+            // Check if workflow was saved successfully
+            viewModel.getWorkflowById(0, object : WorkflowViewModel.WorkflowByIdCallback {
+                override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
+                    if (workflow != null) {
+                        Log.d("TaskCreation", "✅ VERIFIED: Task saved to database!")
+                        Log.d("TaskCreation", "  - ID: ${workflow.id}")
+                        Log.d("TaskCreation", "  - Name: ${workflow.workflowName}")
+                        Log.d("TaskCreation", "  - Enabled: ${workflow.isEnabled()}")
+                    } else {
+                        Log.e("TaskCreation", "❌ ERROR: Task NOT found in database!")
                     }
                 }
-            )
+                override fun onWorkflowError(error: String) {
+                    //Log.e("TaskCreation", "❌ ERROR checking database: $error")
+                }
+            })
+            // Schedule alarm if time trigger
+            if (trigger.type == Constants.TRIGGER_TIME) {
+                try {
+                    // Time is stored as SECONDS in database
+                    val triggerTimeSeconds = timeValue.toLongOrNull() ?: 0L
+
+                    // Convert to MILLISECONDS for comparison and formatting
+                    val triggerTimeMillis = triggerTimeSeconds * 1000L
+                    val currentTimeMillis = System.currentTimeMillis()
+
+                    // Create formatters for logging
+                    val dateTimeFormat = java.text.SimpleDateFormat(
+                        "yyyy-MM-dd HH:mm:ss",
+                        java.util.Locale.getDefault()
+                    )
+
+                    // Log the FULL datetime for both (in milliseconds)
+                    Log.d("TaskCreation", "⏰ Time Check:")
+                    Log.d("TaskCreation", "   Current:  ${dateTimeFormat.format(currentTimeMillis)}")
+                    Log.d("TaskCreation", "   Selected: ${dateTimeFormat.format(triggerTimeMillis)}")
+
+                    if (triggerTimeMillis > currentTimeMillis) {
+                        // ✅ Time is in the FUTURE
+                        AlarmScheduler.scheduleNotification(
+                            context,
+                            0L,
+                            triggerTimeMillis,  // ← Pass milliseconds to AlarmScheduler
+                            action.title ?: "AutoFlow Alert",
+                            action.message ?: "Trigger activated"
+                        )
+
+                        Log.d("TaskCreation", "✅ Alarm scheduled for: ${dateTimeFormat.format(triggerTimeMillis)}")
+                    } else {
+                        // ⚠️ Time is in the PAST
+                        val timeDiff = currentTimeMillis - triggerTimeMillis
+                        val hoursDiff = timeDiff / (1000 * 60 * 60)
+
+                        Log.w("TaskCreation", "⚠️ Selected time is in the past")
+                        Log.w("TaskCreation", "   Difference: $hoursDiff hours ago")
+                        Log.w("TaskCreation", "   Current:  ${dateTimeFormat.format(currentTimeMillis)}")
+                        Log.w("TaskCreation", "   Selected: ${dateTimeFormat.format(triggerTimeMillis)}")
+                    }
+                } catch (e: Exception) {
+                    Log.e("TaskCreation", "❌ Failed to schedule alarm", e)
+                }
+            }
+
         }
+        // 9. SUCCESS!
+        onSuccess()
+    } catch (e: NumberFormatException) {
+        Log.e("TaskCreation", "❌ Number format error", e)
+        onError("Invalid number format: ${e.message}")
+    } catch (e: JSONException) {
+        Log.e("TaskCreation", "❌ JSON error", e)
+        onError("Error creating location data: ${e.message}")
     } catch (e: Exception) {
-        Log.e("TaskCreation", "Error saving task", e)
+        Log.e("TaskCreation", "❌ Unexpected error", e)
         onError("Unexpected error: ${e.message}")
     }
 }
+
+
 
 // ========== UTILITY FUNCTIONS ==========
 
