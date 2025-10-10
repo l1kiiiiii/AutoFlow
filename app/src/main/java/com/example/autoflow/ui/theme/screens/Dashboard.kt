@@ -177,29 +177,15 @@ fun Dashboard(modifier: Modifier = Modifier) {
             navController = navController,
             startDestination = "home",
             modifier = Modifier.padding(innerPadding),
-            enterTransition = {
-                slideIntoContainer(
-                    towards = AnimatedContentTransitionScope.SlideDirection.Left,
-                    animationSpec = tween(300, easing = EaseInOut)
-                ) + fadeIn(animationSpec = tween(300))
+            enterTransition = { EnterTransition.None
             },
-            exitTransition = {
-                slideOutOfContainer(
-                    towards = AnimatedContentTransitionScope.SlideDirection.Left,
-                    animationSpec = tween(300, easing = EaseInOut)
-                ) + fadeOut(animationSpec = tween(300))
+            exitTransition = { ExitTransition.None
             },
             popEnterTransition = {
-                slideIntoContainer(
-                    towards = AnimatedContentTransitionScope.SlideDirection.Right,
-                    animationSpec = tween(300, easing = EaseInOut)
-                ) + fadeIn(animationSpec = tween(300))
+                EnterTransition.None
             },
             popExitTransition = {
-                slideOutOfContainer(
-                    towards = AnimatedContentTransitionScope.SlideDirection.Right,
-                    animationSpec = tween(300, easing = EaseInOut)
-                ) + fadeOut(animationSpec = tween(300))
+                ExitTransition.None
             }
         ) {
             // Home screen
@@ -265,22 +251,7 @@ fun Dashboard(modifier: Modifier = Modifier) {
                     onSaveTask = { taskName ->
                         scope.launch {
                             try {
-                                // Show success message
-                                successMessage = "Task '$taskName' created successfully!"
-                                showSuccessAnimation = true
-
-                                // Show snackbar with action
-                                val result = snackbarHostState.showSnackbar(
-                                    message = "✓ Task '$taskName' created!",
-                                    actionLabel = "View",
-                                    duration = SnackbarDuration.Short,
-                                    withDismissAction = true
-                                )
-
-                                // Small delay for UX smoothness
-                                delay(300)
-
-                                // Navigate to home and clear back stack
+                                // Immediate navigation - no delay
                                 navController.navigate("home") {
                                     popUpTo(navController.graph.findStartDestination().id) {
                                         inclusive = true
@@ -288,12 +259,13 @@ fun Dashboard(modifier: Modifier = Modifier) {
                                     launchSingleTop = true
                                 }
 
-                                showSuccessAnimation = false
-
-                                // If user clicked "View", highlight the new task
-                                if (result == SnackbarResult.ActionPerformed) {
-                                    Log.d("Dashboard", "User wants to view the task")
-                                }
+                                // Show snackbar AFTER navigation
+                                snackbarHostState.showSnackbar(
+                                    message = "Task '$taskName' created!",
+                                    actionLabel = "View",
+                                    duration = SnackbarDuration.Short,
+                                    withDismissAction = true
+                                )
                             } catch (e: Exception) {
                                 Log.e("Dashboard", "Error after saving task", e)
                                 snackbarHostState.showSnackbar("Error saving task: ${e.message}")

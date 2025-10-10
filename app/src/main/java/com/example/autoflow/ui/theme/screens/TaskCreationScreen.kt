@@ -2809,10 +2809,13 @@ private fun validateScript(scriptCode: String) {
 
 // ========== PREVIEW ==========
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, name = "Task Creation Screen Preview")
 @Composable
 fun TaskCreationScreenPreview() {
     AutoFlowTheme {
-        TaskCreationScreen()
+        TaskCreationScreen(
+            onBack = {},
+            onSaveTask = {}
+        )
     }
 }

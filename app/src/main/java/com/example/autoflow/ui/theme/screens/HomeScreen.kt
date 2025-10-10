@@ -562,60 +562,150 @@ private fun getWorkflowIcon(workflow: WorkflowEntity): Pair<ImageVector, Color> 
         val triggerDetails = workflow.triggerDetails
         if (triggerDetails.isNotEmpty()) {
             val triggerJson = JSONObject(triggerDetails)
-            val triggerType = triggerJson.optString("type", "Unknown")
+            val triggerType = triggerJson.optString("type", "")
             when (triggerType) {
-                Constants.TRIGGER_LOCATION -> Pair(Icons.Default.LocationOn, Color(0xFF7E57C2))
-                Constants.TRIGGER_TIME -> Pair(Icons.Default.WbSunny, Color(0xFFFFB74D))
-                Constants.TRIGGER_WIFI -> Pair(Icons.Default.Home, Color(0xFF64B5F6))
-                Constants.TRIGGER_BLE -> Pair(Icons.Default.DirectionsCar, Color(0xFF9575CD))
-                else -> Pair(Icons.Default.Work, Color(0xFF5C6BC0))
+                Constants.TRIGGER_LOCATION -> Pair(Icons.Default.LocationOn, Color(0xFF7E57C2))  // Purple
+                Constants.TRIGGER_TIME -> Pair(Icons.Default.Schedule, Color(0xFFFFB74D))  // Orange
+                Constants.TRIGGER_WIFI -> Pair(Icons.Default.Wifi, Color(0xFF64B5F6))  // Blue
+                Constants.TRIGGER_BLE -> Pair(Icons.Default.Bluetooth, Color(0xFF9575CD))  // Light Purple
+                else -> Pair(Icons.Default.PlayArrow, Color(0xFF5C6BC0))  // Indigo
             }
         } else {
-            Pair(Icons.Default.Work, Color(0xFF5C6BC0))
+            Pair(Icons.Default.PlayArrow, Color(0xFF5C6BC0))
         }
     } catch (e: Exception) {
-        Pair(Icons.Default.Work, Color(0xFF5C6BC0))
+        Log.e("HomeScreen", "Error getting workflow icon", e)
+        Pair(Icons.Default.PlayArrow, Color(0xFF5C6BC0))
     }
 }
 // need improvement
+/**
+ * Get detailed trigger description from workflow data
+ */
 private fun getTriggerDescription(workflow: WorkflowEntity): String {
     return try {
         val triggerDetails = workflow.triggerDetails
         val actionDetails = workflow.actionDetails
 
+        // Parse TRIGGER
         val triggerDesc = if (triggerDetails.isNotEmpty()) {
             val triggerJson = JSONObject(triggerDetails)
-            val triggerType = triggerJson.optString("type", "Unknown")
+            val triggerType = triggerJson.optString("type", "")
+
             when (triggerType) {
-                Constants.TRIGGER_LOCATION -> "At work, "
-                Constants.TRIGGER_TIME -> "At 7 AM, "
-                Constants.TRIGGER_WIFI -> "If I leave home, "
-                Constants.TRIGGER_BLE -> "Bluetooth connects to car, "
-                else -> "When triggered, "
+                Constants.TRIGGER_LOCATION -> {
+                    val locationName = triggerJson.optString("locationName", "a location")
+                    val triggerOn = triggerJson.optString("triggerOn", "enter")
+                    val action = if (triggerOn == "enter") "arriving at" else "leaving"
+                    "$action $locationName"
+                }
+
+                Constants.TRIGGER_TIME -> {
+                    val timeMillis = triggerJson.optLong("time", 0L)
+                    if (timeMillis > 0) {
+                        val calendar = java.util.Calendar.getInstance().apply {
+                            timeInMillis = timeMillis
+                        }
+                        val hour = calendar.get(java.util.Calendar.HOUR_OF_DAY)
+                        val minute = calendar.get(java.util.Calendar.MINUTE)
+                        val amPm = if (hour < 12) "AM" else "PM"
+                        val displayHour = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
+                        val displayMinute = if (minute < 10) "0$minute" else "$minute"
+                        "at $displayHour:$displayMinute $amPm"
+                    } else {
+                        "at scheduled time"
+                    }
+                }
+
+                Constants.TRIGGER_WIFI -> {
+                    val ssid = triggerJson.optString("ssid", "WiFi")
+                    val state = triggerJson.optString("state", "connected")
+                    if (state == "connected") {
+                        "connected to $ssid"
+                    } else {
+                        "disconnected from $ssid"
+                    }
+                }
+
+                Constants.TRIGGER_BLE -> {
+                    val deviceName = triggerJson.optString("deviceName", "device")
+                    val deviceAddress = triggerJson.optString("deviceAddress", "")
+                    val displayName = if (deviceName.isNotBlank() && deviceName != "Unknown") {
+                        deviceName
+                    } else if (deviceAddress.isNotBlank()) {
+                        deviceAddress.substring(0, minOf(8, deviceAddress.length))
+                    } else {
+                        "Bluetooth device"
+                    }
+                    "$displayName connects"
+                }
+
+                else -> "triggered"
             }
         } else {
-            ""
+            "triggered"
         }
 
+        // Parse ACTION
         val actionDesc = if (actionDetails.isNotEmpty()) {
             val actionJson = JSONObject(actionDetails)
-            val actionType = actionJson.optString("type", "Unknown")
+            val actionType = actionJson.optString("type", "")
+
             when (actionType) {
-                Constants.ACTION_SEND_NOTIFICATION -> "send notification"
-                Constants.ACTION_TOGGLE_WIFI -> "turn off WiFi"
-                "SET_DND" -> "enable DND"
-                "LAUNCH_APP" -> "launch Maps"
-                else -> "perform action"
+                Constants.ACTION_SEND_NOTIFICATION -> {
+                    val title = actionJson.optString("title", "notification")
+                    "→ $title"
+                }
+
+                Constants.ACTION_SET_SOUND_MODE -> {
+                    val mode = actionJson.optString("value", "Silent")
+                    "→ $mode mode"
+                }
+
+                Constants.ACTION_TOGGLE_WIFI -> {
+                    val state = actionJson.optString("value", "")
+                    when {
+                        state.contains("ON", ignoreCase = true) -> "→ WiFi ON"
+                        state.contains("OFF", ignoreCase = true) -> "→ WiFi OFF"
+                        else -> "→ toggle WiFi"
+                    }
+                }
+
+                Constants.ACTION_TOGGLE_BLUETOOTH -> {
+                    val state = actionJson.optString("value", "")
+                    when {
+                        state.contains("ON", ignoreCase = true) -> "→ Bluetooth ON"
+                        state.contains("OFF", ignoreCase = true) -> "→ Bluetooth OFF"
+                        else -> "→ toggle Bluetooth"
+                    }
+                }
+
+                Constants.ACTION_RUN_SCRIPT -> {
+                    val script = actionJson.optString("value", "")
+                    val preview = if (script.length > 25) {
+                        script.substring(0, 25) + "..."
+                    } else {
+                        script
+                    }
+                    "→ run script"
+                }
+
+                else -> "→ perform action"
             }
         } else {
-            "perform action"
+            "→ perform action"
         }
 
-        triggerDesc + actionDesc
+        // Combine with natural formatting
+        "$triggerDesc $actionDesc"
+
     } catch (e: Exception) {
+        Log.e("HomeScreen", "Error parsing workflow description", e)
         "Automated workflow"
     }
 }
+
+
 
 @Preview(showBackground = true)
 @Composable
