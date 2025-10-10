@@ -1,8 +1,16 @@
 package com.example.autoflow.ui.theme.screens
 
-import androidx.compose.foundation.clickable
+import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -11,19 +19,23 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.autoflow.data.WorkflowEntity
-import com.example.autoflow.ui.components.WorkflowItem
-import com.example.autoflow.data.WorkflowViewModel
+import com.example.autoflow.viewmodel.WorkflowViewModel
 import com.example.autoflow.util.Constants
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.*
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,343 +48,581 @@ fun HomeScreen(
 ) {
     val scrollState = rememberScrollState()
     val workflows: List<WorkflowEntity>? by viewModel.getWorkflows().observeAsState(null)
+    LaunchedEffect(workflows) {
+        Log.d("HomeScreen", "📊 Workflows updated: ${workflows?.size ?: 0} tasks")
+        workflows?.forEach { workflow ->
+            Log.d("HomeScreen", "  - ${workflow.workflowName} (ID: ${workflow.id}, Enabled: ${workflow.isEnabled()})")
+        }
+    }
+    val activeWorkflows = workflows?.filter { it.isEnabled } ?: emptyList()
+    val totalWorkflows = workflows?.size ?: 0
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    // State for showing task details dialog
-    var selectedWorkflow by remember { mutableStateOf<WorkflowEntity?>(null) }
-    var showDetailsDialog by remember { mutableStateOf(false) }
+    // Delete confirmation dialog state
+    var workflowToDelete by remember { mutableStateOf<WorkflowEntity?>(null) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = modifier
-            .padding(16.dp)
-            .fillMaxSize()
-            .verticalScroll(scrollState),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            text = "Active Tasks",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
 
-        if (workflows != null && workflows!!.isNotEmpty()) {
-            workflows!!.forEach { workflowEntity ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            // Show details dialog when card is clicked
-                            selectedWorkflow = workflowEntity
-                            showDetailsDialog = true
-                        },
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Row(
+    Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+    ) { paddingValues ->
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(horizontal = 20.dp)
+                    .padding(paddingValues)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Header
+                Text(
+                    text = "Dashboard",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 32.sp
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Subtitle with count
+                Text(
+                    text = "Your Flows (${activeWorkflows.size}/$totalWorkflows active)",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Workflow Cards
+                if (workflows != null && workflows!!.isNotEmpty()) {
+                    workflows!!.forEach { workflow ->
+                        WorkflowCardWithActions(
+                            workflow = workflow,
+                            onToggle = {
+                                viewModel.updateWorkflowEnabled(workflow.id, !workflow.isEnabled)
+                            },
+                            onEdit = { onNavigateToEditTask(workflow.id) },
+                            onDelete = {
+                                workflowToDelete = workflow
+                                showDeleteDialog = true
+                            }
+                        )
+                    }
+                } else {
+                    // Empty state
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(vertical = 32.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                        )
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = workflowEntity.workflowName,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                text = "Status: ${if (workflowEntity.isEnabled) "Active" else "Inactive"}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (workflowEntity.isEnabled) Color.Green else Color.Gray
+                                text = "No workflows yet",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                        }
-
-                        Row {
-                            // Toggle button
-                            IconButton(
-                                onClick = {
-                                    viewModel.updateWorkflowEnabled(
-                                        workflowEntity.id,
-                                        !workflowEntity.isEnabled
-                                    )
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = if (workflowEntity.isEnabled)
-                                        Icons.Default.ToggleOn
-                                    else
-                                        Icons.Default.ToggleOff,
-                                    contentDescription = if (workflowEntity.isEnabled) "Disable" else "Enable",
-                                    tint = if (workflowEntity.isEnabled)
-                                        MaterialTheme.colorScheme.primary
-                                    else
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            // Edit button
-                            IconButton(onClick = { onNavigateToEditTask(workflowEntity.id) }) {
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = "Edit",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-
-                            // Delete button
-                            IconButton(onClick = { viewModel.deleteWorkflow(workflowEntity.id) }) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Delete",
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Tap the + button to create your first automation",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(80.dp)) // Space for bottom nav
             }
-        } else {
-            Text(
-                text = "No active tasks found.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.Gray
-            )
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = "Quick Actions",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Button(
-            onClick = onNavigateToCreateTask,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Create New Task")
+            // Floating Action Button
+            FloatingActionButton(
+                onClick = onNavigateToCreateTask,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 20.dp, bottom = 90.dp),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Create Flow"
+                )
+            }
         }
     }
 
-    // Task Details Dialog
-    if (showDetailsDialog && selectedWorkflow != null) {
-        TaskDetailsDialog(
-            workflow = selectedWorkflow!!,
-            onDismiss = { showDetailsDialog = false },
-            onEdit = {
-                showDetailsDialog = false
-                onNavigateToEditTask(selectedWorkflow!!.id)
+    // Delete Confirmation Dialog
+    if (showDeleteDialog && workflowToDelete != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showDeleteDialog = false
+                workflowToDelete = null
+            },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            },
+            title = { Text("Delete Workflow?") },
+            text = {
+                Column {
+                    Text("Are you sure you want to delete '${workflowToDelete?.workflowName}'?")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "This action cannot be undone.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        workflowToDelete?.let { workflow ->
+                            scope.launch {
+                                try {
+                                    viewModel.deleteWorkflow(workflow.id)
+                                    snackbarHostState.showSnackbar(
+                                        message = "Workflow '${workflow.workflowName}' deleted",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                } catch (e: Exception) {
+                                    snackbarHostState.showSnackbar(
+                                        message = "Failed to delete workflow",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                }
+                            }
+                        }
+                        showDeleteDialog = false
+                        workflowToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showDeleteDialog = false
+                    workflowToDelete = null
+                }) {
+                    Text("Cancel")
+                }
             }
         )
     }
 }
 
 @Composable
-fun TaskDetailsDialog(
+fun WorkflowCardWithActions(
     workflow: WorkflowEntity,
-    onDismiss: () -> Unit,
-    onEdit: () -> Unit
+    onToggle: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
 ) {
-    val triggerInfo = getTriggerDisplayInfo(workflow)
-    val actionInfo = getActionDisplayInfo(workflow)
+    val triggerInfo = getWorkflowIcon(workflow)
+    var showMenu by remember { mutableStateOf(false) }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Header
+                // Icon and Content
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Task Details",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, "Close")
-                    }
-                }
-
-                Divider(modifier = Modifier.padding(vertical = 12.dp))
-
-                // Task Name
-                Text(
-                    text = workflow.workflowName,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Status
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = if (workflow.isEnabled) Icons.Default.CheckCircle else Icons.Default.Cancel,
-                        contentDescription = null,
-                        tint = if (workflow.isEnabled) Color.Green else Color.Gray,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (workflow.isEnabled) "Active" else "Inactive",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (workflow.isEnabled) Color.Green else Color.Gray
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Trigger Section
-                Text(
-                    text = "Trigger",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    )
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            text = triggerInfo.first,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.SemiBold
+                    // Icon Box
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(triggerInfo.second),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = triggerInfo.first,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
                         )
-                        if (triggerInfo.second.isNotEmpty()) {
-                            Text(
-                                text = triggerInfo.second,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                        }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Action Section
-                Text(
-                    text = "Action",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                    )
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+                    // Text Content
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Text(
-                            text = actionInfo.first,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.SemiBold
+                            text = workflow.workflowName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        if (actionInfo.second.isNotEmpty()) {
-                            Text(
-                                text = actionInfo.second,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer
+
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = getTriggerDescription(workflow),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2
+                        )
+                    }
+                }
+
+                // Actions Menu
+                Box {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "More options"
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Edit") },
+                            onClick = {
+                                showMenu = false
+                                onEdit()
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = null
+                                )
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete") },
+                            onClick = {
+                                showMenu = false
+                                onDelete()
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            },
+                            colors = MenuDefaults.itemColors(
+                                textColor = MaterialTheme.colorScheme.error
                             )
-                        }
+                        )
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.height(20.dp))
+            // Toggle Switch Section
+            Divider(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+            )
 
-                // Actions
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Close")
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = onEdit) {
-                        Text("Edit Task")
-                    }
-                }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (workflow.isEnabled) "Enabled" else "Disabled",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (workflow.isEnabled)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Switch(
+                    checked = workflow.isEnabled,
+                    onCheckedChange = { onToggle() },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.primary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
+                        uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+                        uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                )
             }
         }
     }
 }
 
-// Helper functions (keep your existing ones)
-private fun getTriggerDisplayInfo(workflow: WorkflowEntity): Pair<String, String> {
-    // Your existing getTriggerDisplayInfo code
+// Alternative: Swipeable Workflow Card (Advanced)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SwipeableWorkflowCard(
+    workflow: WorkflowEntity,
+    onToggle: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var offsetX by remember { mutableStateOf(0f) }
+    val maxSwipe = -200f // Swipe threshold for actions
+    val triggerInfo = getWorkflowIcon(workflow)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(120.dp)
+    ) {
+        // Background actions (revealed on swipe)
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Edit button
+            Box(
+                modifier = Modifier
+                    .width(100.dp)
+                    .fillMaxHeight()
+                    .background(
+                        MaterialTheme.colorScheme.primary,
+                        RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp)
+                    )
+                    .padding(8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit",
+                        tint = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Edit",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+
+            // Delete button
+            Box(
+                modifier = Modifier
+                    .width(100.dp)
+                    .fillMaxHeight()
+                    .background(
+                        MaterialTheme.colorScheme.error,
+                        RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp)
+                    )
+                    .padding(8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Delete",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+        }
+
+        // Foreground card (swipeable)
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset { IntOffset(offsetX.roundToInt(), 0) }
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            // Snap to action if swiped far enough
+                            when {
+                                offsetX < -150 -> onDelete()
+                                offsetX < -75 -> onEdit()
+                                else -> offsetX = 0f
+                            }
+                        }
+                    ) { change, dragAmount ->
+                        change.consume()
+                        val newOffset = (offsetX + dragAmount).coerceIn(maxSwipe, 0f)
+                        offsetX = newOffset
+                    }
+                },
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+        ) {
+            // Same card content as WorkflowCardWithActions...
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(triggerInfo.second),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = triggerInfo.first,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = workflow.workflowName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = getTriggerDescription(workflow),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2
+                        )
+                    }
+                }
+
+                Switch(
+                    checked = workflow.isEnabled,
+                    onCheckedChange = { onToggle() }
+                )
+            }
+        }
+    }
+}
+
+private fun getWorkflowIcon(workflow: WorkflowEntity): Pair<ImageVector, Color> {
     return try {
         val triggerDetails = workflow.triggerDetails
         if (triggerDetails.isNotEmpty()) {
             val triggerJson = JSONObject(triggerDetails)
             val triggerType = triggerJson.optString("type", "Unknown")
-
             when (triggerType) {
-                Constants.TRIGGER_TIME -> {
-                    val timeValue = triggerJson.optString("value", "")
-                    val displayTime = if (timeValue.isNotEmpty()) {
-                        try {
-                            val timestamp = timeValue.toLong()
-                            SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
-                                .format(Date(timestamp))
-                        } catch (e: Exception) {
-                            "Scheduled time"
-                        }
-                    } else {
-                        "Scheduled time"
-                    }
-                    Pair("Time Trigger", displayTime)
-                }
-                Constants.TRIGGER_LOCATION -> Pair("Location Trigger", "Location-based")
-                Constants.TRIGGER_WIFI -> Pair("WiFi Trigger", "WiFi state change")
-                Constants.TRIGGER_BLE -> Pair("Bluetooth Trigger", "Bluetooth device")
-                else -> Pair("Unknown", "Custom trigger")
+                Constants.TRIGGER_LOCATION -> Pair(Icons.Default.LocationOn, Color(0xFF7E57C2))
+                Constants.TRIGGER_TIME -> Pair(Icons.Default.WbSunny, Color(0xFFFFB74D))
+                Constants.TRIGGER_WIFI -> Pair(Icons.Default.Home, Color(0xFF64B5F6))
+                Constants.TRIGGER_BLE -> Pair(Icons.Default.DirectionsCar, Color(0xFF9575CD))
+                else -> Pair(Icons.Default.Work, Color(0xFF5C6BC0))
             }
         } else {
-            Pair("None", "No trigger configured")
+            Pair(Icons.Default.Work, Color(0xFF5C6BC0))
         }
     } catch (e: Exception) {
-        Pair("Unknown", "Invalid trigger data")
+        Pair(Icons.Default.Work, Color(0xFF5C6BC0))
+    }
+}
+// need improvement
+private fun getTriggerDescription(workflow: WorkflowEntity): String {
+    return try {
+        val triggerDetails = workflow.triggerDetails
+        val actionDetails = workflow.actionDetails
+
+        val triggerDesc = if (triggerDetails.isNotEmpty()) {
+            val triggerJson = JSONObject(triggerDetails)
+            val triggerType = triggerJson.optString("type", "Unknown")
+            when (triggerType) {
+                Constants.TRIGGER_LOCATION -> "At work, "
+                Constants.TRIGGER_TIME -> "At 7 AM, "
+                Constants.TRIGGER_WIFI -> "If I leave home, "
+                Constants.TRIGGER_BLE -> "Bluetooth connects to car, "
+                else -> "When triggered, "
+            }
+        } else {
+            ""
+        }
+
+        val actionDesc = if (actionDetails.isNotEmpty()) {
+            val actionJson = JSONObject(actionDetails)
+            val actionType = actionJson.optString("type", "Unknown")
+            when (actionType) {
+                Constants.ACTION_SEND_NOTIFICATION -> "send notification"
+                Constants.ACTION_TOGGLE_WIFI -> "turn off WiFi"
+                "SET_DND" -> "enable DND"
+                "LAUNCH_APP" -> "launch Maps"
+                else -> "perform action"
+            }
+        } else {
+            "perform action"
+        }
+
+        triggerDesc + actionDesc
+    } catch (e: Exception) {
+        "Automated workflow"
     }
 }
 
-private fun getActionDisplayInfo(workflow: WorkflowEntity): Pair<String, String> {
-    // Your existing getActionDisplayInfo code
-    return try {
-        val actionDetails = workflow.actionDetails
-        if (actionDetails.isNotEmpty()) {
-            val actionJson = JSONObject(actionDetails)
-            val actionType = actionJson.optString("type", "Unknown")
-
-            when (actionType) {
-                Constants.ACTION_SEND_NOTIFICATION -> {
-                    val title = actionJson.optString("title", "Notification")
-                    Pair("Send Notification", title)
-                }
-                Constants.ACTION_TOGGLE_WIFI -> Pair("Toggle Settings", "WiFi control")
-                "RUN_SCRIPT" -> Pair("Run Script", "Execute JavaScript")
-                else -> Pair("Unknown", "Custom action")
-            }
-        } else {
-            Pair("None", "No action configured")
-        }
-    } catch (e: Exception) {
-        Pair("Unknown", "Invalid action data")
-    }
+@Preview(showBackground = true)
+@Composable
+fun HomeScreenPreview() {
+    HomeScreen(
+        onNavigateToCreateTask = {},
+        onNavigateToEditTask = {},
+        onNavigateToProfile = {}
+    )
 }

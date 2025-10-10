@@ -306,4 +306,5 @@ public class LocationManager {
         stopLocationUpdates();
         callback = null;
     }
+
 }

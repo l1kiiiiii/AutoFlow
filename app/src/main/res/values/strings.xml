@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">AutoFlow</string>
+        <string name="accessibility_service_description">When enabled, prevents opening selected
+            apps at restricted locations. This helps maintain focus in specific areas like work or
+            study zones.
+        </string>
 </resources>

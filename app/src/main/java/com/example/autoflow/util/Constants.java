@@ -6,6 +6,8 @@ package com.example.autoflow.util;
  */
 public class Constants {
 
+    public static final String ACTION_BLOCK_APPS = "BLOCK_APPS";
+
     // ========== TRIGGER TYPES ==========
     public static final String TRIGGER_TIME = "TIME";
     public static final String TRIGGER_BLE = "BLE";
@@ -15,6 +17,21 @@ public class Constants {
     public static final String TRIGGER_BATTERY_LEVEL = "BATTERY_LEVEL";
     public static final String TRIGGER_CHARGING_STATE = "CHARGING_STATE";
     public static final String TRIGGER_HEADPHONE_CONNECTION = "HEADPHONE_CONNECTION";
+
+    // Action type for sound mode
+    public static final String ACTION_SET_SOUND_MODE = "SET_SOUND_MODE";
+
+    // Sound mode values
+    public static final String SOUND_MODE_RING = "ring";
+    public static final String SOUND_MODE_VIBRATE = "vibrate";
+    public static final String SOUND_MODE_SILENT = "silent";
+
+    // DND modes (require notification policy access)
+    public static final String SOUND_MODE_DND_NONE = "dnd_none";       // Total silence
+    public static final String SOUND_MODE_DND_PRIORITY = "dnd_priority";
+    public static final String SOUND_MODE_DND_ALARMS = "dnd_alarms";
+    public static final String SOUND_MODE_DND_ALL = "dnd_all";         // Turn off DND
+
 
     // ========== ACTION TYPES ==========
     public static final String ACTION_SEND_NOTIFICATION = "SEND_NOTIFICATION";
@@ -106,7 +123,7 @@ public class Constants {
 
     // Default location radius in meters
     public static final float LOCATION_DEFAULT_RADIUS = 100f;
-    public static final float LOCATION_MIN_RADIUS = 50f;
+    public static final float LOCATION_MIN_RADIUS = 20f;
     public static final float LOCATION_MAX_RADIUS = 1000f;
 
     // ========== TIME CONSTANTS ==========
@@ -208,6 +225,8 @@ public class Constants {
     public static final int VOLUME_MEDIUM = 50;
     public static final int VOLUME_HIGH = 75;
     public static final int VOLUME_MAXIMUM = 100;
+
+
 
     // ========== PRIVATE CONSTRUCTOR ==========
     // Prevent instantiation of utility class

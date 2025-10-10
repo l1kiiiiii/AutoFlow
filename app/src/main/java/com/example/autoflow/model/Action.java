@@ -31,6 +31,7 @@ public class Action {
     public String getMessage() { return message; }
     public String getPriority() { return priority; }
     public String getValue() { return value; } // Getter for value
+    public void setType(String type) { this.type = type; }
 
     // Setter for value (to be used by workers if needed)
     public void setValue(String value) {
