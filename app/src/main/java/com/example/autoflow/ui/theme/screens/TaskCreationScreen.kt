@@ -128,6 +128,7 @@ import com.google.android.gms.tasks.OnTokenCanceledListener
 import kotlinx.coroutines.launch
 import org.json.JSONException
 import org.json.JSONObject
+import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -210,6 +211,7 @@ fun TaskCreationScreen(
     // Block Apps Action states
     var blockAppsActionExpanded by remember { mutableStateOf(false) }
     var selectedAppsToBlock by remember { mutableStateOf<List<String>>(emptyList()) }
+
 
     // Pre-populate fields if editing
     LaunchedEffect(existingWorkflow) {
@@ -367,6 +369,8 @@ fun TaskCreationScreen(
                             toggleSetting = toggleSetting,
                             runScriptActionExpanded = runScriptActionExpanded,
                             scriptText = scriptText,
+                            setSoundModeActionExpanded = setSoundModeActionExpanded,  // ✅ ADD THIS
+                            soundMode = soundMode,  // ✅ ADD THIS
                             onSuccess = {
                                 showSuccessSnackbar = true
                                 onSaveTask(taskName)
@@ -381,6 +385,7 @@ fun TaskCreationScreen(
                 },
                 onBack = onBack
             )
+
 
             Spacer(modifier = Modifier.height(16.dp))
         }
@@ -2201,7 +2206,7 @@ private fun ErrorDialog(
 // ========== SAVE HANDLER ==========
 // ========== COMPLETE handleSaveTask FUNCTION ==========
 
-private suspend fun handleSaveTask(  // ← NO @Composable annotation!
+private suspend fun handleSaveTask(
     context: Context,
     viewModel: WorkflowViewModel,
     workflowId: Long?,
@@ -2225,6 +2230,8 @@ private suspend fun handleSaveTask(  // ← NO @Composable annotation!
     toggleSetting: String,
     runScriptActionExpanded: Boolean,
     scriptText: String,
+    setSoundModeActionExpanded: Boolean,  // ✅ ADD THIS
+    soundMode: String,  // ✅ ADD THIS
     onSuccess: () -> Unit,
     onError: (String) -> Unit
 ) {
@@ -2251,10 +2258,10 @@ private suspend fun handleSaveTask(  // ← NO @Composable annotation!
         Log.d("TaskCreation", "Time: $hasTimeTrigger")
         Log.d("TaskCreation", "Bluetooth: $hasBluetoothTrigger")
 
-        // 3. VALIDATE AT LEAST ONE TRIGGER IS CONFIGURED
+        // 3. VALIDATE AT LEAST ONE TRIGGER
         if (!hasLocationTrigger && !hasWifiTrigger && !hasTimeTrigger && !hasBluetoothTrigger) {
             Log.e("TaskCreation", "❌ No trigger configured")
-            onError("Please configure at least ONE trigger (Location, WiFi, Time, or Bluetooth)")
+            onError("Please configure at least ONE trigger")
             return
         }
         Log.d("TaskCreation", "✅ At least one trigger is configured")
@@ -2265,38 +2272,27 @@ private suspend fun handleSaveTask(  // ← NO @Composable annotation!
                 Log.d("TaskCreation", "→ Creating TIME trigger: $timeValue")
                 Trigger(0, 0, Constants.TRIGGER_TIME, timeValue)
             }
-
             hasWifiTrigger -> {
                 Log.d("TaskCreation", "→ Creating WIFI trigger: $wifiState")
                 Trigger(0, 0, Constants.TRIGGER_WIFI, wifiState)
             }
-
             hasBluetoothTrigger -> {
                 Log.d("TaskCreation", "→ Creating BLUETOOTH trigger: $bluetoothDeviceAddress")
                 Trigger(0, 0, Constants.TRIGGER_BLE, bluetoothDeviceAddress)
             }
-
             hasLocationTrigger -> {
                 Log.d("TaskCreation", "→ Creating LOCATION trigger")
-
-                // Parse coordinates
                 val parts = locationDetailsInput.split(",").map { it.trim() }
                 if (parts.size != 2) {
-                    Log.e("TaskCreation", "❌ Invalid coordinate format")
-                    onError("Invalid coordinates. Use format: latitude,longitude (e.g., 37.7749,-122.4194)")
+                    onError("Invalid coordinates. Use format: latitude,longitude")
                     return
                 }
-
                 val lat = parts[0].toDoubleOrNull()
                 val lng = parts[1].toDoubleOrNull()
-
                 if (lat == null || lng == null) {
-                    Log.e("TaskCreation", "❌ Invalid coordinate values")
-                    onError("Invalid coordinate values. Please enter valid numbers.")
+                    onError("Invalid coordinate values")
                     return
                 }
-
-                // Create location JSON
                 val json = JSONObject().apply {
                     put("locationName", locationName.ifEmpty { "Unnamed Location" })
                     put("coordinates", locationDetailsInput)
@@ -2306,39 +2302,36 @@ private suspend fun handleSaveTask(  // ← NO @Composable annotation!
                     put("triggerOnEntry", triggerOnOption == "Entry" || triggerOnOption == "Both")
                     put("triggerOnExit", triggerOnOption == "Exit" || triggerOnOption == "Both")
                 }
-
-                Log.d("TaskCreation", "Location JSON: ${json.toString()}")
                 Trigger(0, 0, Constants.TRIGGER_LOCATION, json.toString())
             }
-
             else -> {
-                Log.e("TaskCreation", "❌ Failed to create trigger")
-                onError("Failed to create trigger. Please try again.")
+                onError("Failed to create trigger")
                 return
             }
         }
-
-        Log.d("TaskCreation", "✅ Trigger created successfully: ${trigger.type}")
+        Log.d("TaskCreation", "✅ Trigger created: ${trigger.type}")
 
         // 5. CHECK WHICH ACTIONS ARE CONFIGURED
         val hasNotificationAction = sendNotificationActionExpanded && notificationTitle.isNotBlank()
         val hasToggleAction = toggleSettingsActionExpanded
         val hasScriptAction = runScriptActionExpanded && scriptText.isNotBlank()
+        val hasSoundModeAction = setSoundModeActionExpanded  // ✅ FIXED
 
         Log.d("TaskCreation", "=== ACTION CHECK ===")
         Log.d("TaskCreation", "Notification: $hasNotificationAction")
         Log.d("TaskCreation", "Toggle: $hasToggleAction")
         Log.d("TaskCreation", "Script: $hasScriptAction")
+        Log.d("TaskCreation", "Sound Mode: $hasSoundModeAction")
 
-        // 6. VALIDATE AT LEAST ONE ACTION IS CONFIGURED
-        if (!hasNotificationAction && !hasToggleAction && !hasScriptAction) {
+        // 6. VALIDATE AT LEAST ONE ACTION
+        if (!hasNotificationAction && !hasToggleAction && !hasScriptAction && !hasSoundModeAction) {
             Log.e("TaskCreation", "❌ No action configured")
-            onError("Please configure at least ONE action (Notification, Toggle Settings, or Script)")
+            onError("Please configure at least ONE action")
             return
         }
         Log.d("TaskCreation", "✅ At least one action is configured")
 
-        // 7. CREATE ACTION (Priority: Notification > Toggle > Script)
+        // 7. CREATE ACTION (Priority: Notification > Toggle > SoundMode > Script)
         val action = when {
             hasNotificationAction -> {
                 Log.d("TaskCreation", "→ Creating NOTIFICATION action")
@@ -2349,123 +2342,118 @@ private suspend fun handleSaveTask(  // ← NO @Composable annotation!
                     notificationPriority
                 )
             }
-
             hasToggleAction -> {
                 Log.d("TaskCreation", "→ Creating TOGGLE action: $toggleSetting")
                 Action(Constants.ACTION_TOGGLE_WIFI, null, null, null).apply {
                     setValue(toggleSetting)
                 }
             }
-
+            hasSoundModeAction -> {  // ✅ FIXED ORDER
+                Log.d("TaskCreation", "→ Creating SOUND MODE action: $soundMode")
+                Action(Constants.ACTION_SET_SOUND_MODE, null, null, null).apply {
+                    setValue(soundMode)
+                }
+            }
             hasScriptAction -> {
                 Log.d("TaskCreation", "→ Creating SCRIPT action")
                 Action(Constants.ACTION_RUN_SCRIPT, null, null, null).apply {
                     setValue(scriptText)
                 }
             }
-
             else -> {
-                Log.e("TaskCreation", "❌ Failed to create action")
-                onError("Failed to create action. Please try again.")
+                onError("Failed to create action")
                 return
             }
         }
-
-        Log.d("TaskCreation", "✅ Action created successfully: ${action.type}")
+        Log.d("TaskCreation", "✅ Action created: ${action.type}")
 
         // 8. SAVE TO DATABASE
-        Log.d("TaskCreation", "💾 Saving workflow to database...")
+        Log.d("TaskCreation", "💾 Saving workflow...")
 
         if (workflowId != null) {
-            // UPDATE existing workflow
-            Log.d("TaskCreation", "→ Updating existing workflow ID: $workflowId")
+            // UPDATE existing
+            Log.d("TaskCreation", "→ Updating workflow ID: $workflowId")
             viewModel.updateWorkflow(workflowId, taskName, trigger, action, null)
-            Log.d("TaskCreation", "✅ Update command sent")
+            Log.d("TaskCreation", "✅ Update sent")
         } else {
-            // CREATE new workflow
+            // CREATE new
             Log.d("TaskCreation", "→ Creating new workflow")
             viewModel.addWorkflow(taskName, trigger, action)
-            Log.d("TaskCreation", "✅ Create command sent")
-            // Check if workflow was saved successfully
-            viewModel.getWorkflowById(0, object : WorkflowViewModel.WorkflowByIdCallback {
-                override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
-                    if (workflow != null) {
-                        Log.d("TaskCreation", "✅ VERIFIED: Task saved to database!")
-                        Log.d("TaskCreation", "  - ID: ${workflow.id}")
-                        Log.d("TaskCreation", "  - Name: ${workflow.workflowName}")
-                        Log.d("TaskCreation", "  - Enabled: ${workflow.isEnabled()}")
-                    } else {
-                        Log.e("TaskCreation", "❌ ERROR: Task NOT found in database!")
-                    }
-                }
-                override fun onWorkflowError(error: String) {
-                    //Log.e("TaskCreation", "❌ ERROR checking database: $error")
-                }
-            })
-            // Schedule alarm if time trigger
-            if (trigger.type == Constants.TRIGGER_TIME) {
-                try {
-                    // Time is stored as SECONDS in database
-                    val triggerTimeSeconds = timeValue.toLongOrNull() ?: 0L
-
-                    // Convert to MILLISECONDS for comparison and formatting
-                    val triggerTimeMillis = triggerTimeSeconds * 1000L
-                    val currentTimeMillis = System.currentTimeMillis()
-
-                    // Create formatters for logging
-                    val dateTimeFormat = java.text.SimpleDateFormat(
-                        "yyyy-MM-dd HH:mm:ss",
-                        java.util.Locale.getDefault()
-                    )
-
-                    // Log the FULL datetime for both (in milliseconds)
-                    Log.d("TaskCreation", "⏰ Time Check:")
-                    Log.d("TaskCreation", "   Current:  ${dateTimeFormat.format(currentTimeMillis)}")
-                    Log.d("TaskCreation", "   Selected: ${dateTimeFormat.format(triggerTimeMillis)}")
-
-                    if (triggerTimeMillis > currentTimeMillis) {
-                        // ✅ Time is in the FUTURE
-                        AlarmScheduler.scheduleNotification(
-                            context,
-                            0L,
-                            triggerTimeMillis,  // ← Pass milliseconds to AlarmScheduler
-                            action.title ?: "AutoFlow Alert",
-                            action.message ?: "Trigger activated"
-                        )
-
-                        Log.d("TaskCreation", "✅ Alarm scheduled for: ${dateTimeFormat.format(triggerTimeMillis)}")
-                    } else {
-                        // ⚠️ Time is in the PAST
-                        val timeDiff = currentTimeMillis - triggerTimeMillis
-                        val hoursDiff = timeDiff / (1000 * 60 * 60)
-
-                        Log.w("TaskCreation", "⚠️ Selected time is in the past")
-                        Log.w("TaskCreation", "   Difference: $hoursDiff hours ago")
-                        Log.w("TaskCreation", "   Current:  ${dateTimeFormat.format(currentTimeMillis)}")
-                        Log.w("TaskCreation", "   Selected: ${dateTimeFormat.format(triggerTimeMillis)}")
-                    }
-                } catch (e: Exception) {
-                    Log.e("TaskCreation", "❌ Failed to schedule alarm", e)
-                }
-            }
-
+            Log.d("TaskCreation", "✅ Create sent")
         }
-        // 9. SUCCESS!
+
+        // 9. SCHEDULE ALARM IF TIME TRIGGER
+        if (trigger.type == Constants.TRIGGER_TIME) {
+            try {
+                val triggerTimeSeconds = timeValue.toLongOrNull() ?: 0L
+                val triggerTimeMillis = triggerTimeSeconds * 1000L
+                val currentTimeMillis = System.currentTimeMillis()
+
+                val dateTimeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                Log.d("TaskCreation", "⏰ Time Check:")
+                Log.d("TaskCreation", "   Current:  ${dateTimeFormat.format(currentTimeMillis)}")
+                Log.d("TaskCreation", "   Selected: ${dateTimeFormat.format(triggerTimeMillis)}")
+
+                if (triggerTimeMillis > currentTimeMillis) {
+                    // ✅ FIXED: Route based on action type
+                    when (action.type) {
+                        Constants.ACTION_SEND_NOTIFICATION -> {
+                            AlarmScheduler.scheduleNotification(
+                                context,
+                                0L,
+                                triggerTimeMillis,
+                                action.title ?: "AutoFlow",
+                                action.message ?: "Triggered"
+                            )
+                        }
+                        Constants.ACTION_SET_SOUND_MODE -> {
+                            AlarmScheduler.scheduleSoundMode(
+                                context,
+                                0L,
+                                triggerTimeMillis,
+                                action.value ?: "Silent"
+                            )
+                        }
+                        Constants.ACTION_TOGGLE_WIFI -> {
+                            AlarmScheduler.scheduleWiFiToggle(
+                                context,
+                                0L,
+                                triggerTimeMillis,
+                                action.value == "ON"
+                            )
+                        }
+                        Constants.ACTION_RUN_SCRIPT -> {
+                            AlarmScheduler.scheduleScript(
+                                context,
+                                0L,
+                                triggerTimeMillis,
+                                action.value ?: ""
+                            )
+                        }
+                    }
+                    Log.d("TaskCreation", "✅ Alarm scheduled for ${action.type}")
+                } else {
+                    Log.w("TaskCreation", "⚠️ Time is in the past")
+                }
+            } catch (e: Exception) {
+                Log.e("TaskCreation", "❌ Alarm scheduling failed", e)
+            }
+        }
+
+        // 10. SUCCESS
         onSuccess()
+
     } catch (e: NumberFormatException) {
         Log.e("TaskCreation", "❌ Number format error", e)
-        onError("Invalid number format: ${e.message}")
+        onError("Invalid number: ${e.message}")
     } catch (e: JSONException) {
         Log.e("TaskCreation", "❌ JSON error", e)
-        onError("Error creating location data: ${e.message}")
+        onError("Location data error: ${e.message}")
     } catch (e: Exception) {
         Log.e("TaskCreation", "❌ Unexpected error", e)
-        onError("Unexpected error: ${e.message}")
+        onError("Error: ${e.message}")
     }
 }
-
-
-
 // ========== UTILITY FUNCTIONS ==========
 
 data class BluetoothDeviceInfo(val name: String, val address: String)
