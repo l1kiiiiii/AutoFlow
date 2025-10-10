@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.location.Geocoder
+import android.os.Build
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
@@ -1998,15 +2000,54 @@ private fun BluetoothTriggerContent(
     val context = LocalContext.current
     var showDevicePicker by remember { mutableStateOf(false) }
     var pairedDevices by remember { mutableStateOf<List<BluetoothDeviceInfo>>(emptyList()) }
+    var showPermissionRationale by remember { mutableStateOf(false) }
+
+    // ✅ Permission launcher for Bluetooth Connect (Android 12+)
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            try {
+                pairedDevices = getPairedBluetoothDevices(context)
+                showDevicePicker = true
+            } catch (e: Exception) {
+                Log.e("Bluetooth", "Error fetching devices", e)
+            }
+        } else {
+            showPermissionRationale = true
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Select device button
         OutlinedButton(
             onClick = {
-                try {
-                    pairedDevices = getPairedBluetoothDevices(context)
-                    showDevicePicker = true
-                } catch (e: Exception) {
-                    Log.e("Bluetooth", "Error fetching devices", e)
+                // Check if permission is needed (Android 12+)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val hasPermission = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.BLUETOOTH_CONNECT
+                    ) == PackageManager.PERMISSION_GRANTED
+
+                    if (hasPermission) {
+                        try {
+                            pairedDevices = getPairedBluetoothDevices(context)
+                            showDevicePicker = true
+                        } catch (e: Exception) {
+                            Log.e("Bluetooth", "Error fetching devices", e)
+                        }
+                    } else {
+                        // Request permission
+                        bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                    }
+                } else {
+                    // Android 11 and below - no BLUETOOTH_CONNECT needed
+                    try {
+                        pairedDevices = getPairedBluetoothDevices(context)
+                        showDevicePicker = true
+                    } catch (e: Exception) {
+                        Log.e("Bluetooth", "Error fetching devices", e)
+                    }
                 }
             },
             modifier = Modifier.fillMaxWidth()
@@ -2016,6 +2057,7 @@ private fun BluetoothTriggerContent(
             Text("Select Paired Device")
         }
 
+        // Manual address input
         OutlinedTextField(
             value = bluetoothDeviceAddress,
             onValueChange = onBluetoothAddressChange,
@@ -2023,12 +2065,50 @@ private fun BluetoothTriggerContent(
             placeholder = { Text("XX:XX:XX:XX:XX:XX") },
             modifier = Modifier.fillMaxWidth()
         )
+
+        // Show selected device
+        if (bluetoothDeviceAddress.isNotBlank()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Column {
+                        Text(
+                            "Device Selected",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            bluetoothDeviceAddress,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        }
     }
 
+    // Device picker dialog
     if (showDevicePicker) {
         AlertDialog(
             onDismissRequest = { showDevicePicker = false },
-            confirmButton = { TextButton(onClick = { showDevicePicker = false }) { Text("Cancel") } },
+            confirmButton = {
+                TextButton(onClick = { showDevicePicker = false }) {
+                    Text("Cancel")
+                }
+            },
             title = { Text("Paired Bluetooth Devices") },
             text = {
                 if (pairedDevices.isEmpty()) {
@@ -2047,7 +2127,10 @@ private fun BluetoothTriggerContent(
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
                                     Text(device.name, fontWeight = FontWeight.Bold)
-                                    Text(device.address, style = MaterialTheme.typography.bodySmall)
+                                    Text(
+                                        device.address,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
                                 }
                             }
                         }
@@ -2056,7 +2139,34 @@ private fun BluetoothTriggerContent(
             }
         )
     }
+
+    // Permission rationale dialog
+    if (showPermissionRationale) {
+        AlertDialog(
+            onDismissRequest = { showPermissionRationale = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showPermissionRationale = false
+                        bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                    }
+                ) {
+                    Text("Grant Permission")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionRationale = false }) {
+                    Text("Cancel")
+                }
+            },
+            title = { Text("Bluetooth Permission Required") },
+            text = {
+                Text("AutoFlow needs Bluetooth permission to scan for paired devices. This allows you to select a device as a trigger.")
+            }
+        )
+    }
 }
+
 
 // ========== ACTION CONTENT COMPONENTS ==========
 
@@ -2344,11 +2454,17 @@ private suspend fun handleSaveTask(
             }
             hasToggleAction -> {
                 Log.d("TaskCreation", "→ Creating TOGGLE action: $toggleSetting")
-                Action(Constants.ACTION_TOGGLE_WIFI, null, null, null).apply {
+                val actionType = when {
+                    toggleSetting.startsWith("WIFI") -> Constants.ACTION_TOGGLE_WIFI
+                    toggleSetting.startsWith("BLUETOOTH") -> Constants.ACTION_TOGGLE_BLUETOOTH
+                    else -> Constants.ACTION_TOGGLE_WIFI // default fallback
+                }
+
+                Action(actionType, null, null, null).apply {
                     setValue(toggleSetting)
                 }
             }
-            hasSoundModeAction -> {  // ✅ FIXED ORDER
+            hasSoundModeAction -> {
                 Log.d("TaskCreation", "→ Creating SOUND MODE action: $soundMode")
                 Action(Constants.ACTION_SET_SOUND_MODE, null, null, null).apply {
                     setValue(soundMode)
@@ -2415,11 +2531,21 @@ private suspend fun handleSaveTask(
                             )
                         }
                         Constants.ACTION_TOGGLE_WIFI -> {
+                            val wifiState = action.value == "WIFI_ON"  // ✅ Parse state
                             AlarmScheduler.scheduleWiFiToggle(
                                 context,
                                 0L,
                                 triggerTimeMillis,
-                                action.value == "ON"
+                                wifiState
+                            )
+                        }
+                        Constants.ACTION_TOGGLE_BLUETOOTH -> {  // ✅ ADD THIS
+                            val bluetoothState = action.value == "BLUETOOTH_ON"  // ✅ Parse state
+                            AlarmScheduler.scheduleBluetoothToggle(
+                                context,
+                                0L,
+                                triggerTimeMillis,
+                                bluetoothState
                             )
                         }
                         Constants.ACTION_RUN_SCRIPT -> {
@@ -2440,6 +2566,7 @@ private suspend fun handleSaveTask(
             }
         }
 
+
         // 10. SUCCESS
         onSuccess()
 
@@ -2458,24 +2585,198 @@ private suspend fun handleSaveTask(
 
 data class BluetoothDeviceInfo(val name: String, val address: String)
 
+@Composable
+private fun ToggleSettingsActionContent(
+    toggleSetting: String,
+    onToggleSettingChange: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            "Select Setting to Toggle",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold
+        )
+
+        // WiFi Toggle
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = if (toggleSetting.startsWith("WIFI"))
+                    MaterialTheme.colorScheme.primaryContainer
+                else
+                    MaterialTheme.colorScheme.surface
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("WiFi", fontWeight = FontWeight.Bold)
+                        Text("Toggle WiFi connection", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Icon(Icons.Default.Wifi, contentDescription = null)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // WiFi ON/OFF buttons
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = toggleSetting == "WIFI_ON",
+                        onClick = { onToggleSettingChange("WIFI_ON") },
+                        label = { Text("Turn ON") },
+                        leadingIcon = if (toggleSetting == "WIFI_ON") {
+                            { Icon(Icons.Default.Check, null, modifier = Modifier.size(18.dp)) }
+                        } else null
+                    )
+                    FilterChip(
+                        selected = toggleSetting == "WIFI_OFF",
+                        onClick = { onToggleSettingChange("WIFI_OFF") },
+                        label = { Text("Turn OFF") },
+                        leadingIcon = if (toggleSetting == "WIFI_OFF") {
+                            { Icon(Icons.Default.Check, null, modifier = Modifier.size(18.dp)) }
+                        } else null
+                    )
+                }
+            }
+        }
+
+        // Bluetooth Toggle
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = if (toggleSetting.startsWith("BLUETOOTH"))
+                    MaterialTheme.colorScheme.primaryContainer
+                else
+                    MaterialTheme.colorScheme.surface
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Bluetooth", fontWeight = FontWeight.Bold)
+                        Text("Toggle Bluetooth connection", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Icon(Icons.Default.Bluetooth, contentDescription = null)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Bluetooth ON/OFF buttons
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = toggleSetting == "BLUETOOTH_ON",
+                        onClick = { onToggleSettingChange("BLUETOOTH_ON") },
+                        label = { Text("Turn ON") },
+                        leadingIcon = if (toggleSetting == "BLUETOOTH_ON") {
+                            { Icon(Icons.Default.Check, null, modifier = Modifier.size(18.dp)) }
+                        } else null
+                    )
+                    FilterChip(
+                        selected = toggleSetting == "BLUETOOTH_OFF",
+                        onClick = { onToggleSettingChange("BLUETOOTH_OFF") },
+                        label = { Text("Turn OFF") },
+                        leadingIcon = if (toggleSetting == "BLUETOOTH_OFF") {
+                            { Icon(Icons.Default.Check, null, modifier = Modifier.size(18.dp)) }
+                        } else null
+                    )
+                }
+            }
+        }
+
+        // Show selection summary
+        if (toggleSetting.isNotBlank()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.tertiary
+                    )
+                    Text(
+                        when (toggleSetting) {
+                            "WIFI_ON" -> "Will turn WiFi ON"
+                            "WIFI_OFF" -> "Will turn WiFi OFF"
+                            "BLUETOOTH_ON" -> "Will turn Bluetooth ON"
+                            "BLUETOOTH_OFF" -> "Will turn Bluetooth OFF"
+                            else -> "Select an option"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+}
+
+
+
+/**
+ * Get paired Bluetooth devices with proper permission handling
+ */
 @SuppressLint("MissingPermission")
 fun getPairedBluetoothDevices(context: Context): List<BluetoothDeviceInfo> {
     return try {
+        // Check for BLUETOOTH_CONNECT permission (Android 12+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val hasPermission = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (!hasPermission) {
+                Log.e("Bluetooth", "❌ BLUETOOTH_CONNECT permission not granted")
+                return emptyList()
+            }
+        }
+
         val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
         val adapter = bluetoothManager?.adapter
 
-        if (adapter == null || !adapter.isEnabled) {
-            emptyList()
-        } else {
-            adapter.bondedDevices?.map {
-                BluetoothDeviceInfo(it.name ?: "Unknown", it.address)
-            } ?: emptyList()
+        when {
+            adapter == null -> {
+                Log.e("Bluetooth", "❌ Bluetooth adapter not available")
+                emptyList()
+            }
+            !adapter.isEnabled -> {
+                Log.w("Bluetooth", "⚠️ Bluetooth is disabled")
+                emptyList()
+            }
+            else -> {
+                adapter.bondedDevices?.map {
+                    BluetoothDeviceInfo(
+                        name = it.name ?: "Unknown",
+                        address = it.address
+                    )
+                } ?: emptyList()
+            }
         }
+    } catch (e: SecurityException) {
+        Log.e("Bluetooth", "❌ Security exception: ${e.message}", e)
+        emptyList()
     } catch (e: Exception) {
-        Log.e("Bluetooth", "Error getting devices", e)
+        Log.e("Bluetooth", "❌ Error getting devices: ${e.message}", e)
         emptyList()
     }
 }
+
 
 private fun testScriptExecution(scriptCode: String, context: Context) {
     Log.i("ScriptTest", "Testing: $scriptCode")

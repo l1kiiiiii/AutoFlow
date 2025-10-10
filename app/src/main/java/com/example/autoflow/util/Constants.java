@@ -8,7 +8,6 @@ public class Constants {
 
     public static final String ACTION_BLOCK_APPS = "BLOCK_APPS";
 
-
     // ========== TRIGGER TYPES ==========
     public static final String TRIGGER_TIME = "TIME";
     public static final String TRIGGER_BLE = "BLE";

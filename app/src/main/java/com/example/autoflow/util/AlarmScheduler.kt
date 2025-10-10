@@ -117,6 +117,27 @@ object AlarmScheduler {
             actionData
         )
     }
+    /**
+     * Schedule Bluetooth toggle
+     */
+    fun scheduleBluetoothToggle(
+        context: Context,
+        workflowId: Long,
+        triggerTimeMillis: Long,
+        bluetoothState: Boolean  // true = turn on, false = turn off
+    ) {
+        val actionData = mapOf(
+            "bluetooth_state" to bluetoothState.toString()
+        )
+
+        scheduleAlarm(
+            context,
+            workflowId,
+            triggerTimeMillis,
+            Constants.ACTION_TOGGLE_BLUETOOTH,
+            actionData
+        )
+    }
 
     /**
      * Schedule WiFi toggle
