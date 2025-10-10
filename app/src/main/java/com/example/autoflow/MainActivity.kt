@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,10 +16,19 @@ import androidx.annotation.RequiresApi
 import com.example.autoflow.ui.theme.AutoFlowTheme
 import com.example.autoflow.ui.theme.screens.Dashboard
 import com.example.autoflow.util.NotificationHelper
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
+        )
 
         // Initialize notification channels
         NotificationHelper.createNotificationChannels(this)
@@ -27,11 +37,16 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             requestExactAlarmPermission()
         }
-
         enableEdgeToEdge()
+
         setContent {
             AutoFlowTheme {
-                Dashboard()
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    Dashboard()
+                }
             }
         }
     }
@@ -43,7 +58,7 @@ class MainActivity : ComponentActivity() {
         if (!alarmManager.canScheduleExactAlarms()) {
             Toast.makeText(
                 this,
-                "Please allow 'Alarms & reminders' permission for scheduled notifications",
+                "⏰ Please allow 'Alarms & reminders' permission for scheduled workflows",
                 Toast.LENGTH_LONG
             ).show()
 
@@ -61,5 +76,11 @@ class MainActivity : ComponentActivity() {
                 startActivity(intent)
             }
         }
+    }
+    override fun onDestroy() {
+        super.onDestroy()
+    }
+    override fun onResume() {
+        super.onResume()
     }
 }
