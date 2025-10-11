@@ -112,9 +112,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.autoflow.data.WorkflowEntity
+import com.example.autoflow.data.toAction
+import com.example.autoflow.data.toTrigger
+import com.example.autoflow.geofence.GeofenceManager
 import com.example.autoflow.model.Action
 import com.example.autoflow.model.Trigger
 import com.example.autoflow.ui.theme.AutoFlowTheme
@@ -164,55 +168,55 @@ fun TaskCreationScreen(
     val scope = rememberCoroutineScope()
 
     // Load existing workflow if editing
-    val workflows by viewModel.getWorkflows().observeAsState(emptyList())
+    val workflows: List<WorkflowEntity> by viewModel.workflows.observeAsState(emptyList())
     val existingWorkflow = remember(workflowId, workflows) {
-        workflowId?.let { id -> workflows?.find { it.id == id } }
+        workflowId?.let { id -> workflows.find { it.id == id } }
     }
 
-    // Task name state
-    var taskName by remember { mutableStateOf("") }
-    var taskNameError by remember { mutableStateOf<String?>(null) }
+    //  Task name state with explicit types
+    var taskName: String by remember { mutableStateOf("") }
+    var taskNameError: String? by remember { mutableStateOf(null) }
 
-    // Trigger states
-    var locationTriggerExpanded by remember { mutableStateOf(false) }
-    var locationName by remember { mutableStateOf("") }
-    var locationDetailsInput by remember { mutableStateOf("") }
-    var radiusValue by remember { mutableFloatStateOf(100f) }
-    var triggerOnOption by remember { mutableStateOf("Entry") }
+    // : Trigger states with explicit types
+    var locationTriggerExpanded: Boolean by remember { mutableStateOf(false) }
+    var locationName: String by remember { mutableStateOf("") }
+    var locationDetailsInput: String by remember { mutableStateOf("") }
+    var radiusValue: Float by remember { mutableFloatStateOf(100f) }
+    var triggerOnOption: String by remember { mutableStateOf("Entry") }
 
-    var wifiTriggerExpanded by remember { mutableStateOf(false) }
-    var wifiState by remember { mutableStateOf("On") }
+    var wifiTriggerExpanded: Boolean by remember { mutableStateOf(false) }
+    var wifiState: String by remember { mutableStateOf("On") }
 
-    var timeTriggerExpanded by remember { mutableStateOf(false) }
-    var timeValue by remember { mutableStateOf("") }
+    var timeTriggerExpanded: Boolean by remember { mutableStateOf(false) }
+    var timeValue: String by remember { mutableStateOf("") }
 
-    var bluetoothDeviceTriggerExpanded by remember { mutableStateOf(false) }
-    var bluetoothDeviceAddress by remember { mutableStateOf("") }
+    var bluetoothDeviceTriggerExpanded: Boolean by remember { mutableStateOf(false) }
+    var bluetoothDeviceAddress: String by remember { mutableStateOf("") }
 
-    // Action states
-    var sendNotificationActionExpanded by remember { mutableStateOf(false) }
-    var notificationTitle by remember { mutableStateOf("") }
-    var notificationMessage by remember { mutableStateOf("") }
-    var notificationPriority by remember { mutableStateOf("Normal") }
+    //   Action states with explicit types
+    var sendNotificationActionExpanded: Boolean by remember { mutableStateOf(false) }
+    var notificationTitle: String by remember { mutableStateOf("") }
+    var notificationMessage: String by remember { mutableStateOf("") }
+    var notificationPriority: String by remember { mutableStateOf("Normal") }
 
-    var toggleSettingsActionExpanded by remember { mutableStateOf(false) }
-    var toggleSetting by remember { mutableStateOf("WiFi") }
+    var toggleSettingsActionExpanded: Boolean by remember { mutableStateOf(false) }
+    var toggleSetting: String by remember { mutableStateOf("WiFi") }
 
-    var runScriptActionExpanded by remember { mutableStateOf(false) }
-    var scriptText by remember { mutableStateOf("") }
+    var runScriptActionExpanded: Boolean by remember { mutableStateOf(false) }
+    var scriptText: String by remember { mutableStateOf("") }
 
-    // Error/success messages
-    var showErrorDialog by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf("") }
-    var showSuccessSnackbar by remember { mutableStateOf(false) }
+    //  Error/success messages with explicit types
+    var showErrorDialog: Boolean by remember { mutableStateOf(false) }
+    var errorMessage: String by remember { mutableStateOf("") }
+    var showSuccessSnackbar: Boolean by remember { mutableStateOf(false) }
 
-    //  Sound Mode Action states
-    var setSoundModeActionExpanded by remember { mutableStateOf(false) }
-    var soundMode by remember { mutableStateOf("Normal") }
+    //  Sound Mode Action states with explicit types
+    var setSoundModeActionExpanded: Boolean by remember { mutableStateOf(false) }
+    var soundMode: String by remember { mutableStateOf("Normal") }
 
-    // Block Apps Action states
-    var blockAppsActionExpanded by remember { mutableStateOf(false) }
-    var selectedAppsToBlock by remember { mutableStateOf<List<String>>(emptyList()) }
+    //  Block Apps Action states with explicit types
+    var blockAppsActionExpanded: Boolean by remember { mutableStateOf(false) }
+    var selectedAppsToBlock: List<String> by remember { mutableStateOf(emptyList()) }
 
 
     // Pre-populate fields if editing
@@ -371,8 +375,8 @@ fun TaskCreationScreen(
                             toggleSetting = toggleSetting,
                             runScriptActionExpanded = runScriptActionExpanded,
                             scriptText = scriptText,
-                            setSoundModeActionExpanded = setSoundModeActionExpanded,  // ✅ ADD THIS
-                            soundMode = soundMode,  // ✅ ADD THIS
+                            setSoundModeActionExpanded = setSoundModeActionExpanded,
+                            soundMode = soundMode,
                             onSuccess = {
                                 showSuccessSnackbar = true
                                 onSaveTask(taskName)
@@ -1427,7 +1431,7 @@ private fun LocationTriggerContent(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // ========== NEW: Radius Input with Text Field ==========
+        // ========== UPDATED: Radius Input with Indoor Presets ==========
 
         Text(
             "Trigger Radius",
@@ -1496,21 +1500,82 @@ private fun LocationTriggerContent(
                 singleLine = true
             )
 
-            // Quick preset buttons
+            // ✅ UPDATED: Quick preset buttons with indoor options
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    "Quick Presets:",
+                    "Quick Presets",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                // ✅ NEW: Indoor/Small Space Presets Row
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    listOf(50, 100, 200, 500, 1000).forEach { preset ->
+                    listOf(
+                        10 to "10m\nRoom",
+                        20 to "20m\nOffice",
+                        30 to "30m\nFloor"
+                    ).forEach { (preset, label) ->
+                        FilterChip(
+                            selected = radiusValue.roundToInt() == preset,
+                            onClick = {
+                                onRadiusChange(preset.toFloat())
+                                radiusText = preset.toString()
+                                radiusError = null
+                            },
+                            label = {
+                                Text(
+                                    label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    lineHeight = 12.sp,
+                                    fontSize = 10.sp
+                                )
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                // Standard Presets Row
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    listOf(50, 100, 200).forEach { preset ->
+                        FilterChip(
+                            selected = radiusValue.roundToInt() == preset,
+                            onClick = {
+                                onRadiusChange(preset.toFloat())
+                                radiusText = preset.toString()
+                                radiusError = null
+                            },
+                            label = {
+                                Text(
+                                    "${preset}m",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                // Large Area Presets Row
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    listOf(500, 1000, 2000).forEach { preset ->
                         FilterChip(
                             selected = radiusValue.roundToInt() == preset,
                             onClick = {
@@ -1697,33 +1762,34 @@ private fun LocationTriggerContent(
             }
         }
     }
-
-    // Permission Dialog (same as before)...
 }
 
-// ========== HELPER FUNCTIONS ==========
-
+//: Helper functions with indoor support
 private fun getRadiusDescription(radius: Int): String {
     return when {
-        radius < 50 -> "Very small area - ${radius}m radius"
-        radius < 150 -> "Small area - ${radius}m radius"
-        radius < 500 -> "Medium area - ${radius}m radius"
-        radius < 1000 -> "Large area - ${radius}m radius"
-        else -> "Very large area - ${radius}m (${radius / 1000}km) radius"
+        radius <= 10 -> "Tiny area - ${radius}m"
+        radius <= 30 -> "Very small area - ${radius}m"
+        radius <= 50 -> "Small area - ${radius}m"
+        radius <= 150 -> "Medium area - ${radius}m"
+        radius <= 500 -> "Large area - ${radius}m"
+        radius <= 1000 -> "Very large area - ${radius}m"
+        else -> "Massive area - ${radius / 1000}km"
     }
 }
 
 private fun getRadiusUseCase(radius: Int): String {
     return when {
-        radius < 50 -> "specific rooms or small buildings"
-        radius < 150 -> "homes, offices, or parking lots"
-        radius < 500 -> "neighborhoods or large buildings"
-        radius < 1000 -> "districts or large complexes"
+        radius <= 10 -> "specific rooms (bedroom, bathroom)"
+        radius <= 30 -> "offices, conference rooms, or single floors"
+        radius <= 50 -> "small buildings or parking spots"
+        radius <= 150 -> "homes, offices, or parking lots"
+        radius <= 500 -> "neighborhoods or large buildings"
+        radius <= 1000 -> "districts or large complexes"
         else -> "cities or wide areas"
     }
 }
 
-
+// Permission Dialog (same as before)...
 // ========== LOCATION FETCHING FUNCTION ==========
 
 @SuppressLint("MissingPermission")
@@ -2314,7 +2380,6 @@ private fun ErrorDialog(
     )
 }
 // ========== SAVE HANDLER ==========
-// ========== COMPLETE handleSaveTask FUNCTION ==========
 
 private suspend fun handleSaveTask(
     context: Context,
@@ -2340,8 +2405,8 @@ private suspend fun handleSaveTask(
     toggleSetting: String,
     runScriptActionExpanded: Boolean,
     scriptText: String,
-    setSoundModeActionExpanded: Boolean,  // ✅ ADD THIS
-    soundMode: String,  // ✅ ADD THIS
+    setSoundModeActionExpanded: Boolean,
+    soundMode: String,
     onSuccess: () -> Unit,
     onError: (String) -> Unit
 ) {
@@ -2380,16 +2445,28 @@ private suspend fun handleSaveTask(
         val trigger = when {
             hasTimeTrigger -> {
                 Log.d("TaskCreation", "→ Creating TIME trigger: $timeValue")
-                Trigger(0, 0, Constants.TRIGGER_TIME, timeValue)
+                Trigger.TimeTrigger(
+                    time = timeValue,
+                    days = listOf() // Add days from your UI if available
+                )
             }
+
             hasWifiTrigger -> {
                 Log.d("TaskCreation", "→ Creating WIFI trigger: $wifiState")
-                Trigger(0, 0, Constants.TRIGGER_WIFI, wifiState)
+                Trigger.WiFiTrigger(
+                    ssid = null, // Add SSID from UI if available
+                    state = wifiState
+                )
             }
+
             hasBluetoothTrigger -> {
                 Log.d("TaskCreation", "→ Creating BLUETOOTH trigger: $bluetoothDeviceAddress")
-                Trigger(0, 0, Constants.TRIGGER_BLE, bluetoothDeviceAddress)
+                Trigger.BluetoothTrigger(
+                    deviceAddress = bluetoothDeviceAddress,
+                    deviceName = null // Add device name from UI if available
+                )
             }
+
             hasLocationTrigger -> {
                 Log.d("TaskCreation", "→ Creating LOCATION trigger")
                 val parts = locationDetailsInput.split(",").map { it.trim() }
@@ -2403,17 +2480,24 @@ private suspend fun handleSaveTask(
                     onError("Invalid coordinate values")
                     return
                 }
-                val json = JSONObject().apply {
-                    put("locationName", locationName.ifEmpty { "Unnamed Location" })
-                    put("coordinates", locationDetailsInput)
-                    put("latitude", lat)
-                    put("longitude", lng)
-                    put("radius", radiusValue.roundToInt())
-                    put("triggerOnEntry", triggerOnOption == "Entry" || triggerOnOption == "Both")
-                    put("triggerOnExit", triggerOnOption == "Exit" || triggerOnOption == "Both")
-                }
-                Trigger(0, 0, Constants.TRIGGER_LOCATION, json.toString())
+
+                Trigger.LocationTrigger(
+                    locationName = locationName.ifEmpty { "Unnamed Location" },
+                    latitude = lat,
+                    longitude = lng,
+                    radius = radiusValue.toDouble(),
+                    triggerOnEntry = triggerOnOption == "Entry" || triggerOnOption == "Both",
+                    triggerOnExit = triggerOnOption == "Exit" || triggerOnOption == "Both",
+                    triggerOn = when (triggerOnOption) {
+                        "Entry" -> "enter"
+                        "Exit" -> "exit"
+                        "Both" -> "both"
+                        else -> "enter"
+                    }
+                )
             }
+
+
             else -> {
                 onError("Failed to create trigger")
                 return
@@ -2461,19 +2545,19 @@ private suspend fun handleSaveTask(
                 }
 
                 Action(actionType, null, null, null).apply {
-                    setValue(toggleSetting)
+                    value = toggleSetting
                 }
             }
             hasSoundModeAction -> {
                 Log.d("TaskCreation", "→ Creating SOUND MODE action: $soundMode")
                 Action(Constants.ACTION_SET_SOUND_MODE, null, null, null).apply {
-                    setValue(soundMode)
+                    value = soundMode
                 }
             }
             hasScriptAction -> {
                 Log.d("TaskCreation", "→ Creating SCRIPT action")
                 Action(Constants.ACTION_RUN_SCRIPT, null, null, null).apply {
-                    setValue(scriptText)
+                    value = scriptText
                 }
             }
             else -> {
@@ -2565,9 +2649,50 @@ private suspend fun handleSaveTask(
                 Log.e("TaskCreation", "❌ Alarm scheduling failed", e)
             }
         }
+        // 10. ADD GEOFENCE IF LOCATION TRIGGER
+        if (trigger.type == Constants.TRIGGER_LOCATION) {
+            try {
+                val locationJson = JSONObject(trigger.value)
+                val lat = locationJson.getDouble("latitude")
+                val lng = locationJson.getDouble("longitude")
+                val radius = locationJson.optInt("radius", 100).toFloat()
+
+                //  Use the correct field names that match your JSON
+                val triggerOnEntry = locationJson.optBoolean("triggerOnEntry", false)
+                val triggerOnExit = locationJson.optBoolean("triggerOnExit", false)
+
+                //  Store triggerOn for GeofenceReceiver compatibility
+                val triggerOn = when {
+                    triggerOnEntry && triggerOnExit -> "both"
+                    triggerOnEntry -> "enter"
+                    triggerOnExit -> "exit"
+                    else -> "enter" // default
+                }
+
+                val geofenceAdded = GeofenceManager.addGeofence(
+                    context = context,
+                    workflowId = workflowId ?: 0L,
+                    latitude = lat,
+                    longitude = lng,
+                    radius = radius,
+                    triggerOnEntry = triggerOnEntry,
+                    triggerOnExit = triggerOnExit
+                )
+
+                if (geofenceAdded) {
+                    Log.d("TaskCreation", "✅ Geofence registered for workflow")
+                } else {
+                    Log.e("TaskCreation", "❌ Failed to register geofence")
+                }
+            } catch (e: Exception) {
+                Log.e("TaskCreation", "❌ Geofence setup failed", e)
+            }
+        }
 
 
-        // 10. SUCCESS
+
+
+        // 11. SUCCESS
         onSuccess()
 
     } catch (e: NumberFormatException) {

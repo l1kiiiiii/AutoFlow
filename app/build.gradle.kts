@@ -3,6 +3,7 @@
         alias(libs.plugins.android.application)
         alias(libs.plugins.kotlin.android)
         alias(libs.plugins.kotlin.compose)
+        id("kotlin-kapt")
     }
 
     android {
@@ -105,5 +106,9 @@
         implementation(libs.maps.compose)
         implementation(libs.maps.compose.utils)
         implementation(libs.maps.compose.widgets)
+
+        implementation(libs.androidx.room.runtime)
+        implementation(libs.androidx.room.ktx)
+        kapt(libs.androidx.room.compiler)
 
     }
