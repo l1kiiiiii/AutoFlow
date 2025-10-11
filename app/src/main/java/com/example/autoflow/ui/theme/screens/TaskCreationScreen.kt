@@ -166,55 +166,55 @@ fun TaskCreationScreen(
     val scope = rememberCoroutineScope()
 
     // Load existing workflow if editing
-    val workflows by viewModel.getWorkflows().observeAsState(emptyList())
+    val workflows: List<WorkflowEntity> by viewModel.workflows.observeAsState(emptyList())
     val existingWorkflow = remember(workflowId, workflows) {
-        workflowId?.let { id -> workflows?.find { it.id == id } }
+        workflowId?.let { id -> workflows.find { it.id == id } }
     }
 
-    // Task name state
-    var taskName by remember { mutableStateOf("") }
-    var taskNameError by remember { mutableStateOf<String?>(null) }
+    //  Task name state with explicit types
+    var taskName: String by remember { mutableStateOf("") }
+    var taskNameError: String? by remember { mutableStateOf(null) }
 
-    // Trigger states
-    var locationTriggerExpanded by remember { mutableStateOf(false) }
-    var locationName by remember { mutableStateOf("") }
-    var locationDetailsInput by remember { mutableStateOf("") }
-    var radiusValue by remember { mutableFloatStateOf(100f) }
-    var triggerOnOption by remember { mutableStateOf("Entry") }
+    // : Trigger states with explicit types
+    var locationTriggerExpanded: Boolean by remember { mutableStateOf(false) }
+    var locationName: String by remember { mutableStateOf("") }
+    var locationDetailsInput: String by remember { mutableStateOf("") }
+    var radiusValue: Float by remember { mutableFloatStateOf(100f) }
+    var triggerOnOption: String by remember { mutableStateOf("Entry") }
 
-    var wifiTriggerExpanded by remember { mutableStateOf(false) }
-    var wifiState by remember { mutableStateOf("On") }
+    var wifiTriggerExpanded: Boolean by remember { mutableStateOf(false) }
+    var wifiState: String by remember { mutableStateOf("On") }
 
-    var timeTriggerExpanded by remember { mutableStateOf(false) }
-    var timeValue by remember { mutableStateOf("") }
+    var timeTriggerExpanded: Boolean by remember { mutableStateOf(false) }
+    var timeValue: String by remember { mutableStateOf("") }
 
-    var bluetoothDeviceTriggerExpanded by remember { mutableStateOf(false) }
-    var bluetoothDeviceAddress by remember { mutableStateOf("") }
+    var bluetoothDeviceTriggerExpanded: Boolean by remember { mutableStateOf(false) }
+    var bluetoothDeviceAddress: String by remember { mutableStateOf("") }
 
-    // Action states
-    var sendNotificationActionExpanded by remember { mutableStateOf(false) }
-    var notificationTitle by remember { mutableStateOf("") }
-    var notificationMessage by remember { mutableStateOf("") }
-    var notificationPriority by remember { mutableStateOf("Normal") }
+    //   Action states with explicit types
+    var sendNotificationActionExpanded: Boolean by remember { mutableStateOf(false) }
+    var notificationTitle: String by remember { mutableStateOf("") }
+    var notificationMessage: String by remember { mutableStateOf("") }
+    var notificationPriority: String by remember { mutableStateOf("Normal") }
 
-    var toggleSettingsActionExpanded by remember { mutableStateOf(false) }
-    var toggleSetting by remember { mutableStateOf("WiFi") }
+    var toggleSettingsActionExpanded: Boolean by remember { mutableStateOf(false) }
+    var toggleSetting: String by remember { mutableStateOf("WiFi") }
 
-    var runScriptActionExpanded by remember { mutableStateOf(false) }
-    var scriptText by remember { mutableStateOf("") }
+    var runScriptActionExpanded: Boolean by remember { mutableStateOf(false) }
+    var scriptText: String by remember { mutableStateOf("") }
 
-    // Error/success messages
-    var showErrorDialog by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf("") }
-    var showSuccessSnackbar by remember { mutableStateOf(false) }
+    //  Error/success messages with explicit types
+    var showErrorDialog: Boolean by remember { mutableStateOf(false) }
+    var errorMessage: String by remember { mutableStateOf("") }
+    var showSuccessSnackbar: Boolean by remember { mutableStateOf(false) }
 
-    //  Sound Mode Action states
-    var setSoundModeActionExpanded by remember { mutableStateOf(false) }
-    var soundMode by remember { mutableStateOf("Normal") }
+    //  Sound Mode Action states with explicit types
+    var setSoundModeActionExpanded: Boolean by remember { mutableStateOf(false) }
+    var soundMode: String by remember { mutableStateOf("Normal") }
 
-    // Block Apps Action states
-    var blockAppsActionExpanded by remember { mutableStateOf(false) }
-    var selectedAppsToBlock by remember { mutableStateOf<List<String>>(emptyList()) }
+    //  Block Apps Action states with explicit types
+    var blockAppsActionExpanded: Boolean by remember { mutableStateOf(false) }
+    var selectedAppsToBlock: List<String> by remember { mutableStateOf(emptyList()) }
 
 
     // Pre-populate fields if editing

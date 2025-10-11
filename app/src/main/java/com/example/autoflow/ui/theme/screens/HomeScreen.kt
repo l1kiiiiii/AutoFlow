@@ -1,11 +1,6 @@
 package com.example.autoflow.ui.theme.screens
 
 import android.util.Log
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
@@ -47,7 +42,7 @@ fun HomeScreen(
     viewModel: WorkflowViewModel = viewModel()
 ) {
     val scrollState = rememberScrollState()
-    val workflows: List<WorkflowEntity>? by viewModel.getWorkflows().observeAsState(null)
+    val workflows: List<WorkflowEntity> by viewModel.workflows.observeAsState(emptyList())
     LaunchedEffect(workflows) {
         Log.d("HomeScreen", "📊 Workflows updated: ${workflows?.size ?: 0} tasks")
         workflows?.forEach { workflow ->
