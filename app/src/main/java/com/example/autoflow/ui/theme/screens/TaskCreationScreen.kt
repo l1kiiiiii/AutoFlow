@@ -115,6 +115,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.autoflow.data.WorkflowEntity
+import com.example.autoflow.geofence.GeofenceManager
 import com.example.autoflow.model.Action
 import com.example.autoflow.model.Trigger
 import com.example.autoflow.ui.theme.AutoFlowTheme
@@ -2565,9 +2566,36 @@ private suspend fun handleSaveTask(
                 Log.e("TaskCreation", "❌ Alarm scheduling failed", e)
             }
         }
+        // 10. ADD GEOFENCE IF LOCATION TRIGGER
+        if (trigger.type == Constants.TRIGGER_LOCATION) {
+            try {
+                val locationJson = JSONObject(trigger.value)
+                val lat = locationJson.getDouble("latitude")
+                val lng = locationJson.getDouble("longitude")
+                val radius = locationJson.optInt("radius", 100).toFloat()
+                val triggerOn = locationJson.getString("triggerOn")
+
+                val geofenceAdded = GeofenceManager.addGeofence(
+                    context = context,
+                    workflowId = workflowId ?: 0L,
+                    latitude = lat,
+                    longitude = lng,
+                    radius = radius,
+                    triggerOnEntry = triggerOn == "enter",
+                    triggerOnExit = triggerOn == "exit"
+                )
+
+                if (geofenceAdded) {
+                    Log.d("TaskCreation", "✅ Geofence registered")
+                }
+            } catch (e: Exception) {
+                Log.e("TaskCreation", "❌ Geofence setup failed", e)
+            }
+        }
 
 
-        // 10. SUCCESS
+
+        // 11. SUCCESS
         onSuccess()
 
     } catch (e: NumberFormatException) {
