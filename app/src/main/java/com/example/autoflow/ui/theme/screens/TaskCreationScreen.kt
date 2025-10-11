@@ -373,8 +373,8 @@ fun TaskCreationScreen(
                             toggleSetting = toggleSetting,
                             runScriptActionExpanded = runScriptActionExpanded,
                             scriptText = scriptText,
-                            setSoundModeActionExpanded = setSoundModeActionExpanded,  // ✅ ADD THIS
-                            soundMode = soundMode,  // ✅ ADD THIS
+                            setSoundModeActionExpanded = setSoundModeActionExpanded,
+                            soundMode = soundMode,
                             onSuccess = {
                                 showSuccessSnackbar = true
                                 onSaveTask(taskName)

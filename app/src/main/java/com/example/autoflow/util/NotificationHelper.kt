@@ -1,344 +1,253 @@
-// Updated NotificationHelper.java - Fixed version
-package com.example.autoflow.util;
+package com.example.autoflow.util
 
-import android.Manifest;
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
-import android.content.Context;
-import android.content.Intent;
-import android.graphics.Color;
-import android.os.Build;
-import android.util.Log;
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.util.Log
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import com.example.autoflow.R
 
-import androidx.annotation.NonNull;
-import androidx.annotation.RequiresPermission;
-import androidx.core.app.NotificationCompat;
-import androidx.core.app.NotificationManagerCompat;
-import com.example.autoflow.MainActivity;
+/**
+ * Helper class for managing notifications
+ * Handles notification channels, creation, and display
+ */
+object NotificationHelper {
 
-public class NotificationHelper {
+    private const val TAG = "NotificationHelper"
+    private const val DEFAULT_NOTIFICATION_ID = 1000
 
-    // Notification channel constants
-    private static final String CHANNEL_ID_DEFAULT = "autoflow_default";
-    private static final String CHANNEL_ID_SCRIPT = "autoflow_script";
-    private static final String CHANNEL_ID_ERROR = "autoflow_error";
-    private static final String CHANNEL_NAME_DEFAULT = "AutoFlow Notifications";
-    private static final String CHANNEL_NAME_SCRIPT = "Script Notifications";
-    private static final String CHANNEL_NAME_ERROR = "Error Notifications";
+    // Notification channels
+    private const val CHANNEL_ID_DEFAULT = "autoflow_default"
+    private const val CHANNEL_ID_HIGH_PRIORITY = "autoflow_high_priority"
+    private const val CHANNEL_ID_LOW_PRIORITY = "autoflow_low_priority"
 
-    // Notification ID counters
-    private static int notificationIdCounter = 1000;
+    private const val CHANNEL_NAME_DEFAULT = "AutoFlow Notifications"
+    private const val CHANNEL_NAME_HIGH = "Important AutoFlow Alerts"
+    private const val CHANNEL_NAME_LOW = "AutoFlow Updates"
 
     /**
-     * Initialize notification channels for different types of notifications
+     * Create notification channels (Android 8.0+)
      */
-    public static void createNotificationChannels(@NonNull Context context) {
+    fun createNotificationChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationManager notificationManager =
-                    (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE)
+                    as? NotificationManager ?: return
 
-            if (notificationManager == null) return;
-
-            // Default channel for general notifications
-            NotificationChannel defaultChannel = new NotificationChannel(
-                    CHANNEL_ID_DEFAULT,
-                    CHANNEL_NAME_DEFAULT,
-                    NotificationManager.IMPORTANCE_DEFAULT
-            );
-            defaultChannel.setDescription("General AutoFlow notifications");
-            defaultChannel.enableLights(true);
-            defaultChannel.setLightColor(Color.BLUE);
-            defaultChannel.enableVibration(true);
-            notificationManager.createNotificationChannel(defaultChannel);
-
-            // Script execution channel
-            NotificationChannel scriptChannel = new NotificationChannel(
-                    CHANNEL_ID_SCRIPT,
-                    CHANNEL_NAME_SCRIPT,
-                    NotificationManager.IMPORTANCE_DEFAULT
-            );
-            scriptChannel.setDescription("Notifications from script execution");
-            scriptChannel.enableLights(true);
-            scriptChannel.setLightColor(Color.GREEN);
-            scriptChannel.enableVibration(false);
-            notificationManager.createNotificationChannel(scriptChannel);
-
-            // Error channel for high-priority error notifications
-            NotificationChannel errorChannel = new NotificationChannel(
-                    CHANNEL_ID_ERROR,
-                    CHANNEL_NAME_ERROR,
-                    NotificationManager.IMPORTANCE_HIGH
-            );
-            errorChannel.setDescription("Error notifications from AutoFlow");
-            errorChannel.enableLights(true);
-            errorChannel.setLightColor(Color.RED);
-            errorChannel.enableVibration(true);
-            errorChannel.setVibrationPattern(new long[]{100, 200, 300, 400, 500});
-            notificationManager.createNotificationChannel(errorChannel);
-        }
-    }
-
-    /**
-     * Send a basic notification with title and message
-     */
-    public static void sendNotification(@NonNull Context context,
-                                        @NonNull String title,
-                                        @NonNull String message) {
-        sendNotification(context, title, message, CHANNEL_ID_DEFAULT, NotificationCompat.PRIORITY_DEFAULT);
-    }
-
-    /**
-     * Send a notification with custom priority
-     */
-    public static void sendNotification(@NonNull Context context,
-                                        @NonNull String title,
-                                        @NonNull String message,
-                                        int priority) {
-        String channelId = (priority == NotificationCompat.PRIORITY_HIGH) ? CHANNEL_ID_ERROR : CHANNEL_ID_DEFAULT;
-        sendNotification(context, title, message, channelId, priority);
-    }
-
-    /**
-     * Send a script-related notification
-     */
-    public static void sendScriptNotification(@NonNull Context context,
-                                              @NonNull String title,
-                                              @NonNull String message) {
-        sendNotification(context, title, message, CHANNEL_ID_SCRIPT, NotificationCompat.PRIORITY_DEFAULT);
-    }
-
-    /**
-     * Send an error notification
-     */
-    public static void sendErrorNotification(@NonNull Context context,
-                                             @NonNull String title,
-                                             @NonNull String message) {
-        sendNotification(context, title, message, CHANNEL_ID_ERROR, NotificationCompat.PRIORITY_HIGH);
-    }
-
-    /**
-     * Core notification sending method
-     */
-    private static void sendNotification(@NonNull Context context,
-                                         @NonNull String title,
-                                         @NonNull String message,
-                                         @NonNull String channelId,
-                                         int priority) {
-        try {
-            // Create pending intent to open the app when notification is tapped
-            Intent intent = new Intent(context, MainActivity.class);
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-
-            PendingIntent pendingIntent = PendingIntent.getActivity(
-                    context,
-                    0,
-                    intent,
-                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
-                            ? PendingIntent.FLAG_IMMUTABLE
-                            : PendingIntent.FLAG_UPDATE_CURRENT
-            );
-
-            // Build the notification
-            NotificationCompat.Builder builder = new NotificationCompat.Builder(context, channelId)
-                    .setSmallIcon(getNotificationIcon(priority))
-                    .setContentTitle(title)
-                    .setContentText(message)
-                    .setPriority(priority)
-                    .setContentIntent(pendingIntent)
-                    .setAutoCancel(true) // Remove notification when tapped
-                    .setStyle(new NotificationCompat.BigTextStyle().bigText(message)); // Expandable text
-
-            // Add sound for high priority notifications
-            if (priority == NotificationCompat.PRIORITY_HIGH) {
-                builder.setDefaults(Notification.DEFAULT_ALL);
+            // Default channel
+            val defaultChannel = NotificationChannel(
+                CHANNEL_ID_DEFAULT,
+                CHANNEL_NAME_DEFAULT,
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "General AutoFlow notifications"
+                enableVibration(true)
+                enableLights(true)
             }
 
-            // Send the notification
-            NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
-            int notificationId = getNextNotificationId();
-            notificationManager.notify(notificationId, builder.build());
+            // High priority channel
+            val highPriorityChannel = NotificationChannel(
+                CHANNEL_ID_HIGH_PRIORITY,
+                CHANNEL_NAME_HIGH,
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Important AutoFlow alerts"
+                enableVibration(true)
+                enableLights(true)
+            }
 
-        } catch (SecurityException e) {
-            // Handle case where notification permissions are denied
-            android.util.Log.e("NotificationHelper", "Notification permission denied: " + e.getMessage());
-        } catch (Exception e) {
-            android.util.Log.e("NotificationHelper", "Error sending notification: " + e.getMessage());
+            // Low priority channel
+            val lowPriorityChannel = NotificationChannel(
+                CHANNEL_ID_LOW_PRIORITY,
+                CHANNEL_NAME_LOW,
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "AutoFlow status updates"
+                enableVibration(false)
+                enableLights(false)
+            }
+
+            notificationManager.createNotificationChannels(
+                listOf(defaultChannel, highPriorityChannel, lowPriorityChannel)
+            )
+
+            Log.d(TAG, "✅ Notification channels created")
         }
     }
 
     /**
-     * Send a rich notification with custom actions - FIXED VERSION
+     * Send a simple notification
      */
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
-    public static void sendRichNotification(@NonNull Context context,
-                                            @NonNull String title,
-                                            @NonNull String message,
-                                            @NonNull String actionText,
-                                            @NonNull PendingIntent actionIntent) {
+    fun sendNotification(
+        context: Context,
+        title: String,
+        message: String,
+        priority: String = Constants.NOTIFICATION_PRIORITY_NORMAL,
+        notificationId: Int = DEFAULT_NOTIFICATION_ID
+    ) {
+        if (!PermissionUtils.hasNotificationPermission(context)) {
+            Log.w(TAG, "⚠️ Notification permission not granted")
+            return
+        }
+
         try {
-            // Default app open intent
-            Intent intent = new Intent(context, MainActivity.class);
-            PendingIntent pendingIntent = PendingIntent.getActivity(
+            val channelId = getChannelId(priority)
+            val priorityInt = getPriorityInt(priority)
+
+            val builder = NotificationCompat.Builder(context, channelId)
+                .setSmallIcon(getNotificationIcon())
+                .setContentTitle(title)
+                .setContentText(message)
+                .setPriority(priorityInt)
+                .setAutoCancel(true)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+
+            // Add content intent to open app
+            val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            if (intent != null) {
+                val pendingIntent = PendingIntent.getActivity(
                     context,
                     0,
                     intent,
-                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
-                            ? PendingIntent.FLAG_IMMUTABLE
-                            : PendingIntent.FLAG_UPDATE_CURRENT
-            );
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                builder.setContentIntent(pendingIntent)
+            }
 
-            // Build notification with custom action - USING SYSTEM ICONS
-            NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID_DEFAULT)
-                    .setSmallIcon(getNotificationIcon(NotificationCompat.PRIORITY_DEFAULT))
-                    .setContentTitle(title)
-                    .setContentText(message)
-                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                    .setContentIntent(pendingIntent)
-                    .setAutoCancel(true)
-                    // FIXED: Using system drawable instead of custom ic_action
-                    .addAction(android.R.drawable.ic_media_play, actionText, actionIntent)
-                    .setStyle(new NotificationCompat.BigTextStyle().bigText(message));
+            NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+            Log.d(TAG, "✅ Notification sent: $title")
 
-            NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
-            notificationManager.notify(getNextNotificationId(), builder.build());
-
-        } catch (Exception e) {
-            Log.e("NotificationHelper", "Error sending rich notification: " + e.getMessage());
+        } catch (e: SecurityException) {
+            Log.e(TAG, "❌ SecurityException sending notification", e)
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error sending notification", e)
         }
     }
 
     /**
-     * Send notification with multiple action buttons
+     * Send notification with custom action
      */
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
-    public static void sendActionNotification(@NonNull Context context,
-                                              @NonNull String title,
-                                              @NonNull String message,
-                                              @NonNull String action1Text,
-                                              @NonNull PendingIntent action1Intent,
-                                              @NonNull String action2Text,
-                                              @NonNull PendingIntent action2Intent) {
+    fun sendNotificationWithAction(
+        context: Context,
+        title: String,
+        message: String,
+        actionTitle: String,
+        actionIntent: PendingIntent,
+        priority: String = Constants.NOTIFICATION_PRIORITY_NORMAL,
+        notificationId: Int = DEFAULT_NOTIFICATION_ID
+    ) {
+        if (!PermissionUtils.hasNotificationPermission(context)) {
+            Log.w(TAG, "⚠️ Notification permission not granted")
+            return
+        }
+
         try {
-            Intent intent = new Intent(context, MainActivity.class);
-            PendingIntent pendingIntent = PendingIntent.getActivity(
-                    context,
-                    0,
-                    intent,
-                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
-                            ? PendingIntent.FLAG_IMMUTABLE
-                            : PendingIntent.FLAG_UPDATE_CURRENT
-            );
+            val channelId = getChannelId(priority)
+            val priorityInt = getPriorityInt(priority)
 
-            NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID_DEFAULT)
-                    .setSmallIcon(getNotificationIcon(NotificationCompat.PRIORITY_DEFAULT))
-                    .setContentTitle(title)
-                    .setContentText(message)
-                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                    .setContentIntent(pendingIntent)
-                    .setAutoCancel(true)
-                    // Using system drawables for action buttons
-                    .addAction(android.R.drawable.ic_menu_call, action1Text, action1Intent)
-                    .addAction(android.R.drawable.ic_menu_close_clear_cancel, action2Text, action2Intent)
-                    .setStyle(new NotificationCompat.BigTextStyle().bigText(message));
+            val builder = NotificationCompat.Builder(context, channelId)
+                .setSmallIcon(getNotificationIcon())
+                .setContentTitle(title)
+                .setContentText(message)
+                .setPriority(priorityInt)
+                .setAutoCancel(true)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+                .addAction(0, actionTitle, actionIntent)
 
-            NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
-            notificationManager.notify(getNextNotificationId(), builder.build());
+            NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+            Log.d(TAG, "✅ Notification with action sent: $title")
 
-        } catch (Exception e) {
-            Log.e("NotificationHelper", "Error sending action notification: " + e.getMessage());
+        } catch (e: SecurityException) {
+            Log.e(TAG, "❌ SecurityException sending notification", e)
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error sending notification", e)
         }
     }
 
     /**
-     * Cancel a specific notification
+     * Send progress notification
      */
-    public static void cancelNotification(@NonNull Context context, int notificationId) {
-        NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
-        notificationManager.cancel(notificationId);
-    }
+    fun sendProgressNotification(
+        context: Context,
+        title: String,
+        message: String,
+        progress: Int,
+        maxProgress: Int = 100,
+        notificationId: Int = DEFAULT_NOTIFICATION_ID
+    ) {
+        if (!PermissionUtils.hasNotificationPermission(context)) return
 
-    /**
-     * Cancel all notifications from this app
-     */
-    public static void cancelAllNotifications(@NonNull Context context) {
-        NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
-        notificationManager.cancelAll();
-    }
+        try {
+            val builder = NotificationCompat.Builder(context, CHANNEL_ID_DEFAULT)
+                .setSmallIcon(getNotificationIcon())
+                .setContentTitle(title)
+                .setContentText(message)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setProgress(maxProgress, progress, false)
+                .setOngoing(true)
 
-    /**
-     * Get appropriate notification icon based on priority - USING SYSTEM ICONS
-     */
-    private static int getNotificationIcon(int priority) {
-        switch (priority) {
-            case NotificationCompat.PRIORITY_HIGH:
-            case NotificationCompat.PRIORITY_MAX:
-                return android.R.drawable.stat_notify_error; // Error/warning icon
-            case NotificationCompat.PRIORITY_LOW:
-            case NotificationCompat.PRIORITY_MIN:
-                return android.R.drawable.ic_dialog_info; // Info icon
-            default:
-                return android.R.drawable.ic_dialog_email; // Default notification icon
+            NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error sending progress notification", e)
         }
     }
 
     /**
-     * Generate unique notification IDs
+     * Cancel a notification
      */
-    private static synchronized int getNextNotificationId() {
-        return notificationIdCounter++;
-    }
-
-    /**
-     * Check if notifications are enabled for the app
-     */
-    public static boolean areNotificationsEnabled(@NonNull Context context) {
-        NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
-        return notificationManager.areNotificationsEnabled();
-    }
-
-    /**
-     * Helper method to convert priority string to integer
-     */
-    public static int getPriorityFromString(@NonNull String priorityString) {
-        switch (priorityString.toLowerCase()) {
-            case "low":
-                return NotificationCompat.PRIORITY_LOW;
-            case "high":
-                return NotificationCompat.PRIORITY_HIGH;
-            case "max":
-                return NotificationCompat.PRIORITY_MAX;
-            case "min":
-                return NotificationCompat.PRIORITY_MIN;
-            default:
-                return NotificationCompat.PRIORITY_DEFAULT;
+    fun cancelNotification(context: Context, notificationId: Int) {
+        try {
+            NotificationManagerCompat.from(context).cancel(notificationId)
+            Log.d(TAG, "✅ Notification cancelled: $notificationId")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error cancelling notification", e)
         }
     }
 
     /**
-     * Get system icon resource ID by name for flexibility
+     * Cancel all notifications
      */
-    public static int getSystemIcon(@NonNull String iconName) {
-        switch (iconName.toLowerCase()) {
-            case "play":
-                return android.R.drawable.ic_media_play;
-            case "pause":
-                return android.R.drawable.ic_media_pause;
-            case "stop":
-                return android.R.drawable.ic_menu_close_clear_cancel;
-            case "call":
-                return android.R.drawable.ic_menu_call;
-            case "settings":
-                return android.R.drawable.ic_menu_preferences;
-            case "info":
-                return android.R.drawable.ic_dialog_info;
-            case "alert":
-                return android.R.drawable.ic_dialog_alert;
-            case "email":
-                return android.R.drawable.ic_dialog_email;
-            default:
-                return android.R.drawable.ic_dialog_info;
+    fun cancelAllNotifications(context: Context) {
+        try {
+            NotificationManagerCompat.from(context).cancelAll()
+            Log.d(TAG, "✅ All notifications cancelled")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error cancelling all notifications", e)
         }
+    }
+
+    /**
+     * Check if notifications are enabled
+     */
+    fun areNotificationsEnabled(context: Context): Boolean {
+        return NotificationManagerCompat.from(context).areNotificationsEnabled()
+    }
+
+    // ========== PRIVATE HELPER METHODS ==========
+
+    private fun getChannelId(priority: String): String {
+        return when (priority.uppercase()) {
+            Constants.NOTIFICATION_PRIORITY_HIGH.uppercase() -> CHANNEL_ID_HIGH_PRIORITY
+            Constants.NOTIFICATION_PRIORITY_LOW.uppercase() -> CHANNEL_ID_LOW_PRIORITY
+            else -> CHANNEL_ID_DEFAULT
+        }
+    }
+
+    private fun getPriorityInt(priority: String): Int {
+        return when (priority.uppercase()) {
+            Constants.NOTIFICATION_PRIORITY_HIGH.uppercase() -> NotificationCompat.PRIORITY_HIGH
+            Constants.NOTIFICATION_PRIORITY_LOW.uppercase() -> NotificationCompat.PRIORITY_LOW
+            else -> NotificationCompat.PRIORITY_DEFAULT
+        }
+    }
+
+    private fun getNotificationIcon(): Int {
+        // Return your app's notification icon
+        // Replace with actual resource ID
+        return android.R.drawable.ic_dialog_info // Placeholder
     }
 }
