@@ -14,6 +14,7 @@ import androidx.lifecycle.MutableLiveData
 import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.data.WorkflowRepository
+import com.example.autoflow.geofence.GeofenceManager  // ✅ ADD THIS IMPORT
 import com.example.autoflow.integrations.BLEManager
 import com.example.autoflow.integrations.LocationManager
 import com.example.autoflow.integrations.WiFiManager
@@ -78,7 +79,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun addWorkflow(workflowName: String, trigger: Trigger, action: Action) {
-        // Validate inputs
+        // Validate inputs FIRST
         if (workflowName.isBlank()) {
             _errorMessage.postValue("Workflow name cannot be empty")
             return
@@ -90,22 +91,43 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
 
         try {
             // Create workflow entity
-            val workflow = WorkflowEntity.fromTriggerAndAction(
-                workflowName.trim(),
-                true,
-                trigger,
-                action
+            val workflowEntity = WorkflowEntity.fromTriggerAndAction(
+                workflowName = workflowName.trim(),
+                isEnabled = true,
+                trigger = trigger,
+                action = action
             )
 
-            if (workflow == null) {
+            if (workflowEntity == null) {
                 _errorMessage.postValue("Failed to create workflow entity")
                 return
             }
 
-            // ✅ FIXED: Use correct method name
-            repository.insert(workflow, object : WorkflowRepository.InsertCallback {
+            // Insert workflow and register geofence with actual database ID
+            repository.insert(workflowEntity, object : WorkflowRepository.InsertCallback {
                 override fun onInsertComplete(insertedId: Long) {
                     Log.d(TAG, "🎉 Workflow inserted - ID: $insertedId")
+
+                    // Register geofence with ACTUAL database ID (not 0)
+                    if (trigger is Trigger.LocationTrigger) {
+                        val success = GeofenceManager.addGeofence(  // ✅ FIXED: Use GeofenceManager object
+                            context = getApplication<Application>().applicationContext,
+                            workflowId = insertedId,  // Use actual ID from database
+                            latitude = trigger.latitude,
+                            longitude = trigger.longitude,
+                            radius = trigger.radius.toFloat(),
+                            triggerOnEntry = trigger.triggerOnEntry,
+                            triggerOnExit = trigger.triggerOnExit
+                        )
+
+                        if (success) {
+                            Log.d(TAG, "✅ Geofence registered for workflow $insertedId")
+                        } else {
+                            Log.e(TAG, "❌ Failed to register geofence for workflow $insertedId")
+                        }
+                    }
+
+                    // Reload workflows and show success message
                     loadWorkflows()
                     _successMessage.postValue("Workflow '$workflowName' created")
                 }
@@ -120,6 +142,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             Log.e(TAG, "❌ Error", e)
         }
     }
+
 
     fun updateWorkflow(
         workflowId: Long,
@@ -215,23 +238,68 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
-        repository.delete(workflowId, object : WorkflowRepository.DeleteCallback {
-            override fun onDeleteComplete(success: Boolean) {
-                if (success) {
-                    loadWorkflows()
-                    val msg = "Workflow deleted"
-                    _successMessage.postValue(msg)
-                    callback?.onSuccess(msg)
-                } else {
-                    val error = "Delete failed"
-                    _errorMessage.postValue(error)
-                    callback?.onError(error)
+        // ✅ Remove geofence before deleting workflow
+        repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
+            override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
+                if (workflow != null) {
+                    // Check if it's a location trigger and remove geofence
+                    try {
+                        val triggerJson = JSONObject(workflow.triggerDetails)
+                        if (triggerJson.optString("type") == "LOCATION") {
+                            GeofenceManager.removeGeofence(
+                                getApplication<Application>().applicationContext,
+                                workflow.id
+                            )
+                            Log.d(TAG, "🗑️ Removed geofence for workflow ${workflow.id}")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error removing geofence: ${e.message}")
+                    }
                 }
+
+                // Now delete the workflow
+                repository.delete(workflowId, object : WorkflowRepository.DeleteCallback {
+                    override fun onDeleteComplete(success: Boolean) {
+                        if (success) {
+                            loadWorkflows()
+                            val msg = "Workflow deleted"
+                            _successMessage.postValue(msg)
+                            callback?.onSuccess(msg)
+                        } else {
+                            val error = "Delete failed"
+                            _errorMessage.postValue(error)
+                            callback?.onError(error)
+                        }
+                    }
+
+                    override fun onDeleteError(error: String) {
+                        _errorMessage.postValue(error)
+                        callback?.onError(error)
+                    }
+                })
             }
 
-            override fun onDeleteError(error: String) {
-                _errorMessage.postValue(error)
-                callback?.onError(error)
+            override fun onWorkflowError(error: String) {
+                // Still try to delete even if we can't load the workflow
+                repository.delete(workflowId, object : WorkflowRepository.DeleteCallback {
+                    override fun onDeleteComplete(success: Boolean) {
+                        if (success) {
+                            loadWorkflows()
+                            val msg = "Workflow deleted"
+                            _successMessage.postValue(msg)
+                            callback?.onSuccess(msg)
+                        } else {
+                            val error = "Delete failed"
+                            _errorMessage.postValue(error)
+                            callback?.onError(error)
+                        }
+                    }
+
+                    override fun onDeleteError(error: String) {
+                        _errorMessage.postValue(error)
+                        callback?.onError(error)
+                    }
+                })
             }
         })
     }

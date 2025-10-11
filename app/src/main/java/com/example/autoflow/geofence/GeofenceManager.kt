@@ -1,4 +1,4 @@
-// GeofenceManager.kt (manages geofence registration)
+// GeofenceManager.kt (improved version)
 package com.example.autoflow.geofence
 
 import android.Manifest
@@ -16,6 +16,7 @@ import com.google.android.gms.location.LocationServices
 object GeofenceManager {
     private const val TAG = "GeofenceManager"
     private const val GEOFENCE_EXPIRATION = Geofence.NEVER_EXPIRE
+    private const val MIN_RADIUS_METERS = 100f  // Android recommended minimum
 
     /**
      * Add geofence for a workflow
@@ -37,7 +38,16 @@ object GeofenceManager {
     ): Boolean {
         Log.d(TAG, "🌍 Adding geofence for workflow $workflowId")
         Log.d(TAG, "   Location: $latitude, $longitude")
-        Log.d(TAG, "   Radius: ${radius}m")
+
+        // Enforce minimum radius for reliability
+        val adjustedRadius = if (radius < MIN_RADIUS_METERS) {
+            Log.w(TAG, "⚠️ Radius ${radius}m is below recommended minimum. Adjusting to ${MIN_RADIUS_METERS}m")
+            MIN_RADIUS_METERS
+        } else {
+            radius
+        }
+
+        Log.d(TAG, "   Radius: ${adjustedRadius}m")
         Log.d(TAG, "   Triggers: Entry=$triggerOnEntry, Exit=$triggerOnExit")
 
         // Check permissions
@@ -48,15 +58,11 @@ object GeofenceManager {
 
         val geofencingClient: GeofencingClient = LocationServices.getGeofencingClient(context)
 
-        // Build geofence list
-        val geofences = mutableListOf<Geofence>()
-
+        // Calculate transition types
         var transitionTypes = 0
-
         if (triggerOnEntry) {
             transitionTypes = transitionTypes or Geofence.GEOFENCE_TRANSITION_ENTER
         }
-
         if (triggerOnExit) {
             transitionTypes = transitionTypes or Geofence.GEOFENCE_TRANSITION_EXIT
         }
@@ -66,27 +72,26 @@ object GeofenceManager {
             return false
         }
 
-        // Create single geofence with both transitions
-        geofences.add(
-            Geofence.Builder()
-                .setRequestId("workflow_$workflowId")
-                .setCircularRegion(latitude, longitude, radius)
-                .setExpirationDuration(GEOFENCE_EXPIRATION)
-                .setTransitionTypes(transitionTypes)  //  Handles ENTER | EXIT
-                .setLoiteringDelay(5000)
-                .build()
-        )
+        // Create geofence
+        val geofence = Geofence.Builder()
+            .setRequestId("workflow_$workflowId")
+            .setCircularRegion(latitude, longitude, adjustedRadius)
+            .setExpirationDuration(GEOFENCE_EXPIRATION)
+            .setTransitionTypes(transitionTypes)
+            .setLoiteringDelay(5000)  // 5 seconds before DWELL triggers
+            .build()
 
         // Build geofencing request
+        // Use 0 to disable initial triggers - only trigger on actual transitions
         val geofencingRequest = GeofencingRequest.Builder().apply {
-            setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
-            addGeofences(geofences)
+            setInitialTrigger(0)  // Don't trigger if already inside/outside
+            addGeofence(geofence)
         }.build()
 
         // Create pending intent
         val geofencePendingIntent = getGeofencePendingIntent(context)
 
-        // Add geofence (requires permission check again for Android lint)
+        // Add geofence
         try {
             if (ActivityCompat.checkSelfPermission(
                     context,
@@ -120,7 +125,6 @@ object GeofenceManager {
         Log.d(TAG, "🗑️ Removing geofence for workflow $workflowId")
 
         val geofencingClient: GeofencingClient = LocationServices.getGeofencingClient(context)
-
         val requestIds = listOf("workflow_$workflowId")
 
         geofencingClient.removeGeofences(requestIds).run {

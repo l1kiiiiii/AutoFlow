@@ -2445,16 +2445,28 @@ private suspend fun handleSaveTask(
         val trigger = when {
             hasTimeTrigger -> {
                 Log.d("TaskCreation", "→ Creating TIME trigger: $timeValue")
-                Trigger(0, 0, Constants.TRIGGER_TIME, timeValue)
+                Trigger.TimeTrigger(
+                    time = timeValue,
+                    days = listOf() // Add days from your UI if available
+                )
             }
+
             hasWifiTrigger -> {
                 Log.d("TaskCreation", "→ Creating WIFI trigger: $wifiState")
-                Trigger(0, 0, Constants.TRIGGER_WIFI, wifiState)
+                Trigger.WiFiTrigger(
+                    ssid = null, // Add SSID from UI if available
+                    state = wifiState
+                )
             }
+
             hasBluetoothTrigger -> {
                 Log.d("TaskCreation", "→ Creating BLUETOOTH trigger: $bluetoothDeviceAddress")
-                Trigger(0, 0, Constants.TRIGGER_BLE, bluetoothDeviceAddress)
+                Trigger.BluetoothTrigger(
+                    deviceAddress = bluetoothDeviceAddress,
+                    deviceName = null // Add device name from UI if available
+                )
             }
+
             hasLocationTrigger -> {
                 Log.d("TaskCreation", "→ Creating LOCATION trigger")
                 val parts = locationDetailsInput.split(",").map { it.trim() }
@@ -2468,25 +2480,24 @@ private suspend fun handleSaveTask(
                     onError("Invalid coordinate values")
                     return
                 }
-                val json = JSONObject().apply {
-                    put("locationName", locationName.ifEmpty { "Unnamed Location" })
-                    put("coordinates", locationDetailsInput)
-                    put("latitude", lat)
-                    put("longitude", lng)
-                    put("radius", radiusValue.roundToInt())
-                    put("triggerOnEntry", triggerOnOption == "Entry" || triggerOnOption == "Both")
-                    put("triggerOnExit", triggerOnOption == "Exit" || triggerOnOption == "Both")
 
-                    //  For GeofenceReceiver compatibility
-                    put("triggerOn", when (triggerOnOption) {
+                Trigger.LocationTrigger(
+                    locationName = locationName.ifEmpty { "Unnamed Location" },
+                    latitude = lat,
+                    longitude = lng,
+                    radius = radiusValue.toDouble(),
+                    triggerOnEntry = triggerOnOption == "Entry" || triggerOnOption == "Both",
+                    triggerOnExit = triggerOnOption == "Exit" || triggerOnOption == "Both",
+                    triggerOn = when (triggerOnOption) {
                         "Entry" -> "enter"
                         "Exit" -> "exit"
                         "Both" -> "both"
                         else -> "enter"
-                    })
-                }
-                Trigger(0, 0, Constants.TRIGGER_LOCATION, json.toString())
+                    }
+                )
             }
+
+
             else -> {
                 onError("Failed to create trigger")
                 return

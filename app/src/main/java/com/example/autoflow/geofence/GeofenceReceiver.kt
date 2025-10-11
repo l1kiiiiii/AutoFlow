@@ -67,6 +67,8 @@ class GeofenceReceiver : BroadcastReceiver() {
             Geofence.GEOFENCE_TRANSITION_DWELL -> {
                 triggeringGeofences.forEach { geofence ->
                     Log.d(TAG, "✅ DWELLING in geofence: ${geofence.requestId}")
+                    // Optionally handle dwell as enter
+                    // handleGeofenceTransition(context, geofence.requestId, "dwell")
                 }
             }
 
@@ -110,7 +112,7 @@ class GeofenceReceiver : BroadcastReceiver() {
                     return@launch
                 }
 
-                // ✅ FIXED: Use Kotlin property access instead of getTriggerDetails()
+                // Parse trigger details - structure is {"type":"LOCATION","value":"{...}"}
                 val triggerDetails = workflow.triggerDetails
                 if (triggerDetails.isEmpty()) {
                     Log.e(TAG, "❌ No trigger details found")
@@ -118,9 +120,18 @@ class GeofenceReceiver : BroadcastReceiver() {
                 }
 
                 val triggerJson = JSONObject(triggerDetails)
-                val triggerOn = triggerJson.optString("triggerOn", "enter")
+                val triggerType = triggerJson.optString("type", "")
 
-                // ✅ Handle "both", "enter", "exit" options
+                // The actual trigger data is nested in the "value" field as a JSON string
+                val triggerValueString = triggerJson.optString("value", "{}")
+                val triggerValueJson = JSONObject(triggerValueString)
+
+                // NOW we can access triggerOn from the nested JSON
+                val triggerOn = triggerValueJson.optString("triggerOn", "enter")
+
+                Log.d(TAG, "🔍 Trigger type: $triggerType, triggerOn: $triggerOn")
+
+                // Handle "both", "enter", "exit" options
                 val shouldExecute = when (triggerOn.lowercase()) {
                     "both" -> true  // Execute on both entry and exit
                     "enter" -> transitionType == "enter"
@@ -136,14 +147,12 @@ class GeofenceReceiver : BroadcastReceiver() {
                     return@launch
                 }
 
-                // ✅ FIXED: Use Kotlin property access
                 Log.d(TAG, "✅ Executing action for workflow: ${workflow.workflowName}")
 
                 // Execute the action through AlarmReceiver
                 val actionIntent = Intent(context, AlarmReceiver::class.java).apply {
                     putExtra("workflow_id", workflowId)
 
-                    // ✅ FIXED: Use Kotlin property access
                     val actionDetails = workflow.actionDetails
                     if (actionDetails.isNotEmpty()) {
                         val actionJson = JSONObject(actionDetails)

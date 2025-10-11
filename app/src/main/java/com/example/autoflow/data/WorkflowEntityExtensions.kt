@@ -30,7 +30,7 @@ fun WorkflowEntity.toAction(): Action? {
             return null
         }
 
-        // ✅ FIXED: Create Action with correct constructor
+        // Create Action with correct constructor
         val action = Action(
             type = type,
             title = json.optString("title"),
@@ -38,7 +38,7 @@ fun WorkflowEntity.toAction(): Action? {
             priority = json.optString("priority")
         )
 
-        // ✅ Set value separately if it exists
+        // Set value separately if it exists
         json.optString("value").takeIf { it.isNotEmpty() }?.let {
             action.value = it
         }
@@ -52,6 +52,7 @@ fun WorkflowEntity.toAction(): Action? {
 
 /**
  * Convert WorkflowEntity to Trigger object
+ * Returns the appropriate sealed class subtype based on trigger type
  */
 fun WorkflowEntity.toTrigger(): Trigger? {
     return try {
@@ -62,19 +63,78 @@ fun WorkflowEntity.toTrigger(): Trigger? {
 
         val json = JSONObject(triggerDetails)
         val type = json.optString("type", "")
-        val value = json.optString("value", "")
+        val valueString = json.optString("value", "")
 
-        if (type.isBlank() || value.isBlank()) {
+        if (type.isBlank() || valueString.isBlank()) {
             Log.e(TAG, "❌ Trigger type or value missing")
             return null
         }
 
-        Trigger(
-            type = type,
-            value = value
-        )
+        // Parse value JSON for specific trigger types
+        val valueJson = try {
+            JSONObject(valueString)
+        } catch (e: Exception) {
+            null
+        }
+
+        // Return appropriate sealed class subtype based on trigger type
+        when (type) {
+            "LOCATION" -> {
+                if (valueJson == null) {
+                    Log.e(TAG, "❌ Invalid location JSON")
+                    return null
+                }
+
+                Trigger.LocationTrigger(
+                    locationName = valueJson.optString("locationName", "Unknown"),
+                    latitude = valueJson.optDouble("latitude", 0.0),
+                    longitude = valueJson.optDouble("longitude", 0.0),
+                    radius = valueJson.optDouble("radius", 100.0),
+                    triggerOnEntry = valueJson.optBoolean("triggerOnEntry", true),
+                    triggerOnExit = valueJson.optBoolean("triggerOnExit", false),
+                    triggerOn = valueJson.optString("triggerOn", "both")
+                )
+            }
+
+            "TIME" -> {
+                if (valueJson == null) {
+                    Log.e(TAG, "❌ Invalid time JSON")
+                    return null
+                }
+
+                val daysArray = valueJson.optJSONArray("days")
+                val days = mutableListOf<String>()
+                if (daysArray != null) {
+                    for (i in 0 until daysArray.length()) {
+                        days.add(daysArray.getString(i))
+                    }
+                }
+
+                Trigger.TimeTrigger(
+                    time = valueJson.optString("time", ""),
+                    days = days
+                )
+            }
+
+            "BATTERY" -> {
+                if (valueJson == null) {
+                    Log.e(TAG, "❌ Invalid battery JSON")
+                    return null
+                }
+
+                Trigger.BatteryTrigger(
+                    level = valueJson.optInt("level", 20),
+                    condition = valueJson.optString("condition", "below")
+                )
+            }
+
+            else -> {
+                Log.w(TAG, "⚠️ Unknown trigger type: $type, cannot create sealed class instance")
+                null
+            }
+        }
     } catch (e: Exception) {
-        Log.e(TAG, "❌ Error parsing trigger: ${e.message}")
+        Log.e(TAG, "❌ Error parsing trigger: ${e.message}", e)
         null
     }
 }
