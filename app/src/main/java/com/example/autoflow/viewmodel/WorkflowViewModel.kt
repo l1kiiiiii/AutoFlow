@@ -1,652 +1,470 @@
-package com.example.autoflow.viewmodel;
+package com.example.autoflow.viewmodel
 
-import android.Manifest;
-import android.annotation.SuppressLint;
-import android.app.Application;
-import android.content.pm.PackageManager;
-import android.location.Location;
-import android.util.Log;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.annotation.RequiresPermission;
-import androidx.core.app.ActivityCompat;
-import androidx.lifecycle.AndroidViewModel;
-import androidx.lifecycle.LiveData;
-import androidx.lifecycle.MutableLiveData;
-
-import com.example.autoflow.data.AppDatabase;
-import com.example.autoflow.data.WorkflowEntity;
-import com.example.autoflow.data.WorkflowRepository;
-import com.example.autoflow.integrations.BLEManager;
-import com.example.autoflow.integrations.LocationManager;
-import com.example.autoflow.integrations.WiFiManager;
-import com.example.autoflow.model.Action;
-import com.example.autoflow.model.Trigger;
-import com.example.autoflow.util.Constants;
-import com.example.autoflow.util.PermissionUtils;
-
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.util.List;
+import android.Manifest
+import android.annotation.SuppressLint
+import android.app.Application
+import android.content.pm.PackageManager
+import android.location.Location
+import android.util.Log
+import androidx.annotation.RequiresPermission
+import androidx.core.app.ActivityCompat
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.viewModelScope
+import com.example.autoflow.data.WorkflowEntity
+import com.example.autoflow.data.WorkflowRepository
+import com.example.autoflow.integrations.BLEManager
+import com.example.autoflow.integrations.LocationManager
+import com.example.autoflow.integrations.WiFiManager
+import com.example.autoflow.model.Action
+import com.example.autoflow.model.Trigger
+import com.example.autoflow.util.Constants
+import com.example.autoflow.util.PermissionUtils
+import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 /**
- * Production-Ready WorkflowViewModel
+ * Modern WorkflowViewModel using Coroutines
  * Manages workflow CRUD operations and trigger monitoring
- * Thread-safe with proper error handling and resource cleanup
  */
-public class WorkflowViewModel extends AndroidViewModel {
-    private static final String TAG = "WorkflowViewModel";
+class WorkflowViewModel(application: Application) : AndroidViewModel(application) {
 
-    // Repository and LiveData
-    private final WorkflowRepository repository;
-    private final MutableLiveData<List<WorkflowEntity>> workflows;
-    private final MutableLiveData<String> successMessage;
-    private final MutableLiveData<String> errorMessage;
+    // Repository
+    private val repository = WorkflowRepository(application)
 
-    // Integration managers for trigger monitoring
-    private final BLEManager bleManager;
-    private final LocationManager locationManager;
-    private final WiFiManager wifiManager;
+    // LiveData
+    private val _workflows = MutableLiveData<List<WorkflowEntity>>()
+    val workflows: LiveData<List<WorkflowEntity>> = _workflows
 
-    /**
-     * Constructor - initializes all components
-     */
-    public WorkflowViewModel(@NonNull Application application) {
-        super(application);
+    private val _successMessage = MutableLiveData<String>()
+    val successMessage: LiveData<String> = _successMessage
 
-        // Initialize database and repository
-        AppDatabase db = AppDatabase.getDatabase(application);
-        repository = new WorkflowRepository(db);
+    private val _errorMessage = MutableLiveData<String>()
+    val errorMessage: LiveData<String> = _errorMessage
 
-        // Initialize LiveData
-        workflows = new MutableLiveData<>();
-        successMessage = new MutableLiveData<>();
-        errorMessage = new MutableLiveData<>();
+    // Integration managers
+    private val bleManager = BLEManager(application)
+    private val locationManager = LocationManager(application)
+    private val wifiManager = WiFiManager(application)
 
-        // Initialize integration managers
-        bleManager = new BLEManager(application);
-        locationManager = new LocationManager(application);
-        wifiManager = new WiFiManager(application);
-
-        // Load initial workflows
-        loadWorkflows();
-
-        Log.d(TAG, "ViewModel initialized successfully");
+    companion object {
+        private const val TAG = "WorkflowViewModel"
     }
 
-    // ==================== LiveData Getters ====================
-
-    /**
-     * Get LiveData of all workflows
-     */
-    @NonNull
-    public LiveData<List<WorkflowEntity>> getWorkflows() {
-        return workflows;
+    init {
+        loadWorkflows()
+        Log.d(TAG, "ViewModel initialized")
     }
 
-    /**
-     * Get LiveData for success messages
-     */
-    @NonNull
-    public LiveData<String> getSuccessMessage() {
-        return successMessage;
-    }
+    //  WORKFLOW CRUD OPERATIONS 
 
-    /**
-     * Get LiveData for error messages
-     */
-    @NonNull
-    public LiveData<String> getErrorMessage() {
-        return errorMessage;
-    }
-
-    // ==================== Workflow Loading ====================
-
-    /**
-     * Load all workflows from repository
-     */
-    public void loadWorkflows() {
-        repository.getAllWorkflows(new WorkflowRepository.WorkflowCallback() {
-            @Override
-            public void onWorkflowsLoaded(@NonNull List<WorkflowEntity> loadedWorkflows) {
-                workflows.postValue(loadedWorkflows);
-                Log.d(TAG, "✅ Loaded " + loadedWorkflows.size() + " workflows");
+    fun loadWorkflows() {
+        repository.getAllWorkflowsWithCallback(object : WorkflowRepository.WorkflowCallback {
+            override fun onWorkflowsLoaded(workflows: MutableList<WorkflowEntity>) {
+                _workflows.postValue(workflows)
+                Log.d(TAG, "✅ Loaded ${workflows.size} workflows")
             }
 
-            @Override
-            public void onWorkflowsError(@NonNull String error) {
-                errorMessage.postValue("Failed to load workflows: " + error);
-                Log.e(TAG, "❌ Load error: " + error);
+            override fun onWorkflowsError(error: String) {
+                _errorMessage.postValue("Failed to load workflows: $error")
+                Log.e(TAG, "❌ Load error: $error")
             }
-        });
+        })
     }
 
-    // ==================== Add Workflow ====================
-
-    /**
-     * Add a new workflow
-     * @param workflowName Name of the workflow
-     * @param trigger Trigger condition
-     * @param action Action to execute
-     */
-    public void addWorkflow(@NonNull String workflowName,
-                            @NonNull Trigger trigger,
-                            @NonNull Action action) {
+    fun addWorkflow(workflowName: String, trigger: Trigger, action: Action) {
         // Validate inputs
-        if (workflowName == null || workflowName.trim().isEmpty()) {
-            String error = "Workflow name cannot be empty";
-            errorMessage.postValue(error);
-            Log.e(TAG, "❌ " + error);
-            return;
+        if (workflowName.isBlank()) {
+            _errorMessage.postValue("Workflow name cannot be empty")
+            return
         }
 
-        if (trigger == null) {
-            String error = "Trigger cannot be null";
-            errorMessage.postValue(error);
-            Log.e(TAG, "❌ " + error);
-            return;
-        }
-
-        if (action == null) {
-            String error = "Action cannot be null";
-            errorMessage.postValue(error);
-            Log.e(TAG, "❌ " + error);
-            return;
-        }
-
-        Log.d(TAG, "🔵 addWorkflow - Name: " + workflowName);
-        Log.d(TAG, "  Trigger: " + trigger.getType() + " = " + trigger.getValue());
-        Log.d(TAG, "  Action: " + action.getType());
+        Log.d(TAG, "🔵 addWorkflow - Name: $workflowName")
+        Log.d(TAG, "  Trigger: ${trigger.type} = ${trigger.value}")
+        Log.d(TAG, "  Action: ${action.type}")
 
         try {
             // Create workflow entity
-            WorkflowEntity workflow = WorkflowEntity.fromTriggerAndAction(
-                    workflowName.trim(),
-                    true,
-                    trigger,
-                    action
-            );
+            val workflow = WorkflowEntity.fromTriggerAndAction(
+                workflowName.trim(),
+                true,
+                trigger,
+                action
+            )
 
             if (workflow == null) {
-                String error = "Failed to create workflow entity";
-                errorMessage.postValue(error);
-                Log.e(TAG, "❌ " + error);
-                return;
+                _errorMessage.postValue("Failed to create workflow entity")
+                return
             }
 
-            Log.d(TAG, "✅ WorkflowEntity created");
-
             // Insert into database
-            repository.insert(workflow, new WorkflowRepository.InsertCallback() {
-                @Override
-                public void onInsertComplete(long insertedId) {
-                    Log.d(TAG, "🎉 Workflow inserted - ID: " + insertedId);
-                    loadWorkflows();
-                    successMessage.postValue("Workflow '" + workflowName + "' created");
+            repository.insertWithCallback(workflow, object : WorkflowRepository.InsertCallback {
+                override fun onInsertComplete(insertedId: Long) {
+                    Log.d(TAG, "🎉 Workflow inserted - ID: $insertedId")
+                    loadWorkflows()
+                    _successMessage.postValue("Workflow '$workflowName' created")
                 }
 
-                @Override
-                public void onInsertError(@NonNull String error) {
-                    errorMessage.postValue("Failed to create workflow: " + error);
-                    Log.e(TAG, "❌ Insert error: " + error);
+                override fun onInsertError(error: String) {
+                    _errorMessage.postValue("Failed to create workflow: $error")
+                    Log.e(TAG, "❌ Insert error: $error")
                 }
-            });
-
-        } catch (Exception e) {
-            String error = "Error creating workflow: " + e.getMessage();
-            errorMessage.postValue(error);
-            Log.e(TAG, "❌ " + error, e);
+            })
+        } catch (e: Exception) {
+            _errorMessage.postValue("Error creating workflow: ${e.message}")
+            Log.e(TAG, "❌ Error", e)
         }
     }
 
-    // ==================== Update Workflow ====================
-
-    /**
-     * Update an existing workflow
-     * @param workflowId ID of workflow to update
-     * @param workflowName New name
-     * @param trigger New trigger
-     * @param action New action
-     * @param callback Optional callback
-     */
-    public void updateWorkflow(long workflowId,
-                               @NonNull String workflowName,
-                               @NonNull Trigger trigger,
-                               @NonNull Action action,
-                               @Nullable WorkflowOperationCallback callback) {
+    fun updateWorkflow(
+        workflowId: Long,
+        workflowName: String,
+        trigger: Trigger,
+        action: Action,
+        callback: WorkflowOperationCallback? = null
+    ) {
         if (workflowId <= 0) {
-            String error = "Invalid workflow ID";
-            errorMessage.postValue(error);
-            if (callback != null) callback.onError(error);
-            return;
+            val error = "Invalid workflow ID"
+            _errorMessage.postValue(error)
+            callback?.onError(error)
+            return
         }
 
-        if (workflowName == null || workflowName.trim().isEmpty()) {
-            String error = "Workflow name cannot be empty";
-            errorMessage.postValue(error);
-            if (callback != null) callback.onError(error);
-            return;
+        if (workflowName.isBlank()) {
+            val error = "Workflow name cannot be empty"
+            _errorMessage.postValue(error)
+            callback?.onError(error)
+            return
         }
 
         try {
             // Build JSON for trigger
-            JSONObject triggerJson = new JSONObject();
-            triggerJson.put("type", trigger.type);
-            triggerJson.put("value", trigger.value);
-            String triggerDetails = triggerJson.toString();
+            val triggerJson = JSONObject().apply {
+                put("type", trigger.type)
+                put("value", trigger.value)
+            }
 
             // Build JSON for action
-            JSONObject actionJson = new JSONObject();
-            actionJson.put("type", action.type);
-            if (action.title != null) actionJson.put("title", action.title);
-            if (action.message != null) actionJson.put("message", action.message);
-            if (action.priority != null) actionJson.put("priority", action.priority);
-            String actionDetails = actionJson.toString();
+            val actionJson = JSONObject().apply {
+                put("type", action.type)
+                action.title?.let { put("title", it) }
+                action.message?.let { put("message", it) }
+                action.priority?.let { put("priority", it) }
+            }
 
             // Get and update workflow
-            repository.getWorkflowById(workflowId, new WorkflowRepository.WorkflowByIdCallback() {
-                @Override
-                public void onWorkflowLoaded(@Nullable WorkflowEntity existingWorkflow) {
-                    if (existingWorkflow == null) {
-                        String error = "Workflow not found";
-                        errorMessage.postValue(error);
-                        if (callback != null) callback.onError(error);
-                        return;
+            repository.getByIdWithCallback(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
+                override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
+                    if (workflow == null) {
+                        val error = "Workflow not found"
+                        _errorMessage.postValue(error)
+                        callback?.onError(error)
+                        return
                     }
 
                     // Update fields
-                    existingWorkflow.setWorkflowName(workflowName.trim());
-                    existingWorkflow.setTriggerDetails(triggerDetails);
-                    existingWorkflow.setActionDetails(actionDetails);
-                    existingWorkflow.setEnabled(true);
+                    workflow.workflowName = workflowName.trim()
+                    workflow.triggerDetails = triggerJson.toString()
+                    workflow.actionDetails = actionJson.toString()
+                    workflow.isEnabled = true
 
                     // Save
-                    repository.update(existingWorkflow, new WorkflowRepository.UpdateCallback() {
-                        @Override
-                        public void onUpdateComplete(boolean success) {
+                    repository.updateWithCallback(workflow, object : WorkflowRepository.UpdateCallback {
+                        override fun onUpdateComplete(success: Boolean) {
                             if (success) {
-                                loadWorkflows();
-                                String successMsg = "Workflow updated";
-                                successMessage.postValue(successMsg);
-                                Log.d(TAG, "✅ " + successMsg);
-                                if (callback != null) callback.onSuccess(successMsg);
+                                loadWorkflows()
+                                val msg = "Workflow updated"
+                                _successMessage.postValue(msg)
+                                callback?.onSuccess(msg)
                             } else {
-                                String error = "Update failed";
-                                errorMessage.postValue(error);
-                                if (callback != null) callback.onError(error);
+                                val error = "Update failed"
+                                _errorMessage.postValue(error)
+                                callback?.onError(error)
                             }
                         }
 
-                        @Override
-                        public void onUpdateError(@NonNull String error) {
-                            errorMessage.postValue(error);
-                            Log.e(TAG, "❌ Update error: " + error);
-                            if (callback != null) callback.onError(error);
+                        override fun onUpdateError(error: String) {
+                            _errorMessage.postValue(error)
+                            callback?.onError(error)
                         }
-                    });
+                    })
                 }
 
-                @Override
-                public void onWorkflowError(@NonNull String error) {
-                    errorMessage.postValue(error);
-                    Log.e(TAG, "❌ Load error: " + error);
-                    if (callback != null) callback.onError(error);
+                override fun onWorkflowError(error: String) {
+                    _errorMessage.postValue(error)
+                    callback?.onError(error)
                 }
-            });
-        } catch (JSONException e) {
-            String error = "JSON error: " + e.getMessage();
-            errorMessage.postValue(error);
-            Log.e(TAG, "❌ " + error, e);
-            if (callback != null) callback.onError(error);
-        } catch (Exception e) {
-            String error = "Error: " + e.getMessage();
-            errorMessage.postValue(error);
-            Log.e(TAG, "❌ " + error, e);
-            if (callback != null) callback.onError(error);
+            })
+        } catch (e: Exception) {
+            val error = "Error: ${e.message}"
+            _errorMessage.postValue(error)
+            callback?.onError(error)
         }
     }
 
-    // ==================== Delete Workflow ====================
-
-    /**
-     * Delete a workflow by ID
-     * @param workflowId ID to delete
-     * @param callback Optional callback
-     */
-    public void deleteWorkflow(long workflowId, @Nullable WorkflowOperationCallback callback) {
+    fun deleteWorkflow(workflowId: Long, callback: WorkflowOperationCallback? = null) {
         if (workflowId <= 0) {
-            String error = "Invalid workflow ID";
-            errorMessage.postValue(error);
-            if (callback != null) callback.onError(error);
-            return;
+            val error = "Invalid workflow ID"
+            _errorMessage.postValue(error)
+            callback?.onError(error)
+            return
         }
 
-        repository.delete(workflowId, new WorkflowRepository.DeleteCallback() {
-            @Override
-            public void onDeleteComplete(boolean success) {
+        repository.deleteWithCallback(workflowId, object : WorkflowRepository.DeleteCallback {
+            override fun onDeleteComplete(success: Boolean) {
                 if (success) {
-                    loadWorkflows();
-                    String successMsg = "Workflow deleted";
-                    successMessage.postValue(successMsg);
-                    Log.d(TAG, "✅ " + successMsg);
-                    if (callback != null) callback.onSuccess(successMsg);
+                    loadWorkflows()
+                    val msg = "Workflow deleted"
+                    _successMessage.postValue(msg)
+                    callback?.onSuccess(msg)
                 } else {
-                    String error = "Delete failed";
-                    errorMessage.postValue(error);
-                    if (callback != null) callback.onError(error);
+                    val error = "Delete failed"
+                    _errorMessage.postValue(error)
+                    callback?.onError(error)
                 }
             }
 
-            @Override
-            public void onDeleteError(@NonNull String error) {
-                errorMessage.postValue(error);
-                Log.e(TAG, "❌ Delete error: " + error);
-                if (callback != null) callback.onError(error);
+            override fun onDeleteError(error: String) {
+                _errorMessage.postValue(error)
+                callback?.onError(error)
             }
-        });
+        })
     }
 
-    public void deleteWorkflow(long workflowId) {
-        deleteWorkflow(workflowId, null);
-    }
-
-    // ==================== Toggle Workflow Enabled State ====================
-
-    /**
-     * Enable or disable a workflow
-     * @param workflowId ID to toggle
-     * @param enabled New enabled state
-     * @param callback Optional callback
-     */
-    public void updateWorkflowEnabled(long workflowId, boolean enabled, @Nullable WorkflowOperationCallback callback) {
+    fun updateWorkflowEnabled(
+        workflowId: Long,
+        enabled: Boolean,
+        callback: WorkflowOperationCallback? = null
+    ) {
         if (workflowId <= 0) {
-            String error = "Invalid workflow ID";
-            errorMessage.postValue(error);
-            if (callback != null) callback.onError(error);
-            return;
+            val error = "Invalid workflow ID"
+            _errorMessage.postValue(error)
+            callback?.onError(error)
+            return
         }
 
-        repository.updateWorkflowEnabled(workflowId, enabled, new WorkflowRepository.UpdateCallback() {
-            @Override
-            public void onUpdateComplete(boolean success) {
+        repository.updateEnabledWithCallback(workflowId, enabled, object : WorkflowRepository.UpdateCallback {
+            override fun onUpdateComplete(success: Boolean) {
                 if (success) {
-                    loadWorkflows();
-                    String successMsg = "Workflow " + (enabled ? "enabled" : "disabled");
-                    successMessage.postValue(successMsg);
-                    Log.d(TAG, "✅ " + successMsg);
-                    if (callback != null) callback.onSuccess(successMsg);
+                    loadWorkflows()
+                    val msg = "Workflow ${if (enabled) "enabled" else "disabled"}"
+                    _successMessage.postValue(msg)
+                    callback?.onSuccess(msg)
                 } else {
-                    String error = "Toggle failed";
-                    errorMessage.postValue(error);
-                    if (callback != null) callback.onError(error);
+                    val error = "Toggle failed"
+                    _errorMessage.postValue(error)
+                    callback?.onError(error)
                 }
             }
 
-            @Override
-            public void onUpdateError(@NonNull String error) {
-                errorMessage.postValue(error);
-                Log.e(TAG, "❌ Toggle error: " + error);
-                if (callback != null) callback.onError(error);
+            override fun onUpdateError(error: String) {
+                _errorMessage.postValue(error)
+                callback?.onError(error)
             }
-        });
+        })
     }
 
-    public void updateWorkflowEnabled(long workflowId, boolean enabled) {
-        updateWorkflowEnabled(workflowId, enabled, null);
-    }
-
-    // ==================== Get Workflow by ID ====================
-
-    /**
-     * Get a specific workflow
-     * @param workflowId ID to retrieve
-     * @param callback Callback with result
-     */
-    public void getWorkflowById(long workflowId, @NonNull WorkflowByIdCallback callback) {
-        if (callback == null) {
-            Log.e(TAG, "❌ Callback cannot be null");
-            return;
-        }
-
+    fun getWorkflowById(workflowId: Long, callback: WorkflowByIdCallback) {
         if (workflowId <= 0) {
-            callback.onWorkflowError("Invalid workflow ID");
-            return;
+            callback.onWorkflowError("Invalid workflow ID")
+            return
         }
 
-        repository.getWorkflowById(workflowId, new WorkflowRepository.WorkflowByIdCallback() {
-            @Override
-            public void onWorkflowLoaded(@Nullable WorkflowEntity workflow) {
-                callback.onWorkflowLoaded(workflow);
-                Log.d(TAG, workflow != null ? "✅ Workflow loaded" : "⚠️ Workflow not found");
+        repository.getByIdWithCallback(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
+            override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
+                callback.onWorkflowLoaded(workflow)
+                Log.d(TAG, if (workflow != null) "✅ Workflow loaded" else "⚠️ Workflow not found")
             }
 
-            @Override
-            public void onWorkflowError(@NonNull String error) {
-                errorMessage.postValue(error);
-                Log.e(TAG, "❌ Load error: " + error);
-                callback.onWorkflowError(error);
+            override fun onWorkflowError(error: String) {
+                _errorMessage.postValue(error)
+                callback.onWorkflowError(error)
             }
-        });
+        })
     }
 
-    // ==================== Trigger Monitoring ====================
+    //  TRIGGER MONITORING 
 
-    /**
-     * Check if a trigger condition is met
-     */
     @SuppressLint("MissingPermission")
-    @RequiresPermission(anyOf = {
-            Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.ACCESS_FINE_LOCATION
-    })
-    public void checkTrigger(@NonNull Trigger trigger, @NonNull TriggerCallback callback) {
-        if (trigger == null || callback == null) {
-            Log.w(TAG, "⚠️ Null trigger or callback");
-            return;
-        }
-
-        switch (trigger.getType()) {
-            case Constants.TRIGGER_BLE:
-                handleBleTrigger(trigger, callback);
-                break;
-            case Constants.TRIGGER_LOCATION:
-                handleLocationTrigger(trigger, callback);
-                break;
-            case Constants.TRIGGER_TIME:
-                handleTimeTrigger(trigger, callback);
-                break;
-            case Constants.TRIGGER_WIFI:
-                handleWiFiTrigger(trigger, callback);
-                break;
-            default:
-                Log.w(TAG, "⚠️ Unknown trigger type: " + trigger.getType());
-                callback.onTriggerFired(trigger, false);
+    @RequiresPermission(anyOf = [Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION])
+    fun checkTrigger(trigger: Trigger, callback: TriggerCallback) {
+        when (trigger.type) {
+            Constants.TRIGGER_BLE -> handleBleTrigger(trigger, callback)
+            Constants.TRIGGER_LOCATION -> handleLocationTrigger(trigger, callback)
+            Constants.TRIGGER_TIME -> handleTimeTrigger(trigger, callback)
+            Constants.TRIGGER_WIFI -> handleWiFiTrigger(trigger, callback)
+            else -> {
+                Log.w(TAG, "⚠️ Unknown trigger type: ${trigger.type}")
+                callback.onTriggerFired(trigger, false)
+            }
         }
     }
 
-    @RequiresPermission(anyOf = {
-            Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.ACCESS_FINE_LOCATION
-    })
-    private void handleBleTrigger(@NonNull Trigger trigger, @NonNull TriggerCallback callback) {
+    @RequiresPermission(anyOf = [Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION])
+    private fun handleBleTrigger(trigger: Trigger, callback: TriggerCallback) {
         if (!PermissionUtils.hasBluetoothPermissions(getApplication())) {
-            callback.onTriggerFired(trigger, false);
-            return;
+            callback.onTriggerFired(trigger, false)
+            return
         }
 
         try {
-            bleManager.startScanning(new BLEManager.BLECallback() {
-                @Override
-                public void onDeviceDetected(@NonNull String deviceAddress, @NonNull String deviceName) {
-                    boolean matched = deviceAddress.equals(trigger.getValue()) ||
-                            deviceName.equals(trigger.getValue());
-                    callback.onTriggerFired(trigger, matched);
+            bleManager.startScanning(object : BLEManager.BLECallback {
+                override fun onDeviceDetected(deviceAddress: String, deviceName: String) {
+                    val matched = deviceAddress == trigger.value || deviceName == trigger.value
+                    callback.onTriggerFired(trigger, matched)
                 }
 
-                @Override
-                public void onScanStarted() {
-                }
+                override fun onScanStarted() {}
+                override fun onScanStopped() {}
 
-                @Override
-                public void onScanStopped() {
+                override fun onError(errorMessage: String) {
+                    callback.onTriggerFired(trigger, false)
                 }
-
-                @Override
-                public void onError(@NonNull String errorMessage) {
-                    callback.onTriggerFired(trigger, false);
-                }
-            });
-        } catch (Exception e) {
-            Log.e(TAG, "BLE error", e);
-            callback.onTriggerFired(trigger, false);
+            })
+        } catch (e: Exception) {
+            Log.e(TAG, "BLE error", e)
+            callback.onTriggerFired(trigger, false)
         }
     }
 
-    @RequiresPermission(allOf = {Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION})
-    private void handleLocationTrigger(@NonNull Trigger trigger, @NonNull TriggerCallback callback) {
+    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
+    private fun handleLocationTrigger(trigger: Trigger, callback: TriggerCallback) {
         if (!PermissionUtils.hasLocationPermissions(getApplication())) {
-            callback.onTriggerFired(trigger, false);
-            return;
+            callback.onTriggerFired(trigger, false)
+            return
         }
 
         try {
-            locationManager.getLastLocation(new LocationManager.LocationCallback() {
-                @Override
-                public void onLocationReceived(@NonNull Location location) {
-                    boolean inRange = isInRange(location, trigger.getValue());
-                    callback.onTriggerFired(trigger, inRange);
+            locationManager.getLastLocation(object : LocationManager.Callback {
+                override fun onLocationReceived(location: Location) {
+                    val inRange = isInRange(location, trigger.value)
+                    callback.onTriggerFired(trigger, inRange)
                 }
 
-                @Override
-                public void onLocationError(@NonNull String errorMessage) {
-                    callback.onTriggerFired(trigger, false);
+                override fun onLocationError(errorMessage: String) {
+                    callback.onTriggerFired(trigger, false)
                 }
 
-                @Override
-                public void onPermissionDenied() {
-                    callback.onTriggerFired(trigger, false);
+                override fun onPermissionDenied() {
+                    callback.onTriggerFired(trigger, false)
                 }
-            });
-        } catch (Exception e) {
-            Log.e(TAG, "Location error", e);
-            callback.onTriggerFired(trigger, false);
+            })
+        } catch (e: Exception) {
+            Log.e(TAG, "Location error", e)
+            callback.onTriggerFired(trigger, false)
         }
     }
 
-    private void handleTimeTrigger(@NonNull Trigger trigger, @NonNull TriggerCallback callback) {
+    private fun handleTimeTrigger(trigger: Trigger, callback: TriggerCallback) {
         try {
-            if (trigger.getValue() == null || trigger.getValue().trim().isEmpty()) {
-                callback.onTriggerFired(trigger, false);
-                return;
+            if (trigger.value.isBlank()) {
+                callback.onTriggerFired(trigger, false)
+                return
             }
 
-            long targetTime = Long.parseLong(trigger.getValue().trim());
-            long currentTime = System.currentTimeMillis();
-            boolean isTriggered = currentTime >= targetTime &&
-                    (currentTime - targetTime) <= Constants.TIME_WINDOW_MS;
+            val targetTime = trigger.value.trim().toLong()
+            val currentTime = System.currentTimeMillis()
+            val isTriggered = currentTime >= targetTime &&
+                    (currentTime - targetTime) <= Constants.TIME_WINDOW_MS
 
-            callback.onTriggerFired(trigger, isTriggered);
-        } catch (NumberFormatException e) {
-            Log.e(TAG, "Time format error", e);
-            callback.onTriggerFired(trigger, false);
+            callback.onTriggerFired(trigger, isTriggered)
+        } catch (e: NumberFormatException) {
+            Log.e(TAG, "Time format error", e)
+            callback.onTriggerFired(trigger, false)
         }
     }
 
     @RequiresPermission(Manifest.permission.ACCESS_WIFI_STATE)
-    private void handleWiFiTrigger(@NonNull Trigger trigger, @NonNull TriggerCallback callback) {
+    private fun handleWiFiTrigger(trigger: Trigger, callback: TriggerCallback) {
         if (!hasWiFiPermissions()) {
-            callback.onTriggerFired(trigger, false);
-            return;
+            callback.onTriggerFired(trigger, false)
+            return
         }
 
         try {
-            boolean wifiState = wifiManager.isWiFiEnabled();
-            boolean expectedState = Constants.WIFI_STATE_ON.equalsIgnoreCase(trigger.getValue());
-            callback.onTriggerFired(trigger, wifiState == expectedState);
-        } catch (Exception e) {
-            Log.e(TAG, "WiFi error", e);
-            callback.onTriggerFired(trigger, false);
+            val wifiState = wifiManager.isWiFiEnabled()
+            val expectedState = Constants.WIFI_STATE_ON.equals(trigger.value, ignoreCase = true)
+            callback.onTriggerFired(trigger, wifiState == expectedState)
+        } catch (e: Exception) {
+            Log.e(TAG, "WiFi error", e)
+            callback.onTriggerFired(trigger, false)
         }
     }
 
-    private boolean hasWiFiPermissions() {
-        return ActivityCompat.checkSelfPermission(getApplication(),
-                Manifest.permission.ACCESS_WIFI_STATE) == PackageManager.PERMISSION_GRANTED;
+    private fun hasWiFiPermissions(): Boolean {
+        return ActivityCompat.checkSelfPermission(
+            getApplication(),
+            Manifest.permission.ACCESS_WIFI_STATE
+        ) == PackageManager.PERMISSION_GRANTED
     }
 
-    private boolean isInRange(@NonNull Location location, @Nullable String value) {
-        if (location == null || value == null || value.trim().isEmpty()) {
-            return false;
-        }
+    private fun isInRange(location: Location, value: String): Boolean {
+        if (value.isBlank()) return false
 
-        try {
-            String[] parts = value.split(",");
-            if (parts.length < 2) return false;
+        return try {
+            val parts = value.split(",")
+            if (parts.size < 2) return false
 
-            double targetLat = Double.parseDouble(parts[0].trim());
-            double targetLng = Double.parseDouble(parts[1].trim());
-            float radius = parts.length > 2 ?
-                    Float.parseFloat(parts[2].trim()) :
-                    Constants.LOCATION_DEFAULT_RADIUS;
+            val targetLat = parts[0].trim().toDouble()
+            val targetLng = parts[1].trim().toDouble()
+            val radius = if (parts.size > 2) parts[2].trim().toFloat()
+            else Constants.LOCATION_DEFAULT_RADIUS
 
-            float[] results = new float[1];
+            val results = FloatArray(1)
             Location.distanceBetween(
-                    location.getLatitude(), location.getLongitude(),
-                    targetLat, targetLng, results
-            );
+                location.latitude, location.longitude,
+                targetLat, targetLng, results
+            )
 
-            return results[0] <= radius;
-        } catch (Exception e) {
-            Log.e(TAG, "Location parse error", e);
-            return false;
+            results[0] <= radius
+        } catch (e: Exception) {
+            Log.e(TAG, "Location parse error", e)
+            false
         }
     }
 
     @SuppressLint("MissingPermission")
-    public void stopAllTriggers() {
+    fun stopAllTriggers() {
         try {
-            if (bleManager != null) bleManager.stopScanning();
-            if (wifiManager != null) wifiManager.stopMonitoring();
-            Log.d(TAG, "✅ All triggers stopped");
-        } catch (Exception e) {
-            Log.e(TAG, "Error stopping triggers", e);
+            bleManager.stopScanning()
+            wifiManager.stopMonitoring()
+            Log.d(TAG, "✅ All triggers stopped")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping triggers", e)
         }
     }
 
-    // ==================== Callback Interfaces ====================
+    //  CALLBACK INTERFACES 
 
-    public interface WorkflowOperationCallback {
-        void onSuccess(@NonNull String message);
-        void onError(@NonNull String error);
+    interface WorkflowOperationCallback {
+        fun onSuccess(message: String)
+        fun onError(error: String)
     }
 
-    public interface WorkflowByIdCallback {
-        void onWorkflowLoaded(@Nullable WorkflowEntity workflow);
-        void onWorkflowError(@NonNull String error);
+    interface WorkflowByIdCallback {
+        fun onWorkflowLoaded(workflow: WorkflowEntity?)
+        fun onWorkflowError(error: String)
     }
 
-    public interface TriggerCallback {
-        void onTriggerFired(@NonNull Trigger trigger, boolean isFired);
+    interface TriggerCallback {
+        fun onTriggerFired(trigger: Trigger, isFired: Boolean)
     }
 
-    // ==================== Lifecycle Management ====================
+    //  LIFECYCLE 
 
     @SuppressLint("MissingPermission")
-    @Override
-    protected void onCleared() {
-        super.onCleared();
-        Log.d(TAG, "🧹 Cleaning up ViewModel");
+    override fun onCleared() {
+        super.onCleared()
+        Log.d(TAG, "🧹 Cleaning up ViewModel")
 
         try {
-            if (bleManager != null) bleManager.cleanup();
-            if (wifiManager != null) wifiManager.cleanup();
-            if (locationManager != null) locationManager.cleanup();
-            if (repository != null) repository.cleanup();
-            Log.d(TAG, "✅ Cleanup complete");
-        } catch (Exception e) {
-            Log.e(TAG, "Cleanup error", e);
+            bleManager.cleanup()
+            wifiManager.cleanup()
+            locationManager.cleanup()
+            Log.d(TAG, "✅ Cleanup complete")
+        } catch (e: Exception) {
+            Log.e(TAG, "Cleanup error", e)
         }
     }
 }

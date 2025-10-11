@@ -9,13 +9,17 @@ import com.example.autoflow.util.ActionExecutor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/**
+ * Generic Trigger Monitoring Worker
+ * Monitors and executes workflow actions
+ */
 class TriggerMonitoringWorker(
     context: Context,
     params: WorkerParameters
 ) : CoroutineWorker(context, params) {
 
     companion object {
-        const val TAG = "TriggerMonitoringWorker"
+        private const val TAG = "TriggerMonitoringWorker"
         const val KEY_WORKFLOW_ID = "workflow_id"
         const val KEY_TRIGGER_TYPE = "trigger_type"
     }
@@ -25,42 +29,41 @@ class TriggerMonitoringWorker(
             val workflowId = inputData.getLong(KEY_WORKFLOW_ID, -1L)
 
             if (workflowId == -1L) {
-                Log.e(TAG, "Invalid workflow ID")
+                Log.e(TAG, "❌ Invalid workflow ID")
                 return@withContext Result.failure()
             }
 
-            // Get workflow from database using correct method name
+            // Get workflow from database
             val database = AppDatabase.getDatabase(applicationContext)
-            val workflow = database.workflowDao().getByIdSync(workflowId) // FIXED: use getByIdSync()
+            val workflow = database.workflowDao().getByIdSync(workflowId)
 
             if (workflow == null) {
-                Log.d(TAG, "Workflow not found: $workflowId")
+                Log.d(TAG, "⚠️ Workflow not found: $workflowId")
                 return@withContext Result.success()
             }
 
-            if (!workflow.isEnabled) { // FIXED: use isEnabled (getter method)
-                Log.d(TAG, "Workflow is disabled: $workflowId")
+            if (!workflow.isEnabled) {
+                Log.d(TAG, "⚠️ Workflow disabled: $workflowId")
                 return@withContext Result.success()
             }
 
             // Execute action
-            val action = workflow.toAction() // This is correct - method exists in WorkflowEntity
+            val action = workflow.toAction()
             if (action != null) {
                 val success = ActionExecutor.executeAction(applicationContext, action)
-
                 if (success) {
-                    Log.d(TAG, "Action executed successfully for workflow: $workflowId")
+                    Log.d(TAG, "✅ Action executed for workflow: $workflowId")
                     return@withContext Result.success()
                 } else {
-                    Log.e(TAG, "Action execution failed for workflow: $workflowId")
+                    Log.e(TAG, "❌ Action execution failed")
                     return@withContext Result.retry()
                 }
             } else {
-                Log.e(TAG, "No valid action found for workflow: $workflowId")
+                Log.e(TAG, "❌ No valid action found")
                 return@withContext Result.failure()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error in worker", e)
+            Log.e(TAG, "❌ Error in worker", e)
             return@withContext Result.retry()
         }
     }

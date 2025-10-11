@@ -1,397 +1,225 @@
-package com.example.autoflow.model;
+package com.example.autoflow.model
 
-import android.util.Patterns;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import com.example.autoflow.util.Constants;
-import org.json.JSONObject;
-import org.json.JSONException;
-import java.util.regex.Pattern;
+import com.example.autoflow.util.Constants
+import org.json.JSONObject
+import java.util.regex.Pattern
 
-public class Trigger {
-    public long id;
-    public long workflowId;
-    public String type;
-    public String value;
+data class Trigger(
+    var id: Long = 0,
+    var workflowId: Long = 0,
+    var type: String = "",
+    var value: String = ""
+) {
 
-    // Validation patterns
-    private static final Pattern MAC_ADDRESS_PATTERN =
-            Pattern.compile("^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$");
-    private static final Pattern COORDINATES_PATTERN =
-            Pattern.compile("^-?\\d+\\.\\d+,-?\\d+\\.\\d+(,\\d+(\\.\\d+)?)?$");
+    companion object {
+        private const val TAG = "Trigger"
 
-    // Constructor
-    public Trigger(long id, long workflowId, @NonNull String type, @NonNull String value) {
-        this.id = id;
-        this.workflowId = workflowId;
-        this.type = type;
-        this.value = value;
+        // Validation patterns
+        private val MAC_ADDRESS_PATTERN: Pattern =
+            Pattern.compile("^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$")
+        private val COORDINATES_PATTERN: Pattern =
+            Pattern.compile("^-?\\d+\\.\\d+,-?\\d+\\.\\d+(,\\d+(\\.\\d+)?)?$")
     }
 
-    // Constructor without ID (for creating new triggers)
+    // VALIDATION
 
-    // Getters
-    public long getId() {
-        return id;
-    }
+    val isValid: Boolean
+        get() {
+            // Basic checks
+            if (type.isBlank() || value.isBlank()) return false
 
-    public long getWorkflowId() {
-        return workflowId;
-    }
-
-    @NonNull
-    public String getType() {
-        return type != null ? type : "";
-    }
-
-    @NonNull
-    public String getValue() {
-        return value != null ? value : "";
-    }
-
-    /**
-     * Comprehensive trigger validation with enhanced security and error checking
-     */
-    public boolean isValid() {
-        // Basic null and empty checks
-        if (type == null || type.trim().isEmpty() || value == null || value.trim().isEmpty()) {
-            return false;
+            return when (type.trim()) {
+                Constants.TRIGGER_TIME -> validateTimeTrigger(value)
+                Constants.TRIGGER_BLE -> validateBleTrigger(value)
+                Constants.TRIGGER_LOCATION -> validateLocationTrigger(value)
+                Constants.TRIGGER_WIFI -> validateWiFiTrigger(value)
+                Constants.TRIGGER_APP_LAUNCH -> validateAppLaunchTrigger(value)
+                Constants.TRIGGER_BATTERY_LEVEL -> validateBatteryLevelTrigger(value)
+                Constants.TRIGGER_CHARGING_STATE -> validateChargingStateTrigger(value)
+                Constants.TRIGGER_HEADPHONE_CONNECTION -> validateHeadphoneConnectionTrigger(value)
+                else -> false
+            }
         }
 
-        String trimmedType = type.trim();
-        String trimmedValue = value.trim();
+    val validationError: String?
+        get() {
+            if (type.isBlank()) return "Trigger type cannot be empty"
+            if (value.isBlank()) return "Trigger value cannot be empty"
 
-        switch (trimmedType) {
-            case Constants.TRIGGER_TIME:
-                return validateTimeTrigger(trimmedValue);
+            return when (type.trim()) {
+                Constants.TRIGGER_TIME -> if (!validateTimeTrigger(value))
+                    "Invalid timestamp format or value out of range" else null
 
-            case Constants.TRIGGER_BLE:
-                return validateBleTrigger(trimmedValue);
+                Constants.TRIGGER_BLE -> if (!validateBleTrigger(value))
+                    "Invalid BLE device address or name format" else null
 
-            case Constants.TRIGGER_LOCATION:
-                return validateLocationTrigger(trimmedValue);
+                Constants.TRIGGER_LOCATION -> if (!validateLocationTrigger(value))
+                    "Invalid location format. Use 'lat,lng,radius' or JSON format" else null
 
-            case Constants.TRIGGER_WIFI: // Updated to use consistent constant
-                return validateWiFiTrigger(trimmedValue);
+                Constants.TRIGGER_WIFI -> if (!validateWiFiTrigger(value))
+                    "Invalid WiFi state or SSID format" else null
 
-            case Constants.TRIGGER_APP_LAUNCH:
-                return validateAppLaunchTrigger(trimmedValue);
+                else -> "Unknown trigger type: $type"
+            }
+        }
 
-            case Constants.TRIGGER_BATTERY_LEVEL:
-                return validateBatteryLevelTrigger(trimmedValue);
+    //  VALIDATION METHODS
 
-            case Constants.TRIGGER_CHARGING_STATE:
-                return validateChargingStateTrigger(trimmedValue);
+    private fun validateTimeTrigger(value: String): Boolean {
+        return try {
+            val timestamp = value.toLong()
+            val currentTime = System.currentTimeMillis()
+            val maxFutureTime = currentTime + Constants.MAX_FUTURE_TIME_MS
+            val minPastTime = currentTime - Constants.MAX_FUTURE_TIME_MS
 
-            case Constants.TRIGGER_HEADPHONE_CONNECTION:
-                return validateHeadphoneConnectionTrigger(trimmedValue);
-
-            default:
-                return false; // Unknown trigger type
+            timestamp in minPastTime..maxFutureTime
+        } catch (e: NumberFormatException) {
+            false
         }
     }
 
-    /**
-     * Validate time-based triggers
-     */
-    private boolean validateTimeTrigger(@NonNull String value) {
-        try {
-            long timestamp = Long.parseLong(value);
-            // Check if timestamp is reasonable (not too far in past/future)
-            long currentTime = System.currentTimeMillis();
-            long maxFutureTime = currentTime + Constants.MAX_FUTURE_TIME_MS;
-            long minPastTime = currentTime - Constants.MAX_FUTURE_TIME_MS;
+    private fun validateBleTrigger(value: String): Boolean {
+        // Check MAC address format
+        if (MAC_ADDRESS_PATTERN.matcher(value).matches()) return true
 
-            return timestamp >= minPastTime && timestamp <= maxFutureTime;
-        } catch (NumberFormatException e) {
-            return false;
-        }
+        // Check device name (1-248 characters)
+        return value.length in 1..248 && value.isNotBlank()
     }
 
-    /**
-     * Validate BLE triggers with enhanced MAC address validation
-     */
-    private boolean validateBleTrigger(@NonNull String value) {
-        // Check if it's a MAC address format
-        if (MAC_ADDRESS_PATTERN.matcher(value).matches()) {
-            return true;
-        }
-
-        // Check if it's a device name (basic validation)
-        if (value.length() >= 1 && value.length() <= 248) { // Bluetooth name length limits
-            // Ensure it doesn't contain only whitespace
-            return !value.trim().isEmpty();
-        }
-
-        return false;
-    }
-
-    /**
-     * Validate location-based triggers with multiple format support
-     */
-    private boolean validateLocationTrigger(@NonNull String value) {
+    private fun validateLocationTrigger(value: String): Boolean {
         // Try JSON format first
-        if (validateLocationJson(value)) {
-            return true;
-        }
+        if (validateLocationJson(value)) return true
 
-        // Try simple coordinate format: "lat,lng" or "lat,lng,radius"
-        return validateLocationCoordinates(value);
+        // Try coordinate format: "lat,lng" or "lat,lng,radius"
+        return validateLocationCoordinates(value)
     }
 
-    /**
-     * Validate location JSON format
-     */
-    private boolean validateLocationJson(@NonNull String value) {
-        try {
-            JSONObject json = new JSONObject(value);
+    private fun validateLocationJson(value: String): Boolean {
+        return try {
+            val json = JSONObject(value)
 
             // Check for coordinates field
             if (json.has(Constants.JSON_KEY_LOCATION_COORDINATES)) {
-                String coordinates = json.getString(Constants.JSON_KEY_LOCATION_COORDINATES);
-                return validateLocationCoordinates(coordinates);
+                val coordinates = json.getString(Constants.JSON_KEY_LOCATION_COORDINATES)
+                return validateLocationCoordinates(coordinates)
             }
 
             // Check for separate lat/lng fields
             if (json.has("latitude") && json.has("longitude")) {
-                double lat = json.getDouble("latitude");
-                double lng = json.getDouble("longitude");
-                return isValidLatitude(lat) && isValidLongitude(lng);
+                val lat = json.getDouble("latitude")
+                val lng = json.getDouble("longitude")
+                return isValidLatitude(lat) && isValidLongitude(lng)
             }
 
-            return false;
-        } catch (JSONException | NumberFormatException e) {
-            return false;
+            false
+        } catch (e: Exception) {
+            false
         }
     }
 
-    /**
-     * Validate coordinate string format
-     */
-    private boolean validateLocationCoordinates(@NonNull String coordinates) {
-        if (!COORDINATES_PATTERN.matcher(coordinates).matches()) {
-            return false;
-        }
+    private fun validateLocationCoordinates(coordinates: String): Boolean {
+        if (!COORDINATES_PATTERN.matcher(coordinates).matches()) return false
 
-        try {
-            String[] parts = coordinates.split(",");
-            if (parts.length < 2 || parts.length > 3) {
-                return false;
-            }
+        return try {
+            val parts = coordinates.split(",")
+            if (parts.size !in 2..3) return false
 
-            double lat = Double.parseDouble(parts[0].trim());
-            double lng = Double.parseDouble(parts[1].trim());
+            val lat = parts[0].trim().toDouble()
+            val lng = parts[1].trim().toDouble()
 
-            if (!isValidLatitude(lat) || !isValidLongitude(lng)) {
-                return false;
-            }
+            if (!isValidLatitude(lat) || !isValidLongitude(lng)) return false
 
             // Validate radius if present
-            if (parts.length == 3) {
-                float radius = Float.parseFloat(parts[2].trim());
-                return radius >= Constants.LOCATION_MIN_RADIUS && radius <= Constants.LOCATION_MAX_RADIUS;
+            if (parts.size == 3) {
+                val radius = parts[2].trim().toFloat()
+                return radius in Constants.LOCATION_MIN_RADIUS..Constants.LOCATION_MAX_RADIUS
             }
 
-            return true;
-        } catch (NumberFormatException e) {
-            return false;
+            true
+        } catch (e: NumberFormatException) {
+            false
         }
     }
 
-    /**
-     * Validate WiFi triggers with JSON or simple state format
-     */
-    private boolean validateWiFiTrigger(@NonNull String value) {
+    private fun validateWiFiTrigger(value: String): Boolean {
         // Try JSON format first
-        try {
-            JSONObject json = new JSONObject(value);
+        return try {
+            val json = JSONObject(value)
 
             // Check for WiFi state
             if (json.has(Constants.JSON_KEY_WIFI_TARGET_STATE)) {
-                String state = json.getString(Constants.JSON_KEY_WIFI_TARGET_STATE);
-                return isValidWiFiState(state);
+                val state = json.getString(Constants.JSON_KEY_WIFI_TARGET_STATE)
+                return isValidWiFiState(state)
             }
 
-            // Check for SSID-based triggers
+            // Check for SSID
             if (json.has(Constants.JSON_KEY_WIFI_SSID)) {
-                String ssid = json.getString(Constants.JSON_KEY_WIFI_SSID);
-                return isValidSSID(ssid);
+                val ssid = json.getString(Constants.JSON_KEY_WIFI_SSID)
+                return isValidSSID(ssid)
             }
 
-            return false;
-        } catch (JSONException e) {
+            false
+        } catch (e: Exception) {
             // Try simple state format
-            return isValidWiFiState(value);
+            isValidWiFiState(value)
         }
     }
 
-    /**
-     * Validate app launch triggers
-     */
-    private boolean validateAppLaunchTrigger(@NonNull String value) {
-        try {
-            JSONObject json = new JSONObject(value);
+    private fun validateAppLaunchTrigger(value: String): Boolean {
+        return try {
+            val json = JSONObject(value)
 
             // Must have package name
-            if (!json.has(Constants.JSON_KEY_APP_PACKAGE_NAME)) {
-                return false;
-            }
+            if (!json.has(Constants.JSON_KEY_APP_PACKAGE_NAME)) return false
 
-            String packageName = json.getString(Constants.JSON_KEY_APP_PACKAGE_NAME);
-            return isValidPackageName(packageName);
-        } catch (JSONException e) {
+            val packageName = json.getString(Constants.JSON_KEY_APP_PACKAGE_NAME)
+            isValidPackageName(packageName)
+        } catch (e: Exception) {
             // Try as simple package name
-            return isValidPackageName(value);
+            isValidPackageName(value)
         }
     }
 
-    /**
-     * Validate battery level triggers
-     */
-    private boolean validateBatteryLevelTrigger(@NonNull String value) {
-        try {
-            int level = Integer.parseInt(value);
-            return level >= 0 && level <= 100;
-        } catch (NumberFormatException e) {
-            return false;
+    private fun validateBatteryLevelTrigger(value: String): Boolean {
+        return try {
+            val level = value.toInt()
+            level in 0..100
+        } catch (e: NumberFormatException) {
+            false
         }
     }
 
-    /**
-     * Validate charging state triggers
-     */
-    private boolean validateChargingStateTrigger(@NonNull String value) {
-        return "CHARGING".equalsIgnoreCase(value) ||
-                "NOT_CHARGING".equalsIgnoreCase(value) ||
-                "PLUGGED".equalsIgnoreCase(value) ||
-                "UNPLUGGED".equalsIgnoreCase(value);
+    private fun validateChargingStateTrigger(value: String): Boolean {
+        return value.uppercase() in listOf("CHARGING", "NOT_CHARGING", "PLUGGED", "UNPLUGGED")
     }
 
-    /**
-     * Validate headphone connection triggers
-     */
-    private boolean validateHeadphoneConnectionTrigger(@NonNull String value) {
-        return "CONNECTED".equalsIgnoreCase(value) ||
-                "DISCONNECTED".equalsIgnoreCase(value);
+    private fun validateHeadphoneConnectionTrigger(value: String): Boolean {
+        return value.uppercase() in listOf("CONNECTED", "DISCONNECTED")
     }
 
-    // Helper validation methods
-    private boolean isValidLatitude(double lat) {
-        return lat >= -90.0 && lat <= 90.0;
+    // ========== HELPER METHODS ==========
+
+    private fun isValidLatitude(lat: Double): Boolean = lat in -90.0..90.0
+
+    private fun isValidLongitude(lng: Double): Boolean = lng in -180.0..180.0
+
+    private fun isValidWiFiState(state: String): Boolean {
+        return state.uppercase() in listOf(
+            Constants.WIFI_STATE_ON.uppercase(),
+            Constants.WIFI_STATE_OFF.uppercase(),
+            Constants.WIFI_STATE_CONNECTED.uppercase(),
+            Constants.WIFI_STATE_DISCONNECTED.uppercase()
+        )
     }
 
-    private boolean isValidLongitude(double lng) {
-        return lng >= -180.0 && lng <= 180.0;
+    private fun isValidSSID(ssid: String): Boolean {
+        // SSID should be 1-32 characters
+        return ssid.length in 1..32 && ssid.isNotBlank()
     }
 
-    private boolean isValidWiFiState(@NonNull String state) {
-        return Constants.WIFI_STATE_ON.equalsIgnoreCase(state) ||
-                Constants.WIFI_STATE_OFF.equalsIgnoreCase(state) ||
-                Constants.WIFI_STATE_CONNECTED.equalsIgnoreCase(state) ||
-                Constants.WIFI_STATE_DISCONNECTED.equalsIgnoreCase(state);
-    }
-
-    private boolean isValidSSID(@NonNull String ssid) {
-        // SSID should be between 1-32 characters
-        return ssid.length() >= 1 && ssid.length() <= 32 && !ssid.trim().isEmpty();
-    }
-
-    private boolean isValidPackageName(@NonNull String packageName) {
+    private fun isValidPackageName(packageName: String): Boolean {
         // Basic package name validation
-        return packageName.matches("^[a-zA-Z][a-zA-Z0-9_]*(?:\\.[a-zA-Z][a-zA-Z0-9_]*)*$") &&
-                packageName.length() >= 3 && packageName.length() <= 255;
-    }
-
-    /**
-     * Get validation error message for debugging
-     */
-    @Nullable
-    public String getValidationError() {
-        if (type == null || type.trim().isEmpty()) {
-            return "Trigger type cannot be empty";
-        }
-
-        if (value == null || value.trim().isEmpty()) {
-            return "Trigger value cannot be empty";
-        }
-
-        String trimmedType = type.trim();
-        String trimmedValue = value.trim();
-
-        switch (trimmedType) {
-            case Constants.TRIGGER_TIME:
-                if (!validateTimeTrigger(trimmedValue)) {
-                    return "Invalid timestamp format or value out of range";
-                }
-                break;
-
-            case Constants.TRIGGER_BLE:
-                if (!validateBleTrigger(trimmedValue)) {
-                    return "Invalid BLE device address or name format";
-                }
-                break;
-
-            case Constants.TRIGGER_LOCATION:
-                if (!validateLocationTrigger(trimmedValue)) {
-                    return "Invalid location format. Use 'lat,lng,radius' or JSON format";
-                }
-                break;
-
-            case Constants.TRIGGER_WIFI:
-                if (!validateWiFiTrigger(trimmedValue)) {
-                    return "Invalid WiFi state or SSID format";
-                }
-                break;
-
-            default:
-                return "Unknown trigger type: " + trimmedType;
-        }
-
-        return null; // No error
-    }
-
-    /**
-     * Create a copy of this trigger with updated values
-     */
-    @NonNull
-    public Trigger copyWith(long newId, long newWorkflowId, @Nullable String newType, @Nullable String newValue) {
-        return new Trigger(
-                newId != 0 ? newId : this.id,
-                newWorkflowId != 0 ? newWorkflowId : this.workflowId,
-                newType != null ? newType : this.type,
-                newValue != null ? newValue : this.value
-        );
-    }
-
-    @Override
-    @NonNull
-    public String toString() {
-        return "Trigger{" +
-                "id=" + id +
-                ", workflowId=" + workflowId +
-                ", type='" + type + '\'' +
-                ", value='" + value + '\'' +
-                '}';
-    }
-
-    @Override
-    public boolean equals(@Nullable Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-
-        Trigger trigger = (Trigger) obj;
-        return id == trigger.id &&
-                workflowId == trigger.workflowId &&
-                type.equals(trigger.type) &&
-                value.equals(trigger.value);
-    }
-
-    @Override
-    public int hashCode() {
-        int result = Long.hashCode(id);
-        result = 31 * result + Long.hashCode(workflowId);
-        result = 31 * result + type.hashCode();
-        result = 31 * result + value.hashCode();
-        return result;
+        val pattern = "^[a-zA-Z][a-zA-Z0-9_]*(?:\\.[a-zA-Z][a-zA-Z0-9_]*)*$".toRegex()
+        return packageName.matches(pattern) && packageName.length in 3..255
     }
 }

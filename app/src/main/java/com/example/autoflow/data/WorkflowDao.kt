@@ -1,56 +1,44 @@
-package com.example.autoflow.data;
+package com.example.autoflow.data
 
-import androidx.lifecycle.LiveData;
-import androidx.room.Dao;
-import androidx.room.Delete;
-import androidx.room.Insert;
-import androidx.room.OnConflictStrategy;
-import androidx.room.Query;
-import androidx.room.Update;
-
-import java.util.List; // Import List
+import androidx.lifecycle.LiveData
+import androidx.room.*
 
 @Dao
-public interface WorkflowDao {
+interface WorkflowDao {
 
-    @Insert
-    long insert(WorkflowEntity workflowEntity);
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(workflow: WorkflowEntity): Long  //  suspend + non-nullable
 
     @Update
-    int update(WorkflowEntity workflowEntity);
+    suspend fun update(workflow: WorkflowEntity): Int
 
     @Delete
-    void delete(WorkflowEntity workflowEntity);
+    suspend fun delete(workflow: WorkflowEntity)
 
     @Query("DELETE FROM workflows WHERE id = :workflowId")
-    int deleteById(long workflowId);
+    suspend fun deleteById(workflowId: Long): Int
 
     @Query("DELETE FROM workflows")
-    void deleteAll();
+    suspend fun deleteAll()
 
     @Query("SELECT * FROM workflows")
-    List<WorkflowEntity> getAllWorkflowsSync();
+    fun getAllWorkflows(): LiveData<List<WorkflowEntity>>  //  LiveData for UI
+
+    @Query("SELECT * FROM workflows")
+    suspend fun getAllWorkflowsSync(): List<WorkflowEntity>  //  For background
 
     @Query("SELECT * FROM workflows WHERE is_enabled = 1")
-    List<WorkflowEntity> getEnabledWorkflowsSync();
+    suspend fun getEnabledWorkflows(): List<WorkflowEntity>
 
     @Query("SELECT * FROM workflows WHERE id = :id")
-    WorkflowEntity getByIdSync(long id);
+    suspend fun getById(id: Long): WorkflowEntity?  //  Nullable only here
+
+    @Query("SELECT * FROM workflows WHERE id = :id")
+    fun getByIdSync(id: Long): WorkflowEntity?  //  For non-suspend calls
 
     @Query("UPDATE workflows SET is_enabled = :enabled WHERE id = :workflowId")
-    int updateEnabled(long workflowId, boolean enabled);
+    suspend fun updateEnabled(workflowId: Long, enabled: Boolean): Int
 
     @Query("SELECT COUNT(*) FROM workflows")
-    int getCount();
-
-    // LiveData versions for reactive programming (optional)
-    @Query("SELECT * FROM workflows")
-    LiveData<List<WorkflowEntity>> getAllWorkflows();
-
-    @Query("SELECT * FROM workflows WHERE is_enabled = 1")
-    LiveData<List<WorkflowEntity>> getEnabledWorkflows();
-
-    @Query("SELECT * FROM workflows WHERE id = :id")
-    LiveData<WorkflowEntity> getById(long id);
-
+    suspend fun getCount(): Int
 }

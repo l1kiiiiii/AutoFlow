@@ -51,7 +51,7 @@ fun HomeScreen(
     LaunchedEffect(workflows) {
         Log.d("HomeScreen", "📊 Workflows updated: ${workflows?.size ?: 0} tasks")
         workflows?.forEach { workflow ->
-            Log.d("HomeScreen", "  - ${workflow.workflowName} (ID: ${workflow.id}, Enabled: ${workflow.isEnabled()})")
+            Log.d("HomeScreen", "  - ${workflow.workflowName} (ID: ${workflow.id}, Enabled: ${workflow.isEnabled})")
         }
     }
     val activeWorkflows = workflows?.filter { it.isEnabled } ?: emptyList()

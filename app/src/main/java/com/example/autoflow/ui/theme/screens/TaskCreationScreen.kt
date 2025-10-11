@@ -112,6 +112,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.autoflow.data.WorkflowEntity
@@ -1428,7 +1429,7 @@ private fun LocationTriggerContent(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // ========== NEW: Radius Input with Text Field ==========
+        // ========== UPDATED: Radius Input with Indoor Presets ==========
 
         Text(
             "Trigger Radius",
@@ -1497,21 +1498,82 @@ private fun LocationTriggerContent(
                 singleLine = true
             )
 
-            // Quick preset buttons
+            // ✅ UPDATED: Quick preset buttons with indoor options
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    "Quick Presets:",
+                    "Quick Presets",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                // ✅ NEW: Indoor/Small Space Presets Row
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    listOf(50, 100, 200, 500, 1000).forEach { preset ->
+                    listOf(
+                        10 to "10m\nRoom",
+                        20 to "20m\nOffice",
+                        30 to "30m\nFloor"
+                    ).forEach { (preset, label) ->
+                        FilterChip(
+                            selected = radiusValue.roundToInt() == preset,
+                            onClick = {
+                                onRadiusChange(preset.toFloat())
+                                radiusText = preset.toString()
+                                radiusError = null
+                            },
+                            label = {
+                                Text(
+                                    label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    lineHeight = 12.sp,
+                                    fontSize = 10.sp
+                                )
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                // Standard Presets Row
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    listOf(50, 100, 200).forEach { preset ->
+                        FilterChip(
+                            selected = radiusValue.roundToInt() == preset,
+                            onClick = {
+                                onRadiusChange(preset.toFloat())
+                                radiusText = preset.toString()
+                                radiusError = null
+                            },
+                            label = {
+                                Text(
+                                    "${preset}m",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                // Large Area Presets Row
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    listOf(500, 1000, 2000).forEach { preset ->
                         FilterChip(
                             selected = radiusValue.roundToInt() == preset,
                             onClick = {
@@ -1698,33 +1760,34 @@ private fun LocationTriggerContent(
             }
         }
     }
-
-    // Permission Dialog (same as before)...
 }
 
-// ========== HELPER FUNCTIONS ==========
-
+//: Helper functions with indoor support
 private fun getRadiusDescription(radius: Int): String {
     return when {
-        radius < 50 -> "Very small area - ${radius}m radius"
-        radius < 150 -> "Small area - ${radius}m radius"
-        radius < 500 -> "Medium area - ${radius}m radius"
-        radius < 1000 -> "Large area - ${radius}m radius"
-        else -> "Very large area - ${radius}m (${radius / 1000}km) radius"
+        radius <= 10 -> "Tiny area - ${radius}m"
+        radius <= 30 -> "Very small area - ${radius}m"
+        radius <= 50 -> "Small area - ${radius}m"
+        radius <= 150 -> "Medium area - ${radius}m"
+        radius <= 500 -> "Large area - ${radius}m"
+        radius <= 1000 -> "Very large area - ${radius}m"
+        else -> "Massive area - ${radius / 1000}km"
     }
 }
 
 private fun getRadiusUseCase(radius: Int): String {
     return when {
-        radius < 50 -> "specific rooms or small buildings"
-        radius < 150 -> "homes, offices, or parking lots"
-        radius < 500 -> "neighborhoods or large buildings"
-        radius < 1000 -> "districts or large complexes"
+        radius <= 10 -> "specific rooms (bedroom, bathroom)"
+        radius <= 30 -> "offices, conference rooms, or single floors"
+        radius <= 50 -> "small buildings or parking spots"
+        radius <= 150 -> "homes, offices, or parking lots"
+        radius <= 500 -> "neighborhoods or large buildings"
+        radius <= 1000 -> "districts or large complexes"
         else -> "cities or wide areas"
     }
 }
 
-
+// Permission Dialog (same as before)...
 // ========== LOCATION FETCHING FUNCTION ==========
 
 @SuppressLint("MissingPermission")
@@ -2315,7 +2378,6 @@ private fun ErrorDialog(
     )
 }
 // ========== SAVE HANDLER ==========
-// ========== COMPLETE handleSaveTask FUNCTION ==========
 
 private suspend fun handleSaveTask(
     context: Context,
@@ -2341,8 +2403,8 @@ private suspend fun handleSaveTask(
     toggleSetting: String,
     runScriptActionExpanded: Boolean,
     scriptText: String,
-    setSoundModeActionExpanded: Boolean,  // ✅ ADD THIS
-    soundMode: String,  // ✅ ADD THIS
+    setSoundModeActionExpanded: Boolean,
+    soundMode: String,
     onSuccess: () -> Unit,
     onError: (String) -> Unit
 ) {
@@ -2412,6 +2474,14 @@ private suspend fun handleSaveTask(
                     put("radius", radiusValue.roundToInt())
                     put("triggerOnEntry", triggerOnOption == "Entry" || triggerOnOption == "Both")
                     put("triggerOnExit", triggerOnOption == "Exit" || triggerOnOption == "Both")
+
+                    //  For GeofenceReceiver compatibility
+                    put("triggerOn", when (triggerOnOption) {
+                        "Entry" -> "enter"
+                        "Exit" -> "exit"
+                        "Both" -> "both"
+                        else -> "enter"
+                    })
                 }
                 Trigger(0, 0, Constants.TRIGGER_LOCATION, json.toString())
             }
@@ -2462,19 +2532,19 @@ private suspend fun handleSaveTask(
                 }
 
                 Action(actionType, null, null, null).apply {
-                    setValue(toggleSetting)
+                    value = toggleSetting
                 }
             }
             hasSoundModeAction -> {
                 Log.d("TaskCreation", "→ Creating SOUND MODE action: $soundMode")
                 Action(Constants.ACTION_SET_SOUND_MODE, null, null, null).apply {
-                    setValue(soundMode)
+                    value = soundMode
                 }
             }
             hasScriptAction -> {
                 Log.d("TaskCreation", "→ Creating SCRIPT action")
                 Action(Constants.ACTION_RUN_SCRIPT, null, null, null).apply {
-                    setValue(scriptText)
+                    value = scriptText
                 }
             }
             else -> {
@@ -2573,7 +2643,18 @@ private suspend fun handleSaveTask(
                 val lat = locationJson.getDouble("latitude")
                 val lng = locationJson.getDouble("longitude")
                 val radius = locationJson.optInt("radius", 100).toFloat()
-                val triggerOn = locationJson.getString("triggerOn")
+
+                //  Use the correct field names that match your JSON
+                val triggerOnEntry = locationJson.optBoolean("triggerOnEntry", false)
+                val triggerOnExit = locationJson.optBoolean("triggerOnExit", false)
+
+                //  Store triggerOn for GeofenceReceiver compatibility
+                val triggerOn = when {
+                    triggerOnEntry && triggerOnExit -> "both"
+                    triggerOnEntry -> "enter"
+                    triggerOnExit -> "exit"
+                    else -> "enter" // default
+                }
 
                 val geofenceAdded = GeofenceManager.addGeofence(
                     context = context,
@@ -2581,17 +2662,20 @@ private suspend fun handleSaveTask(
                     latitude = lat,
                     longitude = lng,
                     radius = radius,
-                    triggerOnEntry = triggerOn == "enter",
-                    triggerOnExit = triggerOn == "exit"
+                    triggerOnEntry = triggerOnEntry,
+                    triggerOnExit = triggerOnExit
                 )
 
                 if (geofenceAdded) {
-                    Log.d("TaskCreation", "✅ Geofence registered")
+                    Log.d("TaskCreation", "✅ Geofence registered for workflow")
+                } else {
+                    Log.e("TaskCreation", "❌ Failed to register geofence")
                 }
             } catch (e: Exception) {
                 Log.e("TaskCreation", "❌ Geofence setup failed", e)
             }
         }
+
 
 
 

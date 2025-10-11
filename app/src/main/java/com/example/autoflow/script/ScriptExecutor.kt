@@ -203,7 +203,7 @@ class ScriptActionExecutor {
     }
 
     fun executeScriptAction(action: Action) {
-        val scriptCode = action.getValue()
+        val scriptCode = action.value
 
         if (scriptCode.isNullOrBlank()) {
             Log.w("ScriptActionExecutor", "Empty script code")

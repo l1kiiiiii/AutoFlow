@@ -1,32 +1,33 @@
-package com.example.autoflow.data;
+package com.example.autoflow.data
 
-import android.content.Context; // Import android.content.Context
-import androidx.room.Database;
-import androidx.room.Room;
-import androidx.room.RoomDatabase;
+import android.content.Context
+import androidx.room.Database
+import androidx.room.Room
+import androidx.room.RoomDatabase
 
-@Database(entities = {WorkflowEntity.class}, version = 1, exportSchema = false)
-public abstract class AppDatabase extends RoomDatabase {
-    public abstract WorkflowDao workflowDao();
+@Database(entities = [WorkflowEntity::class], version = 1, exportSchema = false)
+abstract class AppDatabase : RoomDatabase() {
 
-    private static volatile AppDatabase INSTANCE;
+    abstract fun workflowDao(): WorkflowDao  // WorkflowDao is an interface defined in WorkflowDao.kt Not nullable!
 
-    public static AppDatabase getDatabase(final Context context) {
-        if (INSTANCE == null) {
-            synchronized (AppDatabase.class) {
-                if (INSTANCE == null) {
-                    INSTANCE = Room.databaseBuilder(context.getApplicationContext(),
-                                    AppDatabase.class, "autoflow_database")
-                            .build();
-                }
+    companion object {
+        @Volatile
+        private var INSTANCE: AppDatabase? = null
+
+        fun getDatabase(context: Context): AppDatabase {
+            return INSTANCE ?: synchronized(this) {
+                val instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    AppDatabase::class.java,
+                    "autoflow_database"
+                ).build()
+                INSTANCE = instance
+                instance
             }
         }
-        return INSTANCE;
-    }
 
-    // For testing or cleanup
-    @SuppressWarnings("unused")
-    public static void destroyInstance() {
-        INSTANCE = null;
+        fun destroyInstance() {
+            INSTANCE = null
+        }
     }
 }

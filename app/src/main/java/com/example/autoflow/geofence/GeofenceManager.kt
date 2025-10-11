@@ -50,6 +50,7 @@ object GeofenceManager {
 
         // Build geofence list
         val geofences = mutableListOf<Geofence>()
+
         var transitionTypes = 0
 
         if (triggerOnEntry) {
@@ -71,8 +72,8 @@ object GeofenceManager {
                 .setRequestId("workflow_$workflowId")
                 .setCircularRegion(latitude, longitude, radius)
                 .setExpirationDuration(GEOFENCE_EXPIRATION)
-                .setTransitionTypes(transitionTypes)
-                .setLoiteringDelay(5000) // 5 seconds dwell time
+                .setTransitionTypes(transitionTypes)  //  Handles ENTER | EXIT
+                .setLoiteringDelay(5000)
                 .build()
         )
 
