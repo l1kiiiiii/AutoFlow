@@ -6,16 +6,15 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.example.autoflow.model.Action
 import com.example.autoflow.model.Trigger
-import com.example.autoflow.util.Constants
 import org.json.JSONObject
 
 @Entity(tableName = "workflows")
 data class WorkflowEntity(
     @PrimaryKey(autoGenerate = true)
-    var id: Long = 0,  // ✅ Kotlin Long (not java.lang.Long)
+    var id: Long = 0,
 
     @ColumnInfo(name = "workflow_name")
-    var workflowName: String = "",  // ✅ Direct property, no getter/setter
+    var workflowName: String = "",
 
     @ColumnInfo(name = "is_enabled")
     var isEnabled: Boolean = false,
@@ -26,10 +25,12 @@ data class WorkflowEntity(
     @ColumnInfo(name = "action_details")
     var actionDetails: String = ""
 ) {
-
     companion object {
         private const val TAG = "WorkflowEntity"
 
+        /**
+         * Create WorkflowEntity from Trigger and Action models
+         */
         fun fromTriggerAndAction(
             workflowName: String,
             isEnabled: Boolean,
@@ -37,87 +38,43 @@ data class WorkflowEntity(
             action: Action
         ): WorkflowEntity? {
             return try {
-                Log.d(TAG, "🔵 fromTriggerAndAction called")
+                Log.d(TAG, "🔨 Creating WorkflowEntity")
+                Log.d(TAG, "  Name: $workflowName")
+                Log.d(TAG, "  Trigger: ${trigger.type} = ${trigger.value}")
+                Log.d(TAG, "  Action: ${action.type}")
 
-                // Convert Trigger to JSON
+                // Build trigger JSON
                 val triggerJson = JSONObject().apply {
                     put("type", trigger.type)
                     put("value", trigger.value)
+                    // ✅ REMOVED: trigger.details doesn't exist
                 }
 
-                // Convert Action to JSON
+                // Build action JSON
                 val actionJson = JSONObject().apply {
                     put("type", action.type)
+                    action.value?.let { put("value", it) }
                     action.title?.let { put("title", it) }
                     action.message?.let { put("message", it) }
                     action.priority?.let { put("priority", it) }
-                    action.value?.let { put("value", it) }
                 }
 
-                WorkflowEntity(
+                val entity = WorkflowEntity(
                     workflowName = workflowName,
                     isEnabled = isEnabled,
                     triggerDetails = triggerJson.toString(),
                     actionDetails = actionJson.toString()
                 )
+
+                Log.d(TAG, "✅ WorkflowEntity created successfully")
+                Log.d(TAG, "  Trigger JSON: $triggerJson")
+                Log.d(TAG, "  Action JSON: $actionJson")
+
+                entity
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error creating WorkflowEntity", e)
                 null
             }
-        }
-    }
-
-    // Helper methods
-    fun toTrigger(): Trigger? {
-        if (triggerDetails.isBlank()) return null
-
-        return try {
-            val json = JSONObject(triggerDetails)
-            val type = json.optString("type")
-
-            if (type.isBlank()) {
-                Log.e(TAG, "Trigger type is empty")
-                return null
-            }
-
-            Trigger(
-                id = json.optLong("id", 0L),
-                workflowId = json.optLong("workflowId", 0L),
-                type = type.trim(),
-                value = json.optString("value", "")
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Error parsing trigger", e)
-            null
-        }
-    }
-
-    fun toAction(): Action? {
-        if (actionDetails.isBlank()) return null
-
-        return try {
-            val json = JSONObject(actionDetails)
-            val type = json.optString("type")
-
-            if (type.isBlank()) {
-                Log.e(TAG, "Action type is empty")
-                return null
-            }
-
-            when (type.trim()) {
-                Constants.ACTION_SEND_NOTIFICATION -> Action(
-                    type = type,
-                    title = json.optString("title", "AutoFlow"),
-                    message = json.optString("message", ""),
-                    priority = json.optString("priority", "Normal")
-                )
-                else -> Action(type).apply {
-                    value = json.optString("value", "")
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error parsing action", e)
-            null
         }
     }
 }

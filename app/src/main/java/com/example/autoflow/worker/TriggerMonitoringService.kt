@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.autoflow.data.AppDatabase
+import com.example.autoflow.data.toAction
 import com.example.autoflow.util.ActionExecutor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -48,7 +49,7 @@ class TriggerMonitoringWorker(
             }
 
             // Execute action
-            val action = workflow.toAction()
+            val action = workflow.  toAction()
             if (action != null) {
                 val success = ActionExecutor.executeAction(applicationContext, action)
                 if (success) {

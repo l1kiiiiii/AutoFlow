@@ -11,7 +11,7 @@ import androidx.core.app.ActivityCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.viewModelScope
+import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.data.WorkflowRepository
 import com.example.autoflow.integrations.BLEManager
@@ -21,7 +21,6 @@ import com.example.autoflow.model.Action
 import com.example.autoflow.model.Trigger
 import com.example.autoflow.util.Constants
 import com.example.autoflow.util.PermissionUtils
-import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 /**
@@ -30,8 +29,8 @@ import org.json.JSONObject
  */
 class WorkflowViewModel(application: Application) : AndroidViewModel(application) {
 
-    // Repository
-    private val repository = WorkflowRepository(application)
+    // Pass AppDatabase to repository
+    private val repository: WorkflowRepository
 
     // LiveData
     private val _workflows = MutableLiveData<List<WorkflowEntity>>()
@@ -53,14 +52,19 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
     }
 
     init {
+        //  Get database instance first
+        val database = AppDatabase.getDatabase(application)
+        repository = WorkflowRepository(database)
+
         loadWorkflows()
         Log.d(TAG, "ViewModel initialized")
     }
 
-    //  WORKFLOW CRUD OPERATIONS 
+    // ========== WORKFLOW CRUD OPERATIONS ==========
 
     fun loadWorkflows() {
-        repository.getAllWorkflowsWithCallback(object : WorkflowRepository.WorkflowCallback {
+        // : Use correct method name
+        repository.getAllWorkflows(object : WorkflowRepository.WorkflowCallback {
             override fun onWorkflowsLoaded(workflows: MutableList<WorkflowEntity>) {
                 _workflows.postValue(workflows)
                 Log.d(TAG, "✅ Loaded ${workflows.size} workflows")
@@ -98,8 +102,8 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                 return
             }
 
-            // Insert into database
-            repository.insertWithCallback(workflow, object : WorkflowRepository.InsertCallback {
+            // ✅ FIXED: Use correct method name
+            repository.insert(workflow, object : WorkflowRepository.InsertCallback {
                 override fun onInsertComplete(insertedId: Long) {
                     Log.d(TAG, "🎉 Workflow inserted - ID: $insertedId")
                     loadWorkflows()
@@ -153,8 +157,8 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                 action.priority?.let { put("priority", it) }
             }
 
-            // Get and update workflow
-            repository.getByIdWithCallback(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
+            // ✅ FIXED: Use correct method name
+            repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
                 override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
                     if (workflow == null) {
                         val error = "Workflow not found"
@@ -170,7 +174,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                     workflow.isEnabled = true
 
                     // Save
-                    repository.updateWithCallback(workflow, object : WorkflowRepository.UpdateCallback {
+                    repository.update(workflow, object : WorkflowRepository.UpdateCallback {
                         override fun onUpdateComplete(success: Boolean) {
                             if (success) {
                                 loadWorkflows()
@@ -211,7 +215,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
-        repository.deleteWithCallback(workflowId, object : WorkflowRepository.DeleteCallback {
+        repository.delete(workflowId, object : WorkflowRepository.DeleteCallback {
             override fun onDeleteComplete(success: Boolean) {
                 if (success) {
                     loadWorkflows()
@@ -244,7 +248,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
-        repository.updateEnabledWithCallback(workflowId, enabled, object : WorkflowRepository.UpdateCallback {
+        repository.updateWorkflowEnabled(workflowId, enabled, object : WorkflowRepository.UpdateCallback {
             override fun onUpdateComplete(success: Boolean) {
                 if (success) {
                     loadWorkflows()
@@ -271,7 +275,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
-        repository.getByIdWithCallback(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
+        repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
             override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
                 callback.onWorkflowLoaded(workflow)
                 Log.d(TAG, if (workflow != null) "✅ Workflow loaded" else "⚠️ Workflow not found")
@@ -284,7 +288,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         })
     }
 
-    //  TRIGGER MONITORING 
+    // ========== TRIGGER MONITORING ==========
 
     @SuppressLint("MissingPermission")
     @RequiresPermission(anyOf = [Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION])
@@ -435,7 +439,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    //  CALLBACK INTERFACES 
+    // ========== CALLBACK INTERFACES ==========
 
     interface WorkflowOperationCallback {
         fun onSuccess(message: String)
@@ -451,7 +455,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         fun onTriggerFired(trigger: Trigger, isFired: Boolean)
     }
 
-    //  LIFECYCLE 
+    // ========== LIFECYCLE ==========
 
     @SuppressLint("MissingPermission")
     override fun onCleared() {
@@ -462,6 +466,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             bleManager.cleanup()
             wifiManager.cleanup()
             locationManager.cleanup()
+            repository.cleanup()
             Log.d(TAG, "✅ Cleanup complete")
         } catch (e: Exception) {
             Log.e(TAG, "Cleanup error", e)

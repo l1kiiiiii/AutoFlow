@@ -116,6 +116,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.autoflow.data.WorkflowEntity
+import com.example.autoflow.data.toAction
+import com.example.autoflow.data.toTrigger
 import com.example.autoflow.geofence.GeofenceManager
 import com.example.autoflow.model.Action
 import com.example.autoflow.model.Trigger

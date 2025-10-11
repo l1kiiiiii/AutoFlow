@@ -110,44 +110,44 @@ class GeofenceReceiver : BroadcastReceiver() {
                     return@launch
                 }
 
-                // Parse trigger details to check transition type
-                val triggerDetails = workflow.getTriggerDetails()
+                // ✅ FIXED: Use Kotlin property access instead of getTriggerDetails()
+                val triggerDetails = workflow.triggerDetails
+                if (triggerDetails.isEmpty()) {
+                    Log.e(TAG, "❌ No trigger details found")
+                    return@launch
+                }
+
                 val triggerJson = JSONObject(triggerDetails)
                 val triggerOn = triggerJson.optString("triggerOn", "enter")
 
-                // ✅ FIXED: Handle "both", "enter", "exit" options
+                // ✅ Handle "both", "enter", "exit" options
                 val shouldExecute = when (triggerOn.lowercase()) {
                     "both" -> true  // Execute on both entry and exit
                     "enter" -> transitionType == "enter"
                     "exit" -> transitionType == "exit"
                     else -> {
-                        Log.w(
-                            TAG,
-                            "⚠️ Unknown triggerOn value: '$triggerOn', defaulting to 'enter'"
-                        )
+                        Log.w(TAG, "⚠️ Unknown triggerOn value: '$triggerOn', defaulting to 'enter'")
                         transitionType == "enter"
                     }
                 }
 
                 if (!shouldExecute) {
-                    Log.d(
-                        TAG,
-                        "⏭️ Skipping: workflow expects '$triggerOn' but got '$transitionType'"
-                    )
+                    Log.d(TAG, "⏭️ Skipping: workflow expects '$triggerOn' but got '$transitionType'")
                     return@launch
                 }
 
-                Log.d(TAG, "✅ Executing action for workflow: ${workflow.getWorkflowName()}")
+                // ✅ FIXED: Use Kotlin property access
+                Log.d(TAG, "✅ Executing action for workflow: ${workflow.workflowName}")
 
                 // Execute the action through AlarmReceiver
                 val actionIntent = Intent(context, AlarmReceiver::class.java).apply {
                     putExtra("workflow_id", workflowId)
 
-                    val actionDetails = workflow.getActionDetails()
+                    // ✅ FIXED: Use Kotlin property access
+                    val actionDetails = workflow.actionDetails
                     if (actionDetails.isNotEmpty()) {
                         val actionJson = JSONObject(actionDetails)
-                        val actionType =
-                            actionJson.optString("type", Constants.ACTION_SEND_NOTIFICATION)
+                        val actionType = actionJson.optString("type", Constants.ACTION_SEND_NOTIFICATION)
                         putExtra("action_type", actionType)
 
                         when (actionType) {

@@ -1,228 +1,258 @@
 package com.example.autoflow.data
 
-import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.lifecycle.LiveData
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
-class WorkflowRepository(context: Context) {
+/**
+ * Repository class for managing WorkflowEntity database operations
+ * Provides async operations with callbacks for UI integration
+ */
+class WorkflowRepository(private val database: AppDatabase) {
 
-    private val workflowDao: WorkflowDao = AppDatabase.getDatabase(context).workflowDao()
+    private val workflowDao: WorkflowDao = database.workflowDao()
+    private val executorService: ExecutorService = Executors.newSingleThreadExecutor()
+    private val mainThreadHandler = Handler(Looper.getMainLooper())
 
-    companion object {
-        private const val TAG = "WorkflowRepository"
+    // ========== LIVEDATA QUERIES ==========
+
+    val allWorkflows: LiveData<List<WorkflowEntity>> = workflowDao.getAllWorkflows()
+    val enabledWorkflows: LiveData<List<WorkflowEntity>> = workflowDao.getEnabledWorkflows()
+
+    // ========== SYNCHRONOUS METHODS ==========
+
+    /**
+     * Get a single workflow entity for action execution (synchronous)
+     */
+    fun getWorkflowEntityForActionExecution(workflowId: Long): WorkflowEntity? {
+        return workflowDao.getByIdSync(workflowId)
     }
 
-    //  LIVEDATA (Automatic background) 
+    // ========== INSERT OPERATIONS ==========
 
-    fun getAllWorkflows(): LiveData<List<WorkflowEntity>> {
-        return workflowDao.getAllWorkflows()
-    }
-
-    //  SUSPEND FUNCTIONS (For coroutines) 
-
-    suspend fun insert(workflow: WorkflowEntity): Long = withContext(Dispatchers.IO) {
-        try {
-            val id = workflowDao.insert(workflow)
-            Log.d(TAG, "✅ Inserted workflow with ID: $id")
-            id
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Insert failed", e)
-            throw e
+    fun insert(workflowEntity: WorkflowEntity) {
+        executorService.execute {
+            workflowDao.insert(workflowEntity)
         }
     }
 
-    suspend fun update(workflow: WorkflowEntity): Int = withContext(Dispatchers.IO) {
-        try {
-            val rows = workflowDao.update(workflow)
-            Log.d(TAG, "✅ Updated $rows workflow(s)")
-            rows
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Update failed", e)
-            throw e
-        }
-    }
-
-    suspend fun delete(workflowId: Long): Int = withContext(Dispatchers.IO) {
-        try {
-            val rows = workflowDao.deleteById(workflowId)
-            Log.d(TAG, "✅ Deleted workflow ID: $workflowId")
-            rows
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Delete failed", e)
-            throw e
-        }
-    }
-
-    suspend fun deleteAll() = withContext(Dispatchers.IO) {
-        try {
-            workflowDao.deleteAll()
-            Log.d(TAG, "✅ Deleted all workflows")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Delete all failed", e)
-            throw e
-        }
-    }
-
-    suspend fun getById(id: Long): WorkflowEntity? = withContext(Dispatchers.IO) {
-        workflowDao.getById(id)
-    }
-
-    suspend fun updateEnabled(workflowId: Long, enabled: Boolean): Int =
-        withContext(Dispatchers.IO) {
-            try {
-                val rows = workflowDao.updateEnabled(workflowId, enabled)
-                Log.d(TAG, "✅ Updated enabled for workflow $workflowId: $enabled")
-                rows
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Update enabled failed", e)
-                throw e
-            }
-        }
-
-    suspend fun getEnabledWorkflows(): List<WorkflowEntity> = withContext(Dispatchers.IO) {
-        workflowDao.getEnabledWorkflows()
-    }
-
-    suspend fun getCount(): Int = withContext(Dispatchers.IO) {
-        workflowDao.getCount()
-    }
-
-    //  NON-SUSPEND (For synchronous access) 
-
-    // For GeofenceReceiver and other places that can't use coroutines
-    fun getByIdSync(id: Long): WorkflowEntity? {
-        return workflowDao.getByIdSync(id)
-    }
-
-    //  CALLBACK-BASED (For Java compatibility) 
-
-    fun insertWithCallback(workflow: WorkflowEntity, callback: InsertCallback) {
-        CoroutineScope(Dispatchers.IO).launch {  // ✅ Now works!
+    fun insert(workflow: WorkflowEntity, callback: InsertCallback) {
+        Thread {
             try {
                 val id = workflowDao.insert(workflow)
-                Log.d(TAG, "✅ Inserted workflow with ID: $id")
-                withContext(Dispatchers.Main) {
+                Log.d("WorkflowRepository", "✅ Inserted workflow with ID: $id")
+                mainThreadHandler.post {
                     callback.onInsertComplete(id)
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Insert failed", e)
-                withContext(Dispatchers.Main) {
+                Log.e("WorkflowRepository", "❌ Insert failed", e)
+                mainThreadHandler.post {
                     callback.onInsertError(e.message ?: "Unknown error")
                 }
             }
+        }.start()
+    }
+
+    // ========== UPDATE OPERATIONS ==========
+
+    fun update(workflowEntity: WorkflowEntity) {
+        executorService.execute {
+            workflowDao.update(workflowEntity)
         }
     }
 
-    fun updateWithCallback(workflow: WorkflowEntity, callback: UpdateCallback?) {
-        CoroutineScope(Dispatchers.IO).launch {
+    fun update(workflow: WorkflowEntity, callback: UpdateCallback?) {
+        executorService.execute {
             try {
-                val rows = workflowDao.update(workflow)
-                withContext(Dispatchers.Main) {
-                    callback?.onUpdateComplete(rows > 0)
+                val rowsUpdated = workflowDao.update(workflow)
+                callback?.let {
+                    mainThreadHandler.post {
+                        it.onUpdateComplete(rowsUpdated > 0)
+                    }
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    callback?.onUpdateError(e.message ?: "Unknown error")
+                callback?.let {
+                    mainThreadHandler.post {
+                        it.onUpdateError(e.message ?: "Unknown error")
+                    }
                 }
             }
         }
     }
 
-    fun deleteWithCallback(workflowId: Long, callback: DeleteCallback?) {
-        CoroutineScope(Dispatchers.IO).launch {
+    fun updateWorkflowEnabled(workflowId: Long, enabled: Boolean) {
+        executorService.execute {
+            workflowDao.updateEnabled(workflowId, enabled)
+        }
+    }
+
+    fun updateWorkflowEnabled(workflowId: Long, enabled: Boolean, callback: UpdateCallback?) {
+        executorService.execute {
             try {
-                val rows = workflowDao.deleteById(workflowId)
-                withContext(Dispatchers.Main) {
-                    callback?.onDeleteComplete(rows > 0)
+                val updatedRows = workflowDao.updateEnabled(workflowId, enabled)
+                callback?.let {
+                    mainThreadHandler.post {
+                        it.onUpdateComplete(updatedRows > 0)
+                    }
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    callback?.onDeleteError(e.message ?: "Unknown error")
+                callback?.let {
+                    mainThreadHandler.post {
+                        it.onUpdateError(e.message ?: "Unknown error")
+                    }
                 }
             }
         }
     }
 
-    fun updateEnabledWithCallback(workflowId: Long, enabled: Boolean, callback: UpdateCallback?) {
-        CoroutineScope(Dispatchers.IO).launch {
+    // ========== DELETE OPERATIONS ==========
+
+    fun delete(workflowId: Long) {
+        executorService.execute {
+            workflowDao.deleteById(workflowId)
+        }
+    }
+
+    fun delete(workflowId: Long, callback: DeleteCallback?) {
+        executorService.execute {
             try {
-                val rows = workflowDao.updateEnabled(workflowId, enabled)
-                withContext(Dispatchers.Main) {
-                    callback?.onUpdateComplete(rows > 0)
+                val deletedRows = workflowDao.deleteById(workflowId)
+                callback?.let {
+                    mainThreadHandler.post {
+                        it.onDeleteComplete(deletedRows > 0)
+                    }
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    callback?.onUpdateError(e.message ?: "Unknown error")
+                callback?.let {
+                    mainThreadHandler.post {
+                        it.onDeleteError(e.message ?: "Unknown error")
+                    }
                 }
             }
         }
     }
 
-    fun getAllWorkflowsWithCallback(callback: WorkflowCallback) {
-        CoroutineScope(Dispatchers.IO).launch {
+    fun delete(workflowEntity: WorkflowEntity) {
+        executorService.execute {
+            workflowDao.delete(workflowEntity)
+        }
+    }
+
+    fun deleteAll() {
+        executorService.execute {
+            workflowDao.deleteAll()
+        }
+    }
+
+    fun deleteAll(callback: DeleteCallback?) {
+        executorService.execute {
             try {
-                val workflows = workflowDao.getAllWorkflowsSync()
-                withContext(Dispatchers.Main) {
-                    callback.onWorkflowsLoaded(workflows.toMutableList())
+                workflowDao.deleteAll()
+                callback?.let {
+                    mainThreadHandler.post {
+                        it.onDeleteComplete(true)
+                    }
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
+                callback?.let {
+                    mainThreadHandler.post {
+                        it.onDeleteError(e.message ?: "Unknown error")
+                    }
+                }
+            }
+        }
+    }
+
+    // ========== QUERY OPERATIONS ==========
+
+    /**
+     * Get all workflows with callback
+     * ✅ FIXED: Use getAllWorkflowsSync() function instead of property
+     */
+    fun getAllWorkflows(callback: WorkflowCallback) {
+        executorService.execute {
+            try {
+                val workflowsList = workflowDao.getAllWorkflowsSync()
+                mainThreadHandler.post {
+                    callback.onWorkflowsLoaded(workflowsList.toMutableList())
+                }
+            } catch (e: Exception) {
+                mainThreadHandler.post {
                     callback.onWorkflowsError(e.message ?: "Unknown error")
                 }
             }
         }
     }
 
-    fun getByIdWithCallback(workflowId: Long, callback: WorkflowByIdCallback) {
-        CoroutineScope(Dispatchers.IO).launch {
+    fun getWorkflowById(workflowId: Long, callback: WorkflowByIdCallback) {
+        executorService.execute {
             try {
-                val workflow = workflowDao.getById(workflowId)
-                withContext(Dispatchers.Main) {
+                val workflow = workflowDao.getByIdSync(workflowId)
+                mainThreadHandler.post {
                     callback.onWorkflowLoaded(workflow)
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
+                mainThreadHandler.post {
                     callback.onWorkflowError(e.message ?: "Unknown error")
                 }
             }
         }
     }
 
-    fun getEnabledWorkflowsWithCallback(callback: WorkflowCallback) {
-        CoroutineScope(Dispatchers.IO).launch {
+    fun getEnabledWorkflows(callback: WorkflowCallback) {
+        executorService.execute {
             try {
-                val workflows = workflowDao.getEnabledWorkflows()
-                withContext(Dispatchers.Main) {
-                    callback.onWorkflowsLoaded(workflows.toMutableList())
+                val workflowsList = workflowDao.getEnabledWorkflowsSync()
+                mainThreadHandler.post {
+                    callback.onWorkflowsLoaded(workflowsList.toMutableList())
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
+                mainThreadHandler.post {
                     callback.onWorkflowsError(e.message ?: "Unknown error")
                 }
             }
         }
     }
 
-    fun getCountWithCallback(callback: CountCallback) {
-        CoroutineScope(Dispatchers.IO).launch {
+    fun getWorkflowCount(callback: CountCallback) {
+        executorService.execute {
             try {
                 val count = workflowDao.getCount()
-                withContext(Dispatchers.Main) {
+                mainThreadHandler.post {
                     callback.onCountLoaded(count)
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
+                mainThreadHandler.post {
                     callback.onCountError(e.message ?: "Unknown error")
                 }
             }
         }
     }
 
-    //  CALLBACK INTERFACES 
+    // ========== CLEANUP ==========
+
+    fun cleanup() {
+        if (!executorService.isShutdown) {
+            executorService.shutdown()
+        }
+    }
+
+    // ========== CALLBACK INTERFACES ==========
+
+    interface WorkflowCallback {
+        fun onWorkflowsLoaded(workflows: MutableList<WorkflowEntity>)
+        fun onWorkflowsError(error: String) {}
+    }
+
+    interface WorkflowByIdCallback {
+        fun onWorkflowLoaded(workflow: WorkflowEntity?)
+        fun onWorkflowError(error: String) {}
+    }
 
     interface InsertCallback {
         fun onInsertComplete(insertedId: Long)
@@ -239,18 +269,15 @@ class WorkflowRepository(context: Context) {
         fun onDeleteError(error: String) {}
     }
 
-    interface WorkflowCallback {
-        fun onWorkflowsLoaded(workflows: MutableList<WorkflowEntity>)
-        fun onWorkflowsError(error: String) {}
-    }
-
-    interface WorkflowByIdCallback {
-        fun onWorkflowLoaded(workflow: WorkflowEntity?)
-        fun onWorkflowError(error: String) {}
-    }
-
     interface CountCallback {
         fun onCountLoaded(count: Int)
         fun onCountError(error: String) {}
     }
+
+    suspend fun insertSuspend(workflow: WorkflowEntity): Long {
+        return withContext(Dispatchers.IO) {
+            workflowDao.insert(workflow)
+        }
+    }
+
 }

@@ -1,44 +1,62 @@
 package com.example.autoflow.data
 
 import androidx.lifecycle.LiveData
-import androidx.room.*
+import androidx.room.Dao
+import androidx.room.Delete
+import androidx.room.Insert
+import androidx.room.Query
+import androidx.room.Update
 
 @Dao
 interface WorkflowDao {
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(workflow: WorkflowEntity): Long  //  suspend + non-nullable
+    // ========== INSERT ==========
+    @Insert
+    fun insert(workflowEntity: WorkflowEntity): Long
 
+    @Insert
+    fun insertAll(vararg workflows: WorkflowEntity): List<Long>
+
+    // ========== UPDATE ==========
     @Update
-    suspend fun update(workflow: WorkflowEntity): Int
-
-    @Delete
-    suspend fun delete(workflow: WorkflowEntity)
-
-    @Query("DELETE FROM workflows WHERE id = :workflowId")
-    suspend fun deleteById(workflowId: Long): Int
-
-    @Query("DELETE FROM workflows")
-    suspend fun deleteAll()
-
-    @Query("SELECT * FROM workflows")
-    fun getAllWorkflows(): LiveData<List<WorkflowEntity>>  //  LiveData for UI
-
-    @Query("SELECT * FROM workflows")
-    suspend fun getAllWorkflowsSync(): List<WorkflowEntity>  //  For background
-
-    @Query("SELECT * FROM workflows WHERE is_enabled = 1")
-    suspend fun getEnabledWorkflows(): List<WorkflowEntity>
-
-    @Query("SELECT * FROM workflows WHERE id = :id")
-    suspend fun getById(id: Long): WorkflowEntity?  //  Nullable only here
-
-    @Query("SELECT * FROM workflows WHERE id = :id")
-    fun getByIdSync(id: Long): WorkflowEntity?  //  For non-suspend calls
+    fun update(workflowEntity: WorkflowEntity): Int
 
     @Query("UPDATE workflows SET is_enabled = :enabled WHERE id = :workflowId")
-    suspend fun updateEnabled(workflowId: Long, enabled: Boolean): Int
+    fun updateEnabled(workflowId: Long, enabled: Boolean): Int
+
+    // ========== DELETE ==========
+    @Delete
+    fun delete(workflowEntity: WorkflowEntity)
+
+    @Query("DELETE FROM workflows WHERE id = :workflowId")
+    fun deleteById(workflowId: Long): Int
+
+    @Query("DELETE FROM workflows")
+    fun deleteAll()
+
+    // ========== SYNCHRONOUS QUERIES (NO @JvmField!) ==========
+    @Query("SELECT * FROM workflows")
+    fun getAllWorkflowsSync(): List<WorkflowEntity>
+
+    @Query("SELECT * FROM workflows WHERE is_enabled = 1")
+    fun getEnabledWorkflowsSync(): List<WorkflowEntity>
+
+    @Query("SELECT * FROM workflows WHERE id = :id")
+    fun getByIdSync(id: Long): WorkflowEntity?
 
     @Query("SELECT COUNT(*) FROM workflows")
-    suspend fun getCount(): Int
+    fun getCount(): Int
+
+    // ========== LIVEDATA QUERIES ==========
+    @Query("SELECT * FROM workflows")
+    fun getAllWorkflows(): LiveData<List<WorkflowEntity>>
+
+    @Query("SELECT * FROM workflows WHERE is_enabled = 1")
+    fun getEnabledWorkflows(): LiveData<List<WorkflowEntity>>
+
+    @Query("SELECT * FROM workflows WHERE id = :id")
+    fun getById(id: Long): LiveData<WorkflowEntity>
+
+    @Query("SELECT * FROM workflows WHERE workflow_name LIKE :query")
+    fun search(query: String): List<WorkflowEntity>
 }

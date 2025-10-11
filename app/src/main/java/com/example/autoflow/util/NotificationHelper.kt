@@ -1,15 +1,16 @@
 package com.example.autoflow.util
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import com.example.autoflow.R
 
 /**
  * Helper class for managing notifications
@@ -24,10 +25,14 @@ object NotificationHelper {
     private const val CHANNEL_ID_DEFAULT = "autoflow_default"
     private const val CHANNEL_ID_HIGH_PRIORITY = "autoflow_high_priority"
     private const val CHANNEL_ID_LOW_PRIORITY = "autoflow_low_priority"
+    private const val CHANNEL_ID_SCRIPT = "autoflow_script"
+    private const val CHANNEL_ID_ERROR = "autoflow_error"
 
     private const val CHANNEL_NAME_DEFAULT = "AutoFlow Notifications"
     private const val CHANNEL_NAME_HIGH = "Important AutoFlow Alerts"
     private const val CHANNEL_NAME_LOW = "AutoFlow Updates"
+    private const val CHANNEL_NAME_SCRIPT = "Script Notifications"
+    private const val CHANNEL_NAME_ERROR = "Error Notifications"
 
     /**
      * Create notification channels (Android 8.0+)
@@ -70,8 +75,29 @@ object NotificationHelper {
                 enableLights(false)
             }
 
+            // Script notification channel
+            val scriptChannel = NotificationChannel(
+                CHANNEL_ID_SCRIPT,
+                CHANNEL_NAME_SCRIPT,
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Notifications from user scripts"
+                enableVibration(true)
+            }
+
+            // Error notification channel
+            val errorChannel = NotificationChannel(
+                CHANNEL_ID_ERROR,
+                CHANNEL_NAME_ERROR,
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Error notifications"
+                enableVibration(true)
+                enableLights(true)
+            }
+
             notificationManager.createNotificationChannels(
-                listOf(defaultChannel, highPriorityChannel, lowPriorityChannel)
+                listOf(defaultChannel, highPriorityChannel, lowPriorityChannel, scriptChannel, errorChannel)
             )
 
             Log.d(TAG, "✅ Notification channels created")
@@ -88,7 +114,7 @@ object NotificationHelper {
         priority: String = Constants.NOTIFICATION_PRIORITY_NORMAL,
         notificationId: Int = DEFAULT_NOTIFICATION_ID
     ) {
-        if (!PermissionUtils.hasNotificationPermission(context)) {
+        if (!hasNotificationPermission(context)) {
             Log.w(TAG, "⚠️ Notification permission not granted")
             return
         }
@@ -117,11 +143,13 @@ object NotificationHelper {
                 builder.setContentIntent(pendingIntent)
             }
 
-            NotificationManagerCompat.from(context).notify(notificationId, builder.build())
-            Log.d(TAG, "✅ Notification sent: $title")
+            try {
+                NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+                Log.d(TAG, "✅ Notification sent: $title")
+            } catch (e: SecurityException) {
+                Log.e(TAG, "❌ SecurityException: Missing notification permission", e)
+            }
 
-        } catch (e: SecurityException) {
-            Log.e(TAG, "❌ SecurityException sending notification", e)
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error sending notification", e)
         }
@@ -139,7 +167,7 @@ object NotificationHelper {
         priority: String = Constants.NOTIFICATION_PRIORITY_NORMAL,
         notificationId: Int = DEFAULT_NOTIFICATION_ID
     ) {
-        if (!PermissionUtils.hasNotificationPermission(context)) {
+        if (!hasNotificationPermission(context)) {
             Log.w(TAG, "⚠️ Notification permission not granted")
             return
         }
@@ -157,13 +185,85 @@ object NotificationHelper {
                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))
                 .addAction(0, actionTitle, actionIntent)
 
-            NotificationManagerCompat.from(context).notify(notificationId, builder.build())
-            Log.d(TAG, "✅ Notification with action sent: $title")
+            try {
+                NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+                Log.d(TAG, "✅ Notification with action sent: $title")
+            } catch (e: SecurityException) {
+                Log.e(TAG, "❌ SecurityException: Missing notification permission", e)
+            }
 
-        } catch (e: SecurityException) {
-            Log.e(TAG, "❌ SecurityException sending notification", e)
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error sending notification", e)
+        }
+    }
+
+    /**
+     * Send script notification (for user scripts)
+     */
+    fun sendScriptNotification(
+        context: Context,
+        title: String,
+        message: String,
+        notificationId: Int = (System.currentTimeMillis() % 10000).toInt()
+    ) {
+        if (!hasNotificationPermission(context)) {
+            Log.w(TAG, "⚠️ Notification permission not granted")
+            return
+        }
+
+        try {
+            val builder = NotificationCompat.Builder(context, CHANNEL_ID_SCRIPT)
+                .setSmallIcon(getNotificationIcon())
+                .setContentTitle(title)
+                .setContentText(message)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setAutoCancel(true)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+
+            try {
+                NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+                Log.d(TAG, "✅ Script notification sent: $title")
+            } catch (e: SecurityException) {
+                Log.e(TAG, "❌ SecurityException: Missing notification permission", e)
+            }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error sending script notification", e)
+        }
+    }
+
+    /**
+     * Send error notification
+     */
+    fun sendErrorNotification(
+        context: Context,
+        title: String,
+        message: String,
+        notificationId: Int = (System.currentTimeMillis() % 10000).toInt()
+    ) {
+        if (!hasNotificationPermission(context)) {
+            Log.w(TAG, "⚠️ Notification permission not granted")
+            return
+        }
+
+        try {
+            val builder = NotificationCompat.Builder(context, CHANNEL_ID_ERROR)
+                .setSmallIcon(android.R.drawable.stat_notify_error)
+                .setContentTitle(title)
+                .setContentText(message)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+
+            try {
+                NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+                Log.d(TAG, "✅ Error notification sent: $title")
+            } catch (e: SecurityException) {
+                Log.e(TAG, "❌ SecurityException: Missing notification permission", e)
+            }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error sending error notification", e)
         }
     }
 
@@ -178,7 +278,7 @@ object NotificationHelper {
         maxProgress: Int = 100,
         notificationId: Int = DEFAULT_NOTIFICATION_ID
     ) {
-        if (!PermissionUtils.hasNotificationPermission(context)) return
+        if (!hasNotificationPermission(context)) return
 
         try {
             val builder = NotificationCompat.Builder(context, CHANNEL_ID_DEFAULT)
@@ -189,7 +289,11 @@ object NotificationHelper {
                 .setProgress(maxProgress, progress, false)
                 .setOngoing(true)
 
-            NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+            try {
+                NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+            } catch (e: SecurityException) {
+                Log.e(TAG, "❌ SecurityException: Missing notification permission", e)
+            }
 
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error sending progress notification", e)
@@ -227,7 +331,7 @@ object NotificationHelper {
         return NotificationManagerCompat.from(context).areNotificationsEnabled()
     }
 
-    // ========== PRIVATE HELPER METHODS ==========
+    //  PRIVATE HELPER METHODS 
 
     private fun getChannelId(priority: String): String {
         return when (priority.uppercase()) {
@@ -249,5 +353,16 @@ object NotificationHelper {
         // Return your app's notification icon
         // Replace with actual resource ID
         return android.R.drawable.ic_dialog_info // Placeholder
+    }
+
+    private fun hasNotificationPermission(context: Context): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
     }
 }

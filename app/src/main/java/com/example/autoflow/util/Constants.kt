@@ -1,157 +1,228 @@
 package com.example.autoflow.util
 
 /**
- * Application-wide constants for AutoFlow
- * Centralized configuration for triggers, actions, and app behavior
+ * Central constants repository for AutoFlow automation app
+ * Organized by category for better maintainability
  */
 object Constants {
 
-    // ========== APP INFO ==========
-    const val APP_NAME = "AutoFlow"
-    const val NOTIFICATION_CHANNEL_ID = "autoflow_channel"
-    const val NOTIFICATION_CHANNEL_NAME = "AutoFlow Automations"
+    const val ACTION_BLOCK_APPS = "BLOCK_APPS"
 
-    // ========== TRIGGER TYPES ==========
-    const val TRIGGER_LOCATION = "Location"
-    const val TRIGGER_TIME = "Time"
-    const val TRIGGER_WIFI = "WiFi"
-    const val TRIGGER_BLE = "Bluetooth Device"
-    const val TRIGGER_APP_LAUNCH = "App Launch"
-    const val TRIGGER_BATTERY_LEVEL = "Battery Level"
-    const val TRIGGER_CHARGING_STATE = "Charging State"
-    const val TRIGGER_HEADPHONE_CONNECTION = "Headphone Connection"
+    //  TRIGGER TYPES 
+    const val TRIGGER_TIME = "TIME"
+    const val TRIGGER_BLE = "BLE"
+    const val TRIGGER_LOCATION = "LOCATION"
+    const val TRIGGER_WIFI = "WIFI" // Standardized name (was TRIGGER_WIFI_STATE)
+    const val TRIGGER_APP_LAUNCH = "APP_LAUNCH"
+    const val TRIGGER_BATTERY_LEVEL = "BATTERY_LEVEL"
+    const val TRIGGER_CHARGING_STATE = "CHARGING_STATE"
+    const val TRIGGER_HEADPHONE_CONNECTION = "HEADPHONE_CONNECTION"
 
-    // ========== ACTION TYPES ==========
-    const val ACTION_SEND_NOTIFICATION = "Send Notification"
-    const val ACTION_TOGGLE_WIFI = "Toggle WiFi"
-    const val ACTION_TOGGLE_BLUETOOTH = "Toggle Bluetooth"
-    const val ACTION_SET_SOUND_MODE = "Set Sound Mode"
-    const val ACTION_RUN_SCRIPT = "Run Script"
-    const val ACTION_OPEN_APP = "Open App"
-    const val ACTION_SEND_SMS = "Send SMS"
-    const val ACTION_ADJUST_BRIGHTNESS = "Adjust Brightness"
-    const val ACTION_ADJUST_VOLUME = "Adjust Volume"
+    // Action type for sound mode
+    const val ACTION_SET_SOUND_MODE = "SET_SOUND_MODE"
 
-    // ========== SOUND MODES ==========
-    const val SOUND_MODE_NORMAL = "Normal"
-    const val SOUND_MODE_SILENT = "Silent"
-    const val SOUND_MODE_VIBRATE = "Vibrate"
-    const val SOUND_MODE_DND = "DND"
+    // Sound mode values
+    const val SOUND_MODE_RING = "ring"
+    const val SOUND_MODE_VIBRATE = "vibrate"
+    const val SOUND_MODE_SILENT = "silent"
 
-    // ========== WIFI STATES ==========
+    // DND modes (require notification policy access)
+    const val SOUND_MODE_DND_NONE = "dnd_none"       // Total silence
+    const val SOUND_MODE_DND_PRIORITY = "dnd_priority"
+    const val SOUND_MODE_DND_ALARMS = "dnd_alarms"
+    const val SOUND_MODE_DND_ALL = "dnd_all"         // Turn off DND
+
+
+    //  ACTION TYPES 
+    const val ACTION_SEND_NOTIFICATION = "SEND_NOTIFICATION"
+    const val ACTION_TOGGLE_WIFI = "TOGGLE_WIFI"
+    const val ACTION_TOGGLE_BLUETOOTH = "TOGGLE_BLUETOOTH"
+    const val ACTION_TOGGLE_SETTINGS = "TOGGLE_SETTINGS"
+    const val ACTION_RUN_SCRIPT = "RUN_SCRIPT"
+    const val ACTION_LAUNCH_APP = "LAUNCH_APP"
+    const val ACTION_SEND_SMS = "SEND_SMS"
+    const val ACTION_PLAY_SOUND = "PLAY_SOUND"
+    const val ACTION_SET_VOLUME = "SET_VOLUME"
+    const val ACTION_TOGGLE_FLASHLIGHT = "TOGGLE_FLASHLIGHT"
+
+    //  WORKER INPUT KEYS 
+    const val KEY_WORKFLOW_ID = "workflow_id"
+    const val KEY_TRIGGER_TYPE = "trigger_type"
+    const val KEY_TRIGGER_VALUE = "trigger_value"
+    const val KEY_ACTION_TYPE = "action_type"
+    const val KEY_ACTION_PARAMETERS = "action_parameters"
+    const val KEY_BLE_DEVICE_ADDRESS = "ble_device_address"
+    const val KEY_BLE_DEVICE_NAME = "ble_device_name"
+    const val KEY_TIME_TRIGGER = "time_trigger"
+    const val KEY_LOCATION_LAT = "location_latitude"
+    const val KEY_LOCATION_LNG = "location_longitude"
+    const val KEY_LOCATION_RADIUS = "location_radius"
+
+    //  JSON PARAMETER KEYS 
+    // Notification parameters
+    const val JSON_KEY_NOTIFICATION_TITLE = "notificationTitle"
+    const val JSON_KEY_NOTIFICATION_MESSAGE = "notificationMessage"
+    const val JSON_KEY_NOTIFICATION_PRIORITY = "notificationPriority"
+    const val JSON_KEY_NOTIFICATION_CHANNEL_ID = "notificationChannelId"
+    const val JSON_KEY_NOTIFICATION_ICON = "notificationIcon"
+
+    // WiFi parameters
+    const val JSON_KEY_WIFI_TARGET_STATE = "wifiTargetState"
+    const val JSON_KEY_WIFI_SSID = "wifiSsid"
+    const val JSON_KEY_WIFI_SECURITY_TYPE = "wifiSecurityType"
+
+    // Settings toggle parameters
+    const val JSON_KEY_SETTING_TO_TOGGLE = "settingToToggle"
+    const val JSON_KEY_SETTING_TARGET_STATE = "settingTargetState"
+
+    // Script parameters
+    const val JSON_KEY_SCRIPT_CONTENT = "scriptContent"
+    const val JSON_KEY_SCRIPT_LANGUAGE = "scriptLanguage"
+    const val JSON_KEY_SCRIPT_TIMEOUT = "scriptTimeout"
+
+    // App launch parameters
+    const val JSON_KEY_APP_PACKAGE_NAME = "appPackageName"
+    const val JSON_KEY_APP_CLASS_NAME = "appClassName"
+
+    // Location parameters
+    const val JSON_KEY_LOCATION_NAME = "locationName"
+    const val JSON_KEY_LOCATION_COORDINATES = "locationCoordinates"
+    const val JSON_KEY_LOCATION_RADIUS = "locationRadius"
+    const val JSON_KEY_LOCATION_ENTRY_EXIT = "locationEntryExit"
+
+    //  NOTIFICATION CONSTANTS 
+    const val NOTIFICATION_CHANNEL_ID_DEFAULT = "autoflow_default"
+    const val NOTIFICATION_CHANNEL_ID_HIGH_PRIORITY = "autoflow_high_priority"
+    const val NOTIFICATION_CHANNEL_ID_TRIGGERS = "autoflow_triggers"
+    const val NOTIFICATION_CHANNEL_NAME_DEFAULT = "AutoFlow Notifications"
+    const val NOTIFICATION_CHANNEL_NAME_HIGH_PRIORITY = "AutoFlow High Priority"
+    const val NOTIFICATION_CHANNEL_NAME_TRIGGERS = "AutoFlow Triggers"
+
+    // Notification priorities
+    const val NOTIFICATION_PRIORITY_LOW = "Low"
+    const val NOTIFICATION_PRIORITY_NORMAL = "Normal"
+    const val NOTIFICATION_PRIORITY_HIGH = "High"
+    const val NOTIFICATION_PRIORITY_MAX = "Max"
+
+    //  WIFI CONSTANTS 
     const val WIFI_STATE_ON = "ON"
     const val WIFI_STATE_OFF = "OFF"
     const val WIFI_STATE_CONNECTED = "CONNECTED"
     const val WIFI_STATE_DISCONNECTED = "DISCONNECTED"
 
-    // ========== BLUETOOTH STATES ==========
+    //  BLUETOOTH CONSTANTS 
     const val BLUETOOTH_STATE_ON = "ON"
     const val BLUETOOTH_STATE_OFF = "OFF"
     const val BLUETOOTH_STATE_CONNECTED = "CONNECTED"
     const val BLUETOOTH_STATE_DISCONNECTED = "DISCONNECTED"
 
-    // ========== LOCATION CONSTANTS ==========
-    const val LOCATION_MIN_RADIUS = 50f // meters
-    const val LOCATION_MAX_RADIUS = 5000f // meters
-    const val LOCATION_DEFAULT_RADIUS = 100f // meters
+    //  LOCATION CONSTANTS 
+    const val LOCATION_TRIGGER_ENTRY = "Entry"
+    const val LOCATION_TRIGGER_EXIT = "Exit"
+    const val LOCATION_TRIGGER_BOTH = "Both"
 
-    // ========== TIME CONSTANTS ==========
-    const val TIME_WINDOW_MS = 60000L // 1 minute
-    const val MAX_FUTURE_TIME_MS = 31536000000L // 1 year
+    // Default location radius in meters
+    const val LOCATION_DEFAULT_RADIUS = 100f
+    const val LOCATION_MIN_RADIUS = 20f
+    const val LOCATION_MAX_RADIUS = 1000f
 
-    // ========== BATTERY CONSTANTS ==========
-    const val BATTERY_MIN_LEVEL = 0
-    const val BATTERY_MAX_LEVEL = 100
+    //  TIME CONSTANTS 
+    // Time window for time-based triggers (1 minute in milliseconds)
+    const val TIME_WINDOW_MS = 60 * 1000L
+    // Default trigger check interval (5 minutes)
+    const val TRIGGER_CHECK_INTERVAL_MS = 5 * 60 * 1000L
+    // Maximum allowed future time for triggers (24 hours)
+    const val MAX_FUTURE_TIME_MS = 24 * 60 * 60 * 1000L
 
-    // ========== JSON KEYS ==========
+    //  SYSTEM SETTINGS CONSTANTS 
+    const val SETTING_WIFI = "WiFi"
+    const val SETTING_BLUETOOTH = "Bluetooth"
+    const val SETTING_LOCATION = "Location"
+    const val SETTING_AIRPLANE_MODE = "AirplaneMode"
+    const val SETTING_DO_NOT_DISTURB = "DoNotDisturb"
+    const val SETTING_AUTO_ROTATE = "AutoRotate"
+    const val SETTING_FLASHLIGHT = "Flashlight"
+    const val SETTING_MOBILE_DATA = "MobileData"
 
-    // Location
-    const val JSON_KEY_LOCATION_COORDINATES = "coordinates"
-    const val JSON_KEY_LOCATION_NAME = "locationName"
-    const val JSON_KEY_LOCATION_RADIUS = "radius"
-    const val JSON_KEY_LOCATION_TRIGGER_ON = "triggerOn"
+    //  DATABASE CONSTANTS 
+    const val DATABASE_NAME = "autoflow_database"
+    const val DATABASE_VERSION = 1
+    const val TABLE_WORKFLOWS = "workflows"
 
-    // WiFi
-    const val JSON_KEY_WIFI_SSID = "ssid"
-    const val JSON_KEY_WIFI_TARGET_STATE = "state"
+    //  SHARED PREFERENCES KEYS 
+    const val PREF_FILE_NAME = "autoflow_preferences"
+    const val PREF_FIRST_RUN = "pref_first_run"
+    const val PREF_NOTIFICATIONS_ENABLED = "pref_notifications_enabled"
+    const val PREF_LOCATION_UPDATES_ENABLED = "pref_location_updates_enabled"
+    const val PREF_BLUETOOTH_SCAN_ENABLED = "pref_bluetooth_scan_enabled"
+    const val PREF_TRIGGER_CHECK_INTERVAL = "pref_trigger_check_interval"
+    const val PREF_DEBUG_MODE_ENABLED = "pref_debug_mode_enabled"
 
-    // BLE
-    const val JSON_KEY_BLE_DEVICE_ADDRESS = "deviceAddress"
-    const val JSON_KEY_BLE_DEVICE_NAME = "deviceName"
+    //  INTENT ACTION CONSTANTS 
+    const val ACTION_TRIGGER_FIRED = "com.example.autoflow.TRIGGER_FIRED"
+    const val ACTION_WORKFLOW_EXECUTED = "com.example.autoflow.WORKFLOW_EXECUTED"
+    const val ACTION_PERMISSION_GRANTED = "com.example.autoflow.PERMISSION_GRANTED"
+    const val ACTION_PERMISSION_DENIED = "com.example.autoflow.PERMISSION_DENIED"
 
-    // App Launch
-    const val JSON_KEY_APP_PACKAGE_NAME = "packageName"
-    const val JSON_KEY_APP_NAME = "appName"
+    //  INTENT EXTRA KEYS 
+    const val EXTRA_WORKFLOW_ID = "extra_workflow_id"
+    const val EXTRA_TRIGGER_TYPE = "extra_trigger_type"
+    const val EXTRA_TRIGGER_VALUE = "extra_trigger_value"
+    const val EXTRA_EXECUTION_SUCCESS = "extra_execution_success"
+    const val EXTRA_ERROR_MESSAGE = "extra_error_message"
 
-    // Action
-    const val JSON_KEY_ACTION_TYPE = "type"
-    const val JSON_KEY_ACTION_VALUE = "value"
-    const val JSON_KEY_ACTION_TITLE = "title"
-    const val JSON_KEY_ACTION_MESSAGE = "message"
-    const val JSON_KEY_ACTION_PRIORITY = "priority"
-
-    // ========== WORKER KEYS ==========
-    const val KEY_WORKFLOW_ID = "workflow_id"
-    const val KEY_TRIGGER_TYPE = "trigger_type"
-    const val KEY_TIME_TRIGGER = "time_trigger"
-    const val KEY_BLE_DEVICE_ADDRESS = "ble_device_address"
-    const val KEY_LOCATION_LAT = "location_lat"
-    const val KEY_LOCATION_LNG = "location_lng"
-    const val KEY_LOCATION_RADIUS = "location_radius"
-
-    // ========== PREFERENCES ==========
-    const val PREF_NAME = "autoflow_prefs"
-    const val PREF_FIRST_LAUNCH = "first_launch"
-    const val PREF_NOTIFICATIONS_ENABLED = "notifications_enabled"
-
-    // ========== NOTIFICATION PRIORITIES ==========
-    const val NOTIFICATION_PRIORITY_LOW = "Low"
-    const val NOTIFICATION_PRIORITY_NORMAL = "Normal"
-    const val NOTIFICATION_PRIORITY_HIGH = "High"
-
-    // ========== VALIDATION ==========
-    const val MAX_WORKFLOW_NAME_LENGTH = 50
-    const val MIN_WORKFLOW_NAME_LENGTH = 1
+    //  VALIDATION CONSTANTS 
+    const val MAX_WORKFLOW_NAME_LENGTH = 100
     const val MAX_NOTIFICATION_TITLE_LENGTH = 50
     const val MAX_NOTIFICATION_MESSAGE_LENGTH = 200
+    const val MAX_SCRIPT_LENGTH = 10000
+    const val MIN_TRIGGER_CHECK_INTERVAL_SECONDS = 30
+    const val MAX_CONCURRENT_WORKFLOWS = 50
 
-    // ========== DEBUGGING ==========
-    const val DEBUG_MODE = true
-    const val LOG_TAG = "AutoFlow"
+    //  ERROR CODES 
+    const val ERROR_CODE_PERMISSION_DENIED = 1001
+    const val ERROR_CODE_BLUETOOTH_NOT_AVAILABLE = 1002
+    const val ERROR_CODE_LOCATION_NOT_AVAILABLE = 1003
+    const val ERROR_CODE_WIFI_NOT_AVAILABLE = 1004
+    const val ERROR_CODE_INVALID_TRIGGER_DATA = 1005
+    const val ERROR_CODE_INVALID_ACTION_DATA = 1006
+    const val ERROR_CODE_WORKFLOW_EXECUTION_FAILED = 1007
+    const val ERROR_CODE_DATABASE_ERROR = 1008
 
-    // ========== TRIGGER OPTIONS ==========
-    val TRIGGER_OPTIONS = listOf(
-        TRIGGER_LOCATION,
-        TRIGGER_TIME,
-        TRIGGER_WIFI,
-        TRIGGER_BLE,
-        TRIGGER_APP_LAUNCH,
-        TRIGGER_BATTERY_LEVEL,
-        TRIGGER_CHARGING_STATE,
-        TRIGGER_HEADPHONE_CONNECTION
-    )
+    //  SUCCESS CODES 
+    const val SUCCESS_CODE_WORKFLOW_CREATED = 2001
+    const val SUCCESS_CODE_WORKFLOW_EXECUTED = 2002
+    const val SUCCESS_CODE_TRIGGER_REGISTERED = 2003
+    const val SUCCESS_CODE_PERMISSIONS_GRANTED = 2004
 
-    val ACTION_OPTIONS = listOf(
-        ACTION_SEND_NOTIFICATION,
-        ACTION_TOGGLE_WIFI,
-        ACTION_TOGGLE_BLUETOOTH,
-        ACTION_SET_SOUND_MODE,
-        ACTION_RUN_SCRIPT,
-        ACTION_OPEN_APP,
-        ACTION_ADJUST_BRIGHTNESS,
-        ACTION_ADJUST_VOLUME
-    )
+    //  SCRIPT LANGUAGES 
+    const val SCRIPT_LANGUAGE_JAVASCRIPT = "javascript"
+    const val SCRIPT_LANGUAGE_SHELL = "shell"
+    const val SCRIPT_LANGUAGE_PYTHON = "python"
 
-    val SOUND_MODE_OPTIONS = listOf(
-        SOUND_MODE_NORMAL,
-        SOUND_MODE_SILENT,
-        SOUND_MODE_VIBRATE,
-        SOUND_MODE_DND
-    )
+    // Script execution timeouts (in milliseconds)
+    const val SCRIPT_TIMEOUT_SHORT = 5000L   // 5 seconds
+    const val SCRIPT_TIMEOUT_MEDIUM = 30000L // 30 seconds
+    const val SCRIPT_TIMEOUT_LONG = 60000L   // 1 minute
 
-    val NOTIFICATION_PRIORITY_OPTIONS = listOf(
-        NOTIFICATION_PRIORITY_LOW,
-        NOTIFICATION_PRIORITY_NORMAL,
-        NOTIFICATION_PRIORITY_HIGH
-    )
+    //  BATTERY CONSTANTS 
+    const val BATTERY_LEVEL_LOW = 20
+    const val BATTERY_LEVEL_CRITICAL = 10
+    const val BATTERY_LEVEL_FULL = 100
+
+    //  VOLUME CONSTANTS 
+    const val VOLUME_TYPE_MEDIA = "media"
+    const val VOLUME_TYPE_RING = "ring"
+    const val VOLUME_TYPE_ALARM = "alarm"
+    const val VOLUME_TYPE_NOTIFICATION = "notification"
+    const val VOLUME_TYPE_CALL = "call"
+
+    // Volume levels (0-100)
+    const val VOLUME_MIN = 0
+    const val VOLUME_MAX = 100
+    const val VOLUME_SILENT = 0
+    const val VOLUME_LOW = 25
+    const val VOLUME_MEDIUM = 50
+    const val VOLUME_HIGH = 75
+    const val VOLUME_MAXIMUM = 100
 }

@@ -5,10 +5,10 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [WorkflowEntity::class], version = 1, exportSchema = false)
+@Database(entities = [WorkflowEntity::class], version = 2, exportSchema = false) // ✅ Increment version
 abstract class AppDatabase : RoomDatabase() {
 
-    abstract fun workflowDao(): WorkflowDao  // WorkflowDao is an interface defined in WorkflowDao.kt Not nullable!
+    abstract fun workflowDao(): WorkflowDao
 
     companion object {
         @Volatile
@@ -20,7 +20,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "autoflow_database"
-                ).build()
+                )
+                    .build()
+
                 INSTANCE = instance
                 instance
             }
