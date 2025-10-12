@@ -3,14 +3,14 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.autoflow">
 
-    <!-- ===================== LOCATION ===================== -->
+    <!-- = LOCATION = -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
-    <!-- ===================== BLUETOOTH ===================== -->
+    <!-- = BLUETOOTH = -->
     <!-- Required for legacy Bluetooth operations -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
@@ -19,38 +19,38 @@
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
-    <!-- ===================== TELEPHONY & SMS ===================== -->
+    <!-- = TELEPHONY & SMS = -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
-    <!-- ===================== NOTIFICATIONS & DND ===================== -->
+    <!-- = NOTIFICATIONS & DND = -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
 
-    <!-- ===================== ALARMS & BOOT ===================== -->
+    <!-- = ALARMS & BOOT = -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
-    <!-- ===================== AUDIO CONTROL ===================== -->
+    <!-- = AUDIO CONTROL = -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
-    <!-- ===================== CONNECTIVITY ===================== -->
+    <!-- = CONNECTIVITY = -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-feature android:name="android.hardware.wifi" android:required="false" />
 
-    <!-- ===================== DEVICE ADMIN (DPC builds only) ===================== -->
+    <!-- = DEVICE ADMIN (DPC builds only) = -->
     <uses-permission
         android:name="android.permission.BIND_DEVICE_ADMIN"
         tools:ignore="ProtectedPermissions" />
 
-    <!-- ===================== VIBRATION ===================== -->
+    <!-- = VIBRATION = -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- ======================================================== -->
+    <!-- ====== -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <application
@@ -63,7 +63,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AutoFlow">
 
-        <!-- ============ ACTIVITIES ============ -->
+        <!-- == ACTIVITIES == -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -81,7 +81,7 @@
             android:launchMode="singleTop"
             android:theme="@style/Theme.AutoFlow" />
 
-        <!-- ============ RECEIVERS ============ -->
+        <!-- == RECEIVERS == -->
         <receiver
             android:name=".receiver.AlarmReceiver"
             android:enabled="true"
@@ -105,7 +105,7 @@
             </intent-filter>
         </receiver>
 
-        <!-- ============ SERVICES ============ -->
+        <!-- == SERVICES == -->
         <service
             android:name=".blocker.AppBlockAccessibilityService"
             android:enabled="true"
@@ -119,7 +119,7 @@
                 android:resource="@xml/accessibility_config" />
         </service>
 
-        <!-- ============ META-DATA ============ -->
+        <!-- == META-DATA == -->
         <meta-data
             android:name="com.google.android.gms.version"
             android:value="@integer/google_play_services_version" />

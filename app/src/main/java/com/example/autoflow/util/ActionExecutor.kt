@@ -15,6 +15,8 @@ import android.provider.Settings
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
+import com.example.autoflow.data.WorkflowEntity
+import com.example.autoflow.data.toActions
 import com.example.autoflow.model.Action
 
 object ActionExecutor {
@@ -268,4 +270,27 @@ object ActionExecutor {
             false
         }
     }
+    /**
+     * Execute multiple actions for a workflow
+     */
+    fun executeWorkflow(context: Context, workflow: WorkflowEntity): Boolean {
+        val actions = workflow.toActions()
+
+        if (actions.isEmpty()) {
+            Log.w(TAG, "⚠️ No actions to execute for workflow ${workflow.id}")
+            return false
+        }
+
+        Log.d(TAG, "🚀 Executing ${actions.size} actions for workflow: ${workflow.workflowName}")
+
+        var allSuccessful = true
+        actions.forEachIndexed { index, action ->
+            val success = executeAction(context, action)
+            Log.d(TAG, "Action ${index + 1}/${actions.size}: ${if (success) "✅" else "❌"}")
+            if (!success) allSuccessful = false
+        }
+
+        return allSuccessful
+    }
+
 }

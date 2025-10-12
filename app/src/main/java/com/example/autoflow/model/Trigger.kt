@@ -107,7 +107,7 @@ sealed class Trigger(val type: String, val value: String) {
             "^-?\\d+\\.?\\d*,-?\\d+\\.?\\d*(,-?\\d+\\.?\\d*)?$"
         )
 
-        // ========== JSON BUILDER FUNCTIONS ==========
+        //  JSON BUILDER FUNCTIONS 
 
         private fun buildJsonValue(
             locationName: String,
@@ -146,7 +146,7 @@ sealed class Trigger(val type: String, val value: String) {
             return """{"level":$level,"condition":"$condition"}"""
         }
 
-        // ========== VALIDATION METHODS ==========
+        //  VALIDATION METHODS 
 
         private fun validateTimeTrigger(value: String): Boolean {
             return try {
@@ -280,7 +280,7 @@ sealed class Trigger(val type: String, val value: String) {
             return value.uppercase() in listOf("CONNECTED", "DISCONNECTED")
         }
 
-        // ========== HELPER METHODS ==========
+        //  HELPER METHODS 
 
         private fun isValidLatitude(lat: Double): Boolean = lat in -90.0..90.0
 

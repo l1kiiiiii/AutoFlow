@@ -6,7 +6,10 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.toAction
+import com.example.autoflow.data.toActions
+import com.example.autoflow.data.toTriggers
 import com.example.autoflow.util.ActionExecutor
+import com.example.autoflow.util.TriggerEvaluator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -28,7 +31,6 @@ class TriggerMonitoringWorker(
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
             val workflowId = inputData.getLong(KEY_WORKFLOW_ID, -1L)
-
             if (workflowId == -1L) {
                 Log.e(TAG, "❌ Invalid workflow ID")
                 return@withContext Result.failure()
@@ -38,34 +40,39 @@ class TriggerMonitoringWorker(
             val database = AppDatabase.getDatabase(applicationContext)
             val workflow = database.workflowDao().getByIdSync(workflowId)
 
-            if (workflow == null) {
-                Log.d(TAG, "⚠️ Workflow not found: $workflowId")
+            if (workflow == null || !workflow.isEnabled) {
                 return@withContext Result.success()
             }
 
-            if (!workflow.isEnabled) {
-                Log.d(TAG, "⚠️ Workflow disabled: $workflowId")
-                return@withContext Result.success()
-            }
+            // ✅ NEW: Get all triggers and build current states
+            val triggers = workflow.toTriggers()
+            val currentStates = TriggerEvaluator.buildCurrentStates(
+                applicationContext,
+                triggers
+            )
 
-            // Execute action
-            val action = workflow.  toAction()
-            if (action != null) {
-                val success = ActionExecutor.executeAction(applicationContext, action)
-                if (success) {
-                    Log.d(TAG, "✅ Action executed for workflow: $workflowId")
-                    return@withContext Result.success()
-                } else {
-                    Log.e(TAG, "❌ Action execution failed")
-                    return@withContext Result.retry()
+            // ✅ NEW: Evaluate with trigger logic
+            val shouldExecute = TriggerEvaluator.evaluateWorkflow(
+                workflow,
+                currentStates
+            )
+
+            if (shouldExecute) {
+                // Execute all actions
+                val actions = workflow.toActions()
+                actions.forEach { action ->
+                    ActionExecutor.executeAction(applicationContext, action)
                 }
+                Log.d(TAG, "✅ Workflow executed: $workflowId")
             } else {
-                Log.e(TAG, "❌ No valid action found")
-                return@withContext Result.failure()
+                Log.d(TAG, "⚠️ Trigger conditions not met for workflow: $workflowId")
             }
+
+            return@withContext Result.success()
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error in worker", e)
             return@withContext Result.retry()
         }
     }
+
 }

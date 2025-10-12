@@ -3,6 +3,7 @@ package com.example.autoflow.data
 import android.util.Log
 import com.example.autoflow.model.Action
 import com.example.autoflow.model.Trigger
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -51,90 +52,102 @@ fun WorkflowEntity.toAction(): Action? {
 }
 
 /**
- * Convert WorkflowEntity to Trigger object
- * Returns the appropriate sealed class subtype based on trigger type
+ * Convert WorkflowEntity to list of Triggers
  */
-fun WorkflowEntity.toTrigger(): Trigger? {
+fun WorkflowEntity.toTriggers(): List<Trigger> {
     return try {
         if (triggerDetails.isBlank()) {
             Log.e(TAG, "❌ Empty trigger details")
-            return null
+            return emptyList()
         }
 
-        val json = JSONObject(triggerDetails)
-        val type = json.optString("type", "")
-        val valueString = json.optString("value", "")
+        val triggersArray = JSONArray(triggerDetails)
+        val triggers = mutableListOf<Trigger>()
 
-        if (type.isBlank() || valueString.isBlank()) {
-            Log.e(TAG, "❌ Trigger type or value missing")
-            return null
-        }
+        for (i in 0 until triggersArray.length()) {
+            val json = triggersArray.getJSONObject(i)
+            val type = json.optString("type", "")
 
-        // Parse value JSON for specific trigger types
-        val valueJson = try {
-            JSONObject(valueString)
-        } catch (e: Exception) {
-            null
-        }
-
-        // Return appropriate sealed class subtype based on trigger type
-        when (type) {
-            "LOCATION" -> {
-                if (valueJson == null) {
-                    Log.e(TAG, "❌ Invalid location JSON")
-                    return null
-                }
-
-                Trigger.LocationTrigger(
-                    locationName = valueJson.optString("locationName", "Unknown"),
-                    latitude = valueJson.optDouble("latitude", 0.0),
-                    longitude = valueJson.optDouble("longitude", 0.0),
-                    radius = valueJson.optDouble("radius", 100.0),
-                    triggerOnEntry = valueJson.optBoolean("triggerOnEntry", true),
-                    triggerOnExit = valueJson.optBoolean("triggerOnExit", false),
-                    triggerOn = valueJson.optString("triggerOn", "both")
+            val trigger = when (type) {
+                "LOCATION" -> Trigger.LocationTrigger(
+                    locationName = json.optString("locationName", "Unknown"),
+                    latitude = json.optDouble("latitude", 0.0),
+                    longitude = json.optDouble("longitude", 0.0),
+                    radius = json.optDouble("radius", 100.0),
+                    triggerOnEntry = json.optBoolean("triggerOnEntry", true),
+                    triggerOnExit = json.optBoolean("triggerOnExit", false),
+                    triggerOn = json.optString("triggerOn", "both")
                 )
-            }
-
-            "TIME" -> {
-                if (valueJson == null) {
-                    Log.e(TAG, "❌ Invalid time JSON")
-                    return null
-                }
-
-                val daysArray = valueJson.optJSONArray("days")
-                val days = mutableListOf<String>()
-                if (daysArray != null) {
-                    for (i in 0 until daysArray.length()) {
-                        days.add(daysArray.getString(i))
+                "TIME" -> {
+                    val daysArray = json.optJSONArray("days")
+                    val days = mutableListOf<String>()
+                    if (daysArray != null) {
+                        for (j in 0 until daysArray.length()) {
+                            days.add(daysArray.getString(j))
+                        }
                     }
+                    Trigger.TimeTrigger(
+                        time = json.optString("time", ""),
+                        days = days
+                    )
                 }
-
-                Trigger.TimeTrigger(
-                    time = valueJson.optString("time", ""),
-                    days = days
+                "BATTERY" -> Trigger.BatteryTrigger(
+                    level = json.optInt("level", 20),
+                    condition = json.optString("condition", "below")
                 )
-            }
-
-            "BATTERY" -> {
-                if (valueJson == null) {
-                    Log.e(TAG, "❌ Invalid battery JSON")
-                    return null
+                else -> {
+                    Log.w(TAG, "⚠️ Unknown trigger type: $type")
+                    null
                 }
-
-                Trigger.BatteryTrigger(
-                    level = valueJson.optInt("level", 20),
-                    condition = valueJson.optString("condition", "below")
-                )
             }
 
-            else -> {
-                Log.w(TAG, "⚠️ Unknown trigger type: $type, cannot create sealed class instance")
-                null
-            }
+            trigger?.let { triggers.add(it) }
         }
+
+        triggers
     } catch (e: Exception) {
-        Log.e(TAG, "❌ Error parsing trigger: ${e.message}", e)
-        null
+        Log.e(TAG, "❌ Error parsing triggers: ${e.message}", e)
+        emptyList()
     }
 }
+
+/**
+ * Convert WorkflowEntity to list of Actions
+ */
+fun WorkflowEntity.toActions(): List<Action> {
+    return try {
+        if (actionDetails.isBlank()) {
+            Log.e(TAG, "❌ Empty action details")
+            return emptyList()
+        }
+
+        val actionsArray = JSONArray(actionDetails)
+        val actions = mutableListOf<Action>()
+
+        for (i in 0 until actionsArray.length()) {
+            val json = actionsArray.getJSONObject(i)
+            val type = json.optString("type", "")
+
+            if (type.isNotBlank()) {
+                val action = Action(
+                    type = type,
+                    title = json.optString("title"),
+                    message = json.optString("message"),
+                    priority = json.optString("priority")
+                )
+
+                json.optString("value").takeIf { it.isNotEmpty() }?.let {
+                    action.value = it
+                }
+
+                actions.add(action)
+            }
+        }
+
+        actions
+    } catch (e: Exception) {
+        Log.e(TAG, "❌ Error parsing actions: ${e.message}", e)
+        emptyList()
+    }
+}
+

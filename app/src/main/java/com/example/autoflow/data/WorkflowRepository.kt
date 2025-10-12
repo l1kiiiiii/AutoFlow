@@ -19,12 +19,12 @@ class WorkflowRepository(private val database: AppDatabase) {
     private val executorService: ExecutorService = Executors.newSingleThreadExecutor()
     private val mainThreadHandler = Handler(Looper.getMainLooper())
 
-    // ========== LIVEDATA QUERIES ==========
+    //  LIVEDATA QUERIES 
 
     val allWorkflows: LiveData<List<WorkflowEntity>> = workflowDao.getAllWorkflows()
     val enabledWorkflows: LiveData<List<WorkflowEntity>> = workflowDao.getEnabledWorkflows()
 
-    // ========== SYNCHRONOUS METHODS ==========
+    //  SYNCHRONOUS METHODS 
 
     /**
      * Get a single workflow entity for action execution (synchronous)
@@ -33,7 +33,7 @@ class WorkflowRepository(private val database: AppDatabase) {
         return workflowDao.getByIdSync(workflowId)
     }
 
-    // ========== INSERT OPERATIONS ==========
+    //  INSERT OPERATIONS 
 
     fun insert(workflowEntity: WorkflowEntity) {
         executorService.execute {
@@ -58,7 +58,7 @@ class WorkflowRepository(private val database: AppDatabase) {
         }.start()
     }
 
-    // ========== UPDATE OPERATIONS ==========
+    //  UPDATE OPERATIONS 
 
     fun update(workflowEntity: WorkflowEntity) {
         executorService.execute {
@@ -110,7 +110,7 @@ class WorkflowRepository(private val database: AppDatabase) {
         }
     }
 
-    // ========== DELETE OPERATIONS ==========
+    //  DELETE OPERATIONS 
 
     fun delete(workflowId: Long) {
         executorService.execute {
@@ -168,7 +168,7 @@ class WorkflowRepository(private val database: AppDatabase) {
         }
     }
 
-    // ========== QUERY OPERATIONS ==========
+    //  QUERY OPERATIONS 
 
     /**
      * Get all workflows with callback
@@ -234,7 +234,7 @@ class WorkflowRepository(private val database: AppDatabase) {
         }
     }
 
-    // ========== CLEANUP ==========
+    //  CLEANUP 
 
     fun cleanup() {
         if (!executorService.isShutdown) {
@@ -242,7 +242,7 @@ class WorkflowRepository(private val database: AppDatabase) {
         }
     }
 
-    // ========== CALLBACK INTERFACES ==========
+    //  CALLBACK INTERFACES 
 
     interface WorkflowCallback {
         fun onWorkflowsLoaded(workflows: MutableList<WorkflowEntity>)
