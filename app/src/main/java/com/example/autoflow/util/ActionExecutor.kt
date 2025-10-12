@@ -1,8 +1,10 @@
 package com.example.autoflow.util
 
 import android.Manifest
+import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Context
@@ -18,10 +20,12 @@ import androidx.core.app.NotificationCompat
 import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.data.toActions
 import com.example.autoflow.model.Action
+import com.example.autoflow.blocker.BlockActivity
+import com.example.autoflow.policy.BlockPolicy
+import com.example.autoflow.receiver.AlarmReceiver
 
 object ActionExecutor {
     private const val TAG = "ActionExecutor"
-
     private const val CHANNEL_ID_URGENT = "autoflow_urgent"
     private const val CHANNEL_ID_HIGH = "autoflow_high"
     private const val CHANNEL_ID_NORMAL = "autoflow_normal"
@@ -48,6 +52,12 @@ object ActionExecutor {
                 }
                 Constants.ACTION_SET_SOUND_MODE -> {
                     setSoundMode(context, action.value ?: "Normal")
+                }
+                Constants.ACTION_BLOCK_APPS -> {
+                    blockApps(context, action.value ?: "")
+                }
+                Constants.ACTION_UNBLOCK_APPS -> {
+                    unblockApps(context)
                 }
                 Constants.ACTION_RUN_SCRIPT -> {
                     runScript(context, action.value ?: "")
@@ -259,6 +269,152 @@ object ActionExecutor {
             false
         }
     }
+    /**
+     * Block specified apps using BlockPolicy
+     */
+    private fun blockApps(context: Context, packageNames: String): Boolean {
+        return try {
+            if (packageNames.isBlank()) {
+                Log.w(TAG, "No apps specified for blocking")
+                return false
+            }
+
+            val appsToBlock = packageNames.split(",")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+
+            if (appsToBlock.isEmpty()) {
+                Log.w(TAG, "No valid apps to block")
+                return false
+            }
+
+            Log.d(TAG, "🚫 Blocking ${appsToBlock.size} apps: $appsToBlock")
+
+            BlockPolicy.setBlockedPackages(context, appsToBlock.toSet())
+            BlockPolicy.setBlockingEnabled(context, true)
+
+            val appNames = appsToBlock.map { getAppName(context, it) }
+            val appNamesText = if (appNames.size <= 3) {
+                appNames.joinToString(", ")
+            } else {
+                "${appNames.take(3).joinToString(", ")} +${appNames.size - 3} more"
+            }
+
+            sendNotification(
+                context,
+                "🚫 App Blocking Active",
+                "Now blocking: $appNamesText",
+                "High"
+            )
+
+            Log.d(TAG, "✅ App blocking enabled for: ${appsToBlock.joinToString()}")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error blocking apps", e)
+            false
+        }
+    }
+
+    /**
+     *  Unblock all apps
+     */
+    private fun unblockApps(context: Context): Boolean {
+        return try {
+            Log.d(TAG, "🔓 Unblocking all apps")
+
+            val blockedApps = BlockPolicy.getBlockedPackages(context)
+            val appCount = blockedApps.size
+
+            BlockPolicy.clearBlockedPackages(context)
+            BlockPolicy.setBlockingEnabled(context, false)
+
+            sendNotification(
+                context,
+                "✅ App Blocking Disabled",
+                "Unblocked $appCount app(s)",
+                "Normal"
+            )
+
+            Log.d(TAG, "✅ Successfully unblocked $appCount apps")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error unblocking apps", e)
+            false
+        }
+    }
+
+    /**
+     * Helper to get app name from package name
+     */
+    private fun getAppName(context: Context, packageName: String): String {
+        return try {
+            val pm = context.packageManager
+            val appInfo = pm.getApplicationInfo(packageName, 0)
+            pm.getApplicationLabel(appInfo).toString()
+        } catch (e: Exception) {
+            packageName.split(".").lastOrNull()?.replaceFirstChar { it.uppercase() } ?: packageName
+        }
+    }
+
+    /**
+     *  Schedule automatic unblock using WorkManager
+     */
+    /**
+     * Schedule automatic unblock using AlarmManager
+     */
+    private fun scheduleAutoUnblock(context: Context, durationMinutes: Int) {
+        try {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+            // ✅ Check if we can schedule exact alarms (Android 12+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (!alarmManager.canScheduleExactAlarms()) {
+                    Log.w(TAG, "❌ Cannot schedule exact alarms. Permission not granted.")
+                    // Optionally prompt user to grant permission
+                    val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                    return
+                }
+            }
+
+            val unblockTime = System.currentTimeMillis() + (durationMinutes * 60 * 1000)
+
+            val intent = Intent(context, AlarmReceiver::class.java).apply {
+                action = "com.example.autoflow.ACTION_AUTO_UNBLOCK"
+            }
+
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                99999, // Unique ID for unblock alarm
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            // ✅ Wrap in try-catch to handle SecurityException
+            try {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    unblockTime,
+                    pendingIntent
+                )
+                Log.d(TAG, "⏰ Auto-unblock scheduled for $durationMinutes minutes from now")
+            } catch (e: SecurityException) {
+                Log.e(TAG, "❌ SecurityException: Cannot schedule exact alarm", e)
+                // Fall back to inexact alarm if exact alarm fails
+                alarmManager.set(
+                    AlarmManager.RTC_WAKEUP,
+                    unblockTime,
+                    pendingIntent
+                )
+                Log.d(TAG, "⏰ Fallback: Inexact unblock alarm scheduled")
+            }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error scheduling auto-unblock", e)
+        }
+    }
+
 
     private fun runScript(context: Context, script: String): Boolean {
         return try {
@@ -289,7 +445,6 @@ object ActionExecutor {
             Log.d(TAG, "Action ${index + 1}/${actions.size}: ${if (success) "✅" else "❌"}")
             if (!success) allSuccessful = false
         }
-
         return allSuccessful
     }
 

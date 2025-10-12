@@ -131,9 +131,15 @@ import java.util.Locale
 import kotlin.math.roundToInt
 import android.content.Context
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.filled.Warning
 import com.example.autoflow.data.toActions
 import com.example.autoflow.data.toTriggers
 import com.example.autoflow.ui.components.AppSelectorComposable
+import android.content.Intent
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material3.Surface
+import com.example.autoflow.ui.components.getAppNameFromPackage
 
 /**
  * Production-ready Task Creation Screen with comprehensive error handling
@@ -168,7 +174,7 @@ fun TaskCreationScreen(
     var taskName: String by remember { mutableStateOf("") }
     var taskNameError: String? by remember { mutableStateOf(null) }
 
-    // : Trigger states with explicit types
+    //  Trigger states with explicit types
     var locationTriggerExpanded: Boolean by remember { mutableStateOf(false) }
     var locationName: String by remember { mutableStateOf("") }
     var locationDetailsInput: String by remember { mutableStateOf("") }
@@ -208,6 +214,9 @@ fun TaskCreationScreen(
     //  Block Apps Action states with explicit types
     var blockAppsActionExpanded: Boolean by remember { mutableStateOf(false) }
     var selectedAppsToBlock: List<String> by remember { mutableStateOf(emptyList()) }
+
+    //  UnBlock Apps Action states with explicit types
+    var unblockAppsActionExpanded: Boolean by remember { mutableStateOf(false) }
 
 
     // Pre-populate fields if editing
@@ -261,6 +270,13 @@ fun TaskCreationScreen(
                         Constants.ACTION_RUN_SCRIPT -> {
                             runScriptActionExpanded = true
                             scriptText = action.value ?: ""
+                        }
+                        Constants.ACTION_BLOCK_APPS -> {
+                            blockAppsActionExpanded = true
+                            selectedAppsToBlock = action.value?.split(",") ?: emptyList()
+                        }
+                        Constants.ACTION_UNBLOCK_APPS -> {
+                            unblockAppsActionExpanded = true
                         }
                     }
                 }
@@ -336,7 +352,9 @@ fun TaskCreationScreen(
                 blockAppsActionExpanded = blockAppsActionExpanded,
                 onBlockAppsExpandedChange = { blockAppsActionExpanded = it },
                 selectedAppsToBlock = selectedAppsToBlock,
-                onSelectedAppsChange = { selectedAppsToBlock = it }
+                onSelectedAppsChange = { selectedAppsToBlock = it },
+                unblockAppsActionExpanded = unblockAppsActionExpanded,
+                onUnblockAppsExpandedChange = { unblockAppsActionExpanded = it }
             )
 
             // Save/Back Buttons Card
@@ -370,6 +388,9 @@ fun TaskCreationScreen(
                             scriptText = scriptText,
                             setSoundModeActionExpanded = setSoundModeActionExpanded,
                             soundMode = soundMode,
+                            blockAppsActionExpanded = blockAppsActionExpanded,
+                            selectedAppsToBlock = selectedAppsToBlock,
+                            unblockAppsActionExpanded = unblockAppsActionExpanded,
                             onSuccess = {
                                 showSuccessSnackbar = true
                                 onSaveTask(taskName)
@@ -553,7 +574,9 @@ private fun ActionsCard(
     blockAppsActionExpanded: Boolean,
     onBlockAppsExpandedChange: (Boolean) -> Unit,
     selectedAppsToBlock: List<String>,
-    onSelectedAppsChange: (List<String>) -> Unit
+    onSelectedAppsChange: (List<String>) -> Unit,
+    unblockAppsActionExpanded: Boolean,
+    onUnblockAppsExpandedChange: (Boolean) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -622,6 +645,14 @@ private fun ActionsCard(
                     selectedApps = selectedAppsToBlock,
                     onSelectedAppsChange = onSelectedAppsChange
                 )
+            }
+            ExpandableActionSection(
+                title = "Unblock Apps",
+                icon = Icons.Default.LockOpen,
+                expanded = unblockAppsActionExpanded,
+                onExpandedChange = onUnblockAppsExpandedChange
+            ) {
+                UnblockAppsContent()
             }
         }
     }
@@ -733,12 +764,23 @@ private fun SetSoundModeContent(
     }
 }
 
+/**
+ * Block Apps Action Configuration
+ */
 @Composable
 private fun BlockAppsContent(
     selectedApps: List<String>,
     onSelectedAppsChange: (List<String>) -> Unit
 ) {
     val context = LocalContext.current
+    var isAccessibilityEnabled by remember {
+        mutableStateOf(isAccessibilityServiceEnabled(context))
+    }
+
+    // Recheck accessibility status when composable becomes visible
+    LaunchedEffect(Unit) {
+        isAccessibilityEnabled = isAccessibilityServiceEnabled(context)
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
@@ -747,7 +789,64 @@ private fun BlockAppsContent(
             fontWeight = FontWeight.Medium
         )
 
-        // ✅ NEW: Selected Apps Display with Remove Option
+        // ✅ Accessibility Service Warning
+        if (!isAccessibilityEnabled) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Accessibility Service Required",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "App blocking requires accessibility service to monitor app launches. Please enable it to use this feature.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = {
+                            openAccessibilitySettings(context)
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Open Accessibility Settings")
+                    }
+                }
+            }
+        }
+
+        // ✅ Selected Apps Display with Remove Option
         if (selectedApps.isNotEmpty()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -772,18 +871,16 @@ private fun BlockAppsContent(
                         )
 
                         // Clear All button
-                        if (selectedApps.isNotEmpty()) {
-                            TextButton(
-                                onClick = { onSelectedAppsChange(emptyList()) }
-                            ) {
-                                Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = "Clear all",
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Clear All", style = MaterialTheme.typography.labelSmall)
-                            }
+                        TextButton(
+                            onClick = { onSelectedAppsChange(emptyList()) }
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Clear all",
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Clear All", style = MaterialTheme.typography.labelSmall)
                         }
                     }
 
@@ -808,8 +905,6 @@ private fun BlockAppsContent(
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
         }
 
         // App Selector
@@ -837,7 +932,7 @@ private fun BlockAppsContent(
                     tint = MaterialTheme.colorScheme.onTertiaryContainer
                 )
                 Text(
-                    text = "Blocked apps will be restricted when this automation triggers. Requires accessibility permission.",
+                    text = "Blocked apps will be immediately closed when launched during this automation's active period.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer
                 )
@@ -846,24 +941,53 @@ private fun BlockAppsContent(
     }
 }
 
-// ✅ NEW: Composable for individual selected app chip with remove button
+@Composable
+private fun UnblockAppsContent() {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            "Unblock all currently blocked apps",
+            style = MaterialTheme.typography.bodyMedium
+        )
+
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer
+            )
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Default.Info, null)
+                Text(
+                    "This action will clear all app restrictions and re-enable access to blocked apps.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
+
+/**
+ * ✅ NEW: Chip component for selected apps
+ */
 @Composable
 private fun SelectedAppChip(
     packageName: String,
     appName: String,
     onRemove: () -> Unit
 ) {
-    Card(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -875,56 +999,61 @@ private fun SelectedAppChip(
                 Icon(
                     imageVector = Icons.Default.Apps,
                     contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
                 )
 
-                Column(modifier = Modifier.weight(1f)) {
+                Column {
                     Text(
                         text = appName,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        maxLines = 1
                     )
                     Text(
                         text = packageName,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        maxLines = 1
                     )
                 }
             }
 
-            // Remove button
             IconButton(
                 onClick = onRemove,
-                modifier = Modifier.size(36.dp)
+                modifier = Modifier.size(32.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
-                    contentDescription = "Remove $appName",
+                    contentDescription = "Remove",
                     tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
     }
 }
 
-// ✅ Utility function to get app name from package (add if not present)
-fun getAppNameFromPackage(context: Context, packageName: String): String {
-    return try {
-        val packageManager = context.packageManager
-        val appInfo = packageManager.getApplicationInfo(packageName, 0)
-        packageManager.getApplicationLabel(appInfo).toString()
-    } catch (e: Exception) {
-        packageName
-    }
+/**
+ * ✅ NEW: Check if accessibility service is enabled
+ */
+private fun isAccessibilityServiceEnabled(context: Context): Boolean {
+    val serviceName = "${context.packageName}/.blocker.AppBlockAccessibilityService"
+    val enabledServices = android.provider.Settings.Secure.getString(
+        context.contentResolver,
+        android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+    )
+    return enabledServices?.contains(serviceName) == true
 }
 
-
+/**
+ *  Open accessibility settings
+ */
+private fun openAccessibilitySettings(context: Context) {
+    val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+    context.startActivity(intent)
+}
 @Composable
 private fun AppPickerDialog(
     apps: List<AppInfo>,
@@ -1908,18 +2037,25 @@ private fun TimeTriggerContent(
         if (selectedDate != null && selectedTime != null) {
             val dateTime = LocalDateTime.of(selectedDate, selectedTime)
 
-            // ✅ CORRECT: Proper timezone conversion
+            // ADD THESE DEBUG LOGS
+            Log.d("TimeTriggerContent", "========== TIME DEBUG ==========")
+            Log.d("TimeTriggerContent", "Current System Time: ${LocalDateTime.now()}")
+            Log.d("TimeTriggerContent", "Selected Date: $selectedDate")
+            Log.d("TimeTriggerContent", "Selected Time: $selectedTime")
+            Log.d("TimeTriggerContent", "Combined DateTime: $dateTime")
+            Log.d("TimeTriggerContent", "System TimeZone: ${java.time.ZoneId.systemDefault()}")
+
             val timestamp = dateTime
                 .atZone(java.time.ZoneId.systemDefault())
                 .toEpochSecond()
 
+            //  ADD THIS TOO
+            Log.d("TimeTriggerContent", "Expected (now): ${LocalDateTime.now().atZone(java.time.ZoneId.systemDefault()).toEpochSecond()}")
+            Log.d("TimeTriggerContent", "Calculated timestamp: $timestamp")
+            Log.d("TimeTriggerContent", "Difference (seconds): ${timestamp - LocalDateTime.now().atZone(java.time.ZoneId.systemDefault()).toEpochSecond()}")
+
             // Save the timestamp
             onTimeValueChange(timestamp.toString())
-
-            // Log for debugging
-            Log.d("TimeTriggerContent", "Is24Hour: $is24HourFormat")
-            Log.d("TimeTriggerContent", "Selected DateTime: $dateTime")
-            Log.d("TimeTriggerContent", "Timestamp (seconds): $timestamp")
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -2382,6 +2518,9 @@ private suspend fun handleSaveTask(
     scriptText: String,
     setSoundModeActionExpanded: Boolean,
     soundMode: String,
+    blockAppsActionExpanded: Boolean,
+    selectedAppsToBlock: List<String>,
+    unblockAppsActionExpanded: Boolean,
     onSuccess: () -> Unit,
     onError: (String) -> Unit
 ) {
@@ -2466,14 +2605,16 @@ private suspend fun handleSaveTask(
         val hasToggleAction = toggleSettingsActionExpanded
         val hasScriptAction = runScriptActionExpanded && scriptText.isNotBlank()
         val hasSoundModeAction = setSoundModeActionExpanded
+        val hasBlockAppAction = blockAppsActionExpanded && selectedAppsToBlock.isNotEmpty()
         Log.d("TaskCreation", "=== ACTION CHECK ===")
         Log.d("TaskCreation", "Notification: $hasNotificationAction")
         Log.d("TaskCreation", "Toggle: $hasToggleAction")
         Log.d("TaskCreation", "Script: $hasScriptAction")
         Log.d("TaskCreation", "Sound Mode: $hasSoundModeAction")
+        Log.d("TaskCreation", "Block Apps: $hasBlockAppAction")
 
         // 6. VALIDATE AT LEAST ONE ACTION
-        if (!hasNotificationAction && !hasToggleAction && !hasScriptAction && !hasSoundModeAction) {
+        if (!hasNotificationAction && !hasToggleAction && !hasScriptAction && !hasSoundModeAction && !hasBlockAppAction) {
             Log.e("TaskCreation", "❌ No action configured")
             onError("Please configure at least ONE action")
             return
@@ -2482,6 +2623,7 @@ private suspend fun handleSaveTask(
 
         // 7. CREATE LIST OF ALL CONFIGURED ACTIONS
         val actions = mutableListOf<Action>()
+
         if (hasNotificationAction) {
             Log.d("TaskCreation", "→ Adding NOTIFICATION action")
             actions.add(Action(Constants.ACTION_SEND_NOTIFICATION, notificationTitle, notificationMessage, notificationPriority))
@@ -2498,6 +2640,21 @@ private suspend fun handleSaveTask(
         if (hasSoundModeAction) {
             Log.d("TaskCreation", "→ Adding SOUND MODE action: $soundMode")
             actions.add(Action(Constants.ACTION_SET_SOUND_MODE, null, null, null).apply { value = soundMode })
+        }
+        //  Block Apps Action
+        if (blockAppsActionExpanded && selectedAppsToBlock.isNotEmpty()) {
+            Log.d("TaskCreation", "→ Adding BLOCK APPS action: ${selectedAppsToBlock.size} apps")
+            Log.d("TaskCreation", "→ Apps: ${selectedAppsToBlock.joinToString()}")
+            // Store as comma-separated package names
+            val appsToBlock = selectedAppsToBlock.joinToString(",")
+            actions.add(Action(Constants.ACTION_BLOCK_APPS, null, null, null).apply {
+                value = appsToBlock
+            })
+        }
+        //  ADD UNBLOCK APPS ACTION
+        if (unblockAppsActionExpanded) {
+            Log.d("TaskCreation", "→ Adding UNBLOCK APPS action")
+            actions.add(Action(Constants.ACTION_UNBLOCK_APPS, null, null, null))
         }
         if (hasScriptAction) {
             Log.d("TaskCreation", "→ Adding SCRIPT action")

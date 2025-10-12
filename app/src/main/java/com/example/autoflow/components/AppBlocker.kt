@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
+import android.os.Build
 import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -12,13 +13,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -56,25 +60,32 @@ fun AppSelectorComposable(
     var searchQuery by remember { mutableStateOf("") }
     var selectedApps by remember { mutableStateOf(preSelectedApps) }
 
-    // Load apps on composition
+    LaunchedEffect(preSelectedApps) {
+        selectedApps = preSelectedApps
+    }
+
     LaunchedEffect(showSystemApps) {
         isLoading = true
         error = null
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Log.d("AppSelector", "🤖 Running on Android ${Build.VERSION.SDK_INT}, using QUERY_ALL_PACKAGES")
+        }
 
         scope.launch {
             try {
                 val apps = fetchInstalledApps(context, showSystemApps)
                 installedApps = apps
+                Log.d("AppSelector", "✅ Successfully loaded ${apps.size} apps")
             } catch (e: Exception) {
                 error = "Failed to load apps: ${e.message}"
-                Log.e("AppSelector", "Error loading apps", e)
+                Log.e("AppSelector", "❌ Error loading apps", e)
             } finally {
                 isLoading = false
             }
         }
     }
 
-    // Filter apps based on search query
     val filteredApps = remember(installedApps, searchQuery) {
         if (searchQuery.isEmpty()) {
             installedApps
@@ -90,14 +101,24 @@ fun AppSelectorComposable(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Header with count
-        Text(
-            text = "Select Apps (${selectedApps.size} selected)",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Select Apps",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
 
-        // Search bar
+            Text(
+                text = "${selectedApps.size} of ${installedApps.size} selected",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
@@ -114,7 +135,6 @@ fun AppSelectorComposable(
             singleLine = true
         )
 
-        // Loading state
         if (isLoading) {
             Box(
                 modifier = Modifier
@@ -132,7 +152,6 @@ fun AppSelectorComposable(
             }
         }
 
-        // Error state
         error?.let { errorMsg ->
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -140,16 +159,77 @@ fun AppSelectorComposable(
                     containerColor = MaterialTheme.colorScheme.errorContainer
                 )
             ) {
-                Text(
-                    text = errorMsg,
-                    modifier = Modifier.padding(16.dp),
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Error Loading Apps",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = errorMsg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                isLoading = true
+                                error = null
+                                try {
+                                    val apps = fetchInstalledApps(context, showSystemApps)
+                                    installedApps = apps
+                                } catch (e: Exception) {
+                                    error = "Failed to load apps: ${e.message}"
+                                } finally {
+                                    isLoading = false
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Icon(Icons.Default.Refresh, "Retry", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Retry")
+                    }
+                }
             }
         }
 
-        // Apps list
         if (!isLoading && error == null) {
+            if (installedApps.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            selectedApps = filteredApps.map { it.packageName }
+                            onAppsSelected(selectedApps)
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Select All", style = MaterialTheme.typography.labelSmall)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            selectedApps = emptyList()
+                            onAppsSelected(selectedApps)
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = selectedApps.isNotEmpty()
+                    ) {
+                        Text("Clear", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -159,7 +239,19 @@ fun AppSelectorComposable(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(8.dp)
                 ) {
-                    items(filteredApps) { app ->
+                    item {
+                        Text(
+                            text = "Showing ${filteredApps.size} apps",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    items(
+                        items = filteredApps,
+                        key = { it.packageName }
+                    ) { app ->
                         AppListItem(
                             app = app,
                             isSelected = app.packageName in selectedApps,
@@ -177,25 +269,48 @@ fun AppSelectorComposable(
                             HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp))
                         }
                     }
+
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                 }
             }
 
-            // Summary
-            if (filteredApps.isEmpty() && searchQuery.isNotEmpty()) {
-                Text(
-                    text = "No apps found matching \"$searchQuery\"",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(8.dp)
-                )
+            if (filteredApps.isEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SearchOff,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = if (searchQuery.isNotEmpty()) {
+                                "No apps found matching \"$searchQuery\""
+                            } else {
+                                "No apps available"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
             }
         }
     }
 }
 
-/**
- * Individual app list item
- */
 @Composable
 private fun AppListItem(
     app: InstalledAppInfo,
@@ -215,7 +330,6 @@ private fun AppListItem(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.weight(1f)
         ) {
-            // App icon placeholder (you can enhance this to show actual drawable)
             Icon(
                 imageVector = Icons.Default.Apps,
                 contentDescription = null,
@@ -253,7 +367,6 @@ private fun AppListItem(
         )
     }
 }
-
 /**
  * Suspend function to fetch installed apps
  */
@@ -263,16 +376,22 @@ private suspend fun fetchInstalledApps(
 ): List<InstalledAppInfo> = withContext(Dispatchers.IO) {
     try {
         val packageManager = context.packageManager
+
+        //  Simple approach that works on all Android versions
         val packages = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
+
+        Log.d("AppSelector", "📱 Found ${packages.size} total packages")
 
         packages
             .asSequence()
             .filter { appInfo ->
-                // Filter system apps if requested
-                if (!includeSystemApps) {
-                    (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) == 0
+                val isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+
+                if (!includeSystemApps && isSystemApp) {
+                    false
                 } else {
-                    true
+                    // Only include apps with launch intent
+                    packageManager.getLaunchIntentForPackage(appInfo.packageName) != null
                 }
             }
             .map { appInfo ->
@@ -293,11 +412,15 @@ private suspend fun fetchInstalledApps(
             }
             .sortedBy { it.appName.lowercase() }
             .toList()
+            .also {
+                Log.d("AppSelector", "✅ Filtered to ${it.size} launchable apps")
+            }
     } catch (e: Exception) {
-        Log.e("AppFetcher", "Error fetching apps", e)
+        Log.e("AppFetcher", "❌ Error fetching apps: ${e.message}", e)
         emptyList()
     }
 }
+
 
 /**
  * Utility function to get app name from package name
@@ -311,7 +434,6 @@ fun getAppNameFromPackage(context: Context, packageName: String): String {
         packageName
     }
 }
-
 /**
  * Utility function to check if an app is installed
  */

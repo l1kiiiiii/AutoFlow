@@ -19,6 +19,8 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.example.autoflow.R
 import com.example.autoflow.integrations.SoundModeManager
+import com.example.autoflow.model.Action
+import com.example.autoflow.util.ActionExecutor
 import com.example.autoflow.util.Constants
 
 class AlarmReceiver : BroadcastReceiver() {
@@ -43,6 +45,8 @@ class AlarmReceiver : BroadcastReceiver() {
                 Constants.ACTION_TOGGLE_WIFI -> handleWiFiToggle(context, intent)
                 Constants.ACTION_TOGGLE_BLUETOOTH -> handleBluetoothToggle(context, intent)
                 Constants.ACTION_RUN_SCRIPT -> handleScript(context, intent)
+                Constants.ACTION_BLOCK_APPS -> handleBlockApps(context, intent)
+                Constants.ACTION_UNBLOCK_APPS -> handleUnblockApps(context, intent)
                 else -> {
                     Log.w(TAG, "⚠️ Unknown action type: $actionType")
                     Toast.makeText(context, "Unknown action: $actionType", Toast.LENGTH_SHORT).show()
@@ -341,6 +345,53 @@ class AlarmReceiver : BroadcastReceiver() {
 
         Toast.makeText(context, "Script execution not yet implemented", Toast.LENGTH_LONG).show()
         Log.w(TAG, "⚠️ Script execution not implemented for security reasons")
+    }
+    /**
+     * Handle BLOCK_APPS action
+     */
+    private fun handleBlockApps(context: Context, intent: Intent) {
+        val packages = intent.getStringExtra("app_packages") ?: ""
+
+        Log.d(TAG, "🚫 Executing BLOCK_APPS action")
+        Log.d(TAG, "   Packages: $packages")
+
+        if (packages.isBlank()) {
+            Log.w(TAG, "⚠️ No packages to block")
+            return
+        }
+
+        val action = Action(Constants.ACTION_BLOCK_APPS, null, null, null).apply {
+            value = packages
+        }
+
+        val success = ActionExecutor.executeAction(context, action)
+
+        if (success) {
+            Log.i(TAG, "✅ Block apps action executed successfully")
+            Toast.makeText(context, "Apps blocked", Toast.LENGTH_SHORT).show()
+        } else {
+            Log.e(TAG, "❌ Block apps action failed")
+            Toast.makeText(context, "Failed to block apps", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Handle UNBLOCK_APPS action
+     */
+    private fun handleUnblockApps(context: Context, intent: Intent) {
+        Log.d(TAG, "🔓 Executing UNBLOCK_APPS action")
+
+        val action = Action(Constants.ACTION_UNBLOCK_APPS, null, null, null)
+
+        val success = ActionExecutor.executeAction(context, action)
+
+        if (success) {
+            Log.i(TAG, "✅ Unblock apps action executed successfully")
+            Toast.makeText(context, "Apps unblocked", Toast.LENGTH_SHORT).show()
+        } else {
+            Log.e(TAG, "❌ Unblock apps action failed")
+            Toast.makeText(context, "Failed to unblock apps", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun createNotificationChannel(context: Context) {

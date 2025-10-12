@@ -85,8 +85,8 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
      */
     fun addWorkflow(
         workflowName: String,
-        triggers: List<Trigger>,  // ✅ Changed to List
-        actions: List<Action>,    // ✅ Changed to List
+        triggers: List<Trigger>,
+        actions: List<Action>,
         triggerLogic: String = "AND"
     ) {
         // Validate inputs FIRST
@@ -129,7 +129,11 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                 override fun onInsertComplete(insertedId: Long) {
                     Log.d(TAG, "🎉 Workflow inserted - ID: $insertedId")
 
-                    // Register all location triggers
+                    // ✅ NEW: Schedule alarms for the inserted workflow
+                    val savedWorkflow = workflowEntity.copy(id = insertedId)
+                    AlarmScheduler.scheduleWorkflow(getApplication<Application>().applicationContext, savedWorkflow)
+
+                    // Register all location triggers (existing code)
                     triggers.filterIsInstance<Trigger.LocationTrigger>().forEach { trigger ->
                         val success = GeofenceManager.addGeofence(
                             context = getApplication<Application>().applicationContext,
