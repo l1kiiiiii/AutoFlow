@@ -3,7 +3,6 @@ package com.example.autoflow.ui.screens
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
-import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.location.Geocoder
@@ -34,7 +33,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bluetooth
@@ -45,7 +43,6 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.DoNotDisturb
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -55,13 +52,10 @@ import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.VolumeOff
@@ -76,7 +70,6 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.Divider
 import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -116,8 +109,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.autoflow.data.WorkflowEntity
-import com.example.autoflow.data.toAction
-import com.example.autoflow.data.toTrigger
 import com.example.autoflow.geofence.GeofenceManager
 import com.example.autoflow.model.Action
 import com.example.autoflow.model.Trigger
@@ -133,17 +124,22 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.gms.tasks.OnTokenCanceledListener
 import kotlinx.coroutines.launch
 import org.json.JSONException
-import org.json.JSONObject
-import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.util.Locale
 import kotlin.math.roundToInt
-
-// Note: You will also need imports for your 'fetchCurrentLocation' function,
-// which is called but not defined in the provided snippet. For example:
-// import com.google.android.gms.location.FusedLocationProviderClient
+import android.content.Context
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.filled.Warning
+import com.example.autoflow.data.toActions
+import com.example.autoflow.data.toTriggers
+import com.example.autoflow.ui.components.AppSelectorComposable
+import android.content.Intent
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material3.Surface
+import com.example.autoflow.ui.components.getAppNameFromPackage
 
 /**
  * Production-ready Task Creation Screen with comprehensive error handling
@@ -154,6 +150,7 @@ import kotlin.math.roundToInt
  * - Proper state management
  * - Memory leak prevention
  */
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskCreationScreen(
@@ -177,7 +174,7 @@ fun TaskCreationScreen(
     var taskName: String by remember { mutableStateOf("") }
     var taskNameError: String? by remember { mutableStateOf(null) }
 
-    // : Trigger states with explicit types
+    //  Trigger states with explicit types
     var locationTriggerExpanded: Boolean by remember { mutableStateOf(false) }
     var locationName: String by remember { mutableStateOf("") }
     var locationDetailsInput: String by remember { mutableStateOf("") }
@@ -218,6 +215,9 @@ fun TaskCreationScreen(
     var blockAppsActionExpanded: Boolean by remember { mutableStateOf(false) }
     var selectedAppsToBlock: List<String> by remember { mutableStateOf(emptyList()) }
 
+    //  UnBlock Apps Action states with explicit types
+    var unblockAppsActionExpanded: Boolean by remember { mutableStateOf(false) }
+
 
     // Pre-populate fields if editing
     LaunchedEffect(existingWorkflow) {
@@ -225,35 +225,33 @@ fun TaskCreationScreen(
             try {
                 taskName = workflow.workflowName
 
-                workflow.toTrigger()?.let { trigger ->
-                    when (trigger.type) {
-                        Constants.TRIGGER_TIME -> {
+                workflow.toTriggers().firstOrNull()?.let { trigger ->
+                    when (trigger) {
+                        is Trigger.TimeTrigger -> {
                             timeTriggerExpanded = true
-                            timeValue = trigger.value ?: ""
+                            timeValue = trigger.time
                         }
-                        Constants.TRIGGER_WIFI -> {
+                        is Trigger.WiFiTrigger -> {
                             wifiTriggerExpanded = true
-                            wifiState = trigger.value ?: "On"
+                            wifiState = trigger.state
                         }
-                        Constants.TRIGGER_BLE -> {
+                        is Trigger.BluetoothTrigger -> {
                             bluetoothDeviceTriggerExpanded = true
-                            bluetoothDeviceAddress = trigger.value ?: ""
+                            bluetoothDeviceAddress = trigger.deviceAddress
                         }
-                        Constants.TRIGGER_LOCATION -> {
+                        is Trigger.LocationTrigger -> {
                             locationTriggerExpanded = true
-                            try {
-                                val locationJson = JSONObject(trigger.value ?: "{}")
-                                locationName = locationJson.optString("locationName", "")
-                                locationDetailsInput = locationJson.optString("coordinates", "")
-                                radiusValue = locationJson.optDouble("radius", 100.0).toFloat()
-                            } catch (e: Exception) {
-                                Log.e("TaskCreation", "Error parsing location JSON", e)
-                            }
+                            locationName = trigger.locationName
+                            locationDetailsInput = "${trigger.latitude},${trigger.longitude}"
+                            radiusValue = trigger.radius.toFloat()
                         }
+                        is Trigger.BatteryTrigger -> {
+                        Log.d("TaskCreation", "Battery trigger found but not supported in UI")
+                    }
                     }
                 }
 
-                workflow.toAction()?.let { action ->
+                workflow.toActions().firstOrNull()?.let { action ->
                     when (action.type) {
                         Constants.ACTION_SEND_NOTIFICATION -> {
                             sendNotificationActionExpanded = true
@@ -261,13 +259,24 @@ fun TaskCreationScreen(
                             notificationMessage = action.message ?: ""
                             notificationPriority = action.priority ?: "Normal"
                         }
-                        Constants.ACTION_TOGGLE_WIFI -> {
+                        Constants.ACTION_SET_SOUND_MODE -> {
+                            setSoundModeActionExpanded = true
+                            soundMode = action.value ?: "Normal"
+                        }
+                        Constants.ACTION_TOGGLE_WIFI, Constants.ACTION_TOGGLE_BLUETOOTH -> {
                             toggleSettingsActionExpanded = true
                             toggleSetting = action.value ?: "WiFi"
                         }
-                        "RUN_SCRIPT" -> {
+                        Constants.ACTION_RUN_SCRIPT -> {
                             runScriptActionExpanded = true
                             scriptText = action.value ?: ""
+                        }
+                        Constants.ACTION_BLOCK_APPS -> {
+                            blockAppsActionExpanded = true
+                            selectedAppsToBlock = action.value?.split(",") ?: emptyList()
+                        }
+                        Constants.ACTION_UNBLOCK_APPS -> {
+                            unblockAppsActionExpanded = true
                         }
                     }
                 }
@@ -343,7 +352,9 @@ fun TaskCreationScreen(
                 blockAppsActionExpanded = blockAppsActionExpanded,
                 onBlockAppsExpandedChange = { blockAppsActionExpanded = it },
                 selectedAppsToBlock = selectedAppsToBlock,
-                onSelectedAppsChange = { selectedAppsToBlock = it }
+                onSelectedAppsChange = { selectedAppsToBlock = it },
+                unblockAppsActionExpanded = unblockAppsActionExpanded,
+                onUnblockAppsExpandedChange = { unblockAppsActionExpanded = it }
             )
 
             // Save/Back Buttons Card
@@ -377,6 +388,9 @@ fun TaskCreationScreen(
                             scriptText = scriptText,
                             setSoundModeActionExpanded = setSoundModeActionExpanded,
                             soundMode = soundMode,
+                            blockAppsActionExpanded = blockAppsActionExpanded,
+                            selectedAppsToBlock = selectedAppsToBlock,
+                            unblockAppsActionExpanded = unblockAppsActionExpanded,
                             onSuccess = {
                                 showSuccessSnackbar = true
                                 onSaveTask(taskName)
@@ -412,7 +426,7 @@ fun TaskCreationScreen(
         }
     }
 }
-// ========== COMPOSABLE COMPONENTS ==========
+//  COMPOSABLE COMPONENTS 
 
 @Composable
 private fun TaskNameCard(
@@ -537,7 +551,7 @@ private fun TriggersCard(
     }
 }
 
-// ========== UPDATED ACTIONS CARD ==========
+//  UPDATED ACTIONS CARD 
 
 @Composable
 private fun ActionsCard(
@@ -560,7 +574,9 @@ private fun ActionsCard(
     blockAppsActionExpanded: Boolean,
     onBlockAppsExpandedChange: (Boolean) -> Unit,
     selectedAppsToBlock: List<String>,
-    onSelectedAppsChange: (List<String>) -> Unit
+    onSelectedAppsChange: (List<String>) -> Unit,
+    unblockAppsActionExpanded: Boolean,
+    onUnblockAppsExpandedChange: (Boolean) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -630,10 +646,18 @@ private fun ActionsCard(
                     onSelectedAppsChange = onSelectedAppsChange
                 )
             }
+            ExpandableActionSection(
+                title = "Unblock Apps",
+                icon = Icons.Default.LockOpen,
+                expanded = unblockAppsActionExpanded,
+                onExpandedChange = onUnblockAppsExpandedChange
+            ) {
+                UnblockAppsContent()
+            }
         }
     }
 }
-// ========== NEW ACTION CONTENT COMPONENTS ==========
+//  NEW ACTION CONTENT COMPONENTS 
 
 @Composable
 private fun SetSoundModeContent(
@@ -740,139 +764,156 @@ private fun SetSoundModeContent(
     }
 }
 
+/**
+ * Block Apps Action Configuration
+ */
 @Composable
 private fun BlockAppsContent(
     selectedApps: List<String>,
     onSelectedAppsChange: (List<String>) -> Unit
 ) {
     val context = LocalContext.current
-    var showAppPicker by remember { mutableStateOf(false) }
-    var installedApps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(false) }
+    var isAccessibilityEnabled by remember {
+        mutableStateOf(isAccessibilityServiceEnabled(context))
+    }
+
+    // Recheck accessibility status when composable becomes visible
+    LaunchedEffect(Unit) {
+        isAccessibilityEnabled = isAccessibilityServiceEnabled(context)
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-            "Select apps to block when triggered:",
+            "Select apps to block when triggered",
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Medium
         )
 
-        // Selected apps display
+        // ✅ Accessibility Service Warning
+        if (!isAccessibilityEnabled) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Accessibility Service Required",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "App blocking requires accessibility service to monitor app launches. Please enable it to use this feature.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = {
+                            openAccessibilitySettings(context)
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Open Accessibility Settings")
+                    }
+                }
+            }
+        }
+
+        // ✅ Selected Apps Display with Remove Option
         if (selectedApps.isNotEmpty()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
                 )
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        "Selected Apps (${selectedApps.size}):",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    selectedApps.forEach { appPackage ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Apps,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Text(
-                                    text = getAppName(context, appPackage),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-
-                            IconButton(
-                                onClick = {
-                                    onSelectedAppsChange(selectedApps - appPackage)
-                                },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Remove",
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
-                        if (appPackage != selectedApps.last()) {
-                            Divider(modifier = Modifier.padding(vertical = 4.dp))
-                        }
-                    }
-                }
-            }
-        }
-
-        // Add apps button
-        Button(
-            onClick = {
-                isLoading = true
-                try {
-                    installedApps = getInstalledApps(context)
-                    showAppPicker = true
-                } catch (e: Exception) {
-                    Log.e("BlockApps", "Error loading apps", e)
-                } finally {
-                    isLoading = false
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
-        ) {
-            if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Loading Apps...")
-            } else {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(if (selectedApps.isEmpty()) "Select Apps to Block" else "Add More Apps")
-            }
-        }
-
-        // Quick presets
-        Text(
-            "Quick Presets:",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(appBlockPresets.keys.toList()) { presetName ->
-                FilterChip(
-                    selected = false,
-                    onClick = {
-                        val presetApps = appBlockPresets[presetName] ?: emptyList()
-                        onSelectedAppsChange((selectedApps + presetApps).distinct())
-                    },
-                    label = { Text(presetName) },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = getPresetIcon(presetName),
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Selected Apps (${selectedApps.size})",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
+
+                        // Clear All button
+                        TextButton(
+                            onClick = { onSelectedAppsChange(emptyList()) }
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Clear all",
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Clear All", style = MaterialTheme.typography.labelSmall)
+                        }
                     }
-                )
+
+                    HorizontalDivider()
+
+                    // Scrollable list of selected apps with remove buttons
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(selectedApps) { packageName ->
+                            SelectedAppChip(
+                                packageName = packageName,
+                                appName = getAppNameFromPackage(context, packageName),
+                                onRemove = {
+                                    onSelectedAppsChange(selectedApps - packageName)
+                                }
+                            )
+                        }
+                    }
+                }
             }
         }
+
+        // App Selector
+        AppSelectorComposable(
+            onAppsSelected = onSelectedAppsChange,
+            preSelectedApps = selectedApps,
+            showSystemApps = false,
+            modifier = Modifier.fillMaxWidth()
+        )
 
         // Info card
         Card(
@@ -891,26 +932,127 @@ private fun BlockAppsContent(
                     tint = MaterialTheme.colorScheme.onTertiaryContainer
                 )
                 Text(
-                    text = "Blocked apps will be restricted when this automation triggers. Requires accessibility permission.",
+                    text = "Blocked apps will be immediately closed when launched during this automation's active period.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer
                 )
             }
         }
     }
+}
 
-    // App picker dialog
-    if (showAppPicker) {
-        AppPickerDialog(
-            apps = installedApps,
-            selectedApps = selectedApps,
-            onDismiss = { showAppPicker = false },
-            onConfirm = { newSelection ->
-                onSelectedAppsChange(newSelection)
-                showAppPicker = false
-            }
+@Composable
+private fun UnblockAppsContent() {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            "Unblock all currently blocked apps",
+            style = MaterialTheme.typography.bodyMedium
         )
+
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer
+            )
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Default.Info, null)
+                Text(
+                    "This action will clear all app restrictions and re-enable access to blocked apps.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
     }
+}
+
+
+/**
+ * ✅ NEW: Chip component for selected apps
+ */
+@Composable
+private fun SelectedAppChip(
+    packageName: String,
+    appName: String,
+    onRemove: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Apps,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+
+                Column {
+                    Text(
+                        text = appName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = packageName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+            }
+
+            IconButton(
+                onClick = onRemove,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Remove",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * ✅ NEW: Check if accessibility service is enabled
+ */
+private fun isAccessibilityServiceEnabled(context: Context): Boolean {
+    val serviceName = "${context.packageName}/.blocker.AppBlockAccessibilityService"
+    val enabledServices = android.provider.Settings.Secure.getString(
+        context.contentResolver,
+        android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+    )
+    return enabledServices?.contains(serviceName) == true
+}
+
+/**
+ *  Open accessibility settings
+ */
+private fun openAccessibilitySettings(context: Context) {
+    val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+    context.startActivity(intent)
 }
 @Composable
 private fun AppPickerDialog(
@@ -1023,7 +1165,7 @@ private fun AppPickerDialog(
         }
     )
 }
-// ========== UTILITY FUNCTIONS ==========
+//  UTILITY FUNCTIONS 
 
 private fun getInstalledApps(context: Context): List<AppInfo> {
     return try {
@@ -1046,7 +1188,7 @@ private fun getInstalledApps(context: Context): List<AppInfo> {
     }
 }
 
-private fun getAppName(context: Context, packageName: String): String {
+    private fun getAppName(context: Context, packageName: String): String {
     return try {
         val packageManager = context.packageManager
         val appInfo = packageManager.getApplicationInfo(packageName, 0)
@@ -1055,44 +1197,7 @@ private fun getAppName(context: Context, packageName: String): String {
         packageName
     }
 }
-
-private val appBlockPresets = mapOf(
-    "Social Media" to listOf(
-        "com.facebook.katana",
-        "com.instagram.android",
-        "com.twitter.android",
-        "com.snapchat.android",
-        "com.zhiliaoapp.musically" // TikTok
-    ),
-    "Gaming" to listOf(
-        "com.pubg.imobile",
-        "com.supercell.clashofclans",
-        "com.king.candycrushsaga",
-        "com.roblox.client"
-    ),
-    "Streaming" to listOf(
-        "com.google.android.youtube",
-        "com.netflix.mediaclient",
-        "com.amazon.avod.thirdpartyclient",
-        "com.spotify.music"
-    ),
-    "Shopping" to listOf(
-        "com.amazon.mShop.android.shopping",
-        "com.ebay.mobile",
-        "com.shopify.mobile"
-    )
-)
-
-private fun getPresetIcon(presetName: String): ImageVector {
-    return when (presetName) {
-        "Social Media" -> Icons.Default.Group
-        "Gaming" -> Icons.Default.SportsEsports
-        "Streaming" -> Icons.Default.PlayCircle
-        "Shopping" -> Icons.Default.ShoppingCart
-        else -> Icons.Default.Apps
-    }
-}
-// ========== SUPPORTING COMPONENTS AND DATA CLASSES ==========
+//  SUPPORTING COMPONENTS AND DATA CLASSES 
 
 data class SoundModeOption(
     val name: String,
@@ -1140,7 +1245,7 @@ private fun SaveButtonsCard(
     }
 }
 
-// ========== EXPANDABLE SECTIONS ==========
+//  EXPANDABLE SECTIONS 
 
 @Composable
 private fun ExpandableTriggerSection(
@@ -1431,7 +1536,7 @@ private fun LocationTriggerContent(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // ========== UPDATED: Radius Input with Indoor Presets ==========
+        //  UPDATED: Radius Input with Indoor Presets 
 
         Text(
             "Trigger Radius",
@@ -1790,7 +1895,7 @@ private fun getRadiusUseCase(radius: Int): String {
 }
 
 // Permission Dialog (same as before)...
-// ========== LOCATION FETCHING FUNCTION ==========
+//  LOCATION FETCHING FUNCTION 
 
 @SuppressLint("MissingPermission")
 private fun fetchCurrentLocation(
@@ -1845,7 +1950,7 @@ private fun fetchCurrentLocation(
     }
 }
 
-// ========== REVERSE GEOCODING ==========
+//  REVERSE GEOCODING 
 
 private fun getAddressFromCoordinates(
     context: Context,
@@ -1932,18 +2037,25 @@ private fun TimeTriggerContent(
         if (selectedDate != null && selectedTime != null) {
             val dateTime = LocalDateTime.of(selectedDate, selectedTime)
 
-            // ✅ CORRECT: Proper timezone conversion
+            // ADD THESE DEBUG LOGS
+            Log.d("TimeTriggerContent", "========== TIME DEBUG ==========")
+            Log.d("TimeTriggerContent", "Current System Time: ${LocalDateTime.now()}")
+            Log.d("TimeTriggerContent", "Selected Date: $selectedDate")
+            Log.d("TimeTriggerContent", "Selected Time: $selectedTime")
+            Log.d("TimeTriggerContent", "Combined DateTime: $dateTime")
+            Log.d("TimeTriggerContent", "System TimeZone: ${java.time.ZoneId.systemDefault()}")
+
             val timestamp = dateTime
                 .atZone(java.time.ZoneId.systemDefault())
                 .toEpochSecond()
 
+            //  ADD THIS TOO
+            Log.d("TimeTriggerContent", "Expected (now): ${LocalDateTime.now().atZone(java.time.ZoneId.systemDefault()).toEpochSecond()}")
+            Log.d("TimeTriggerContent", "Calculated timestamp: $timestamp")
+            Log.d("TimeTriggerContent", "Difference (seconds): ${timestamp - LocalDateTime.now().atZone(java.time.ZoneId.systemDefault()).toEpochSecond()}")
+
             // Save the timestamp
             onTimeValueChange(timestamp.toString())
-
-            // Log for debugging
-            Log.d("TimeTriggerContent", "Is24Hour: $is24HourFormat")
-            Log.d("TimeTriggerContent", "Selected DateTime: $dateTime")
-            Log.d("TimeTriggerContent", "Timestamp (seconds): $timestamp")
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -2234,7 +2346,7 @@ private fun BluetoothTriggerContent(
 }
 
 
-// ========== ACTION CONTENT COMPONENTS ==========
+//  ACTION CONTENT COMPONENTS 
 
 @Composable
 private fun NotificationActionContent(
@@ -2360,7 +2472,7 @@ private fun RunScriptContent(
     }
 }
 
-// ========== ERROR DIALOG ==========
+//  ERROR DIALOG 
 
 @Composable
 private fun ErrorDialog(
@@ -2379,8 +2491,7 @@ private fun ErrorDialog(
         icon = { Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error) }
     )
 }
-// ========== SAVE HANDLER ==========
-
+//  SAVE HANDLER
 private suspend fun handleSaveTask(
     context: Context,
     viewModel: WorkflowViewModel,
@@ -2407,6 +2518,9 @@ private suspend fun handleSaveTask(
     scriptText: String,
     setSoundModeActionExpanded: Boolean,
     soundMode: String,
+    blockAppsActionExpanded: Boolean,
+    selectedAppsToBlock: List<String>,
+    unblockAppsActionExpanded: Boolean,
     onSuccess: () -> Unit,
     onError: (String) -> Unit
 ) {
@@ -2426,7 +2540,6 @@ private suspend fun handleSaveTask(
         val hasWifiTrigger = wifiTriggerExpanded
         val hasTimeTrigger = timeTriggerExpanded && timeValue.isNotBlank()
         val hasBluetoothTrigger = bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank()
-
         Log.d("TaskCreation", "=== TRIGGER CHECK ===")
         Log.d("TaskCreation", "Location: $hasLocationTrigger")
         Log.d("TaskCreation", "WiFi: $hasWifiTrigger")
@@ -2441,46 +2554,34 @@ private suspend fun handleSaveTask(
         }
         Log.d("TaskCreation", "✅ At least one trigger is configured")
 
-        // 4. CREATE TRIGGER (Priority: Time > WiFi > Bluetooth > Location)
-        val trigger = when {
-            hasTimeTrigger -> {
-                Log.d("TaskCreation", "→ Creating TIME trigger: $timeValue")
-                Trigger.TimeTrigger(
-                    time = timeValue,
-                    days = listOf() // Add days from your UI if available
-                )
+        // 4. CREATE LIST OF ALL CONFIGURED TRIGGERS
+        val triggers = mutableListOf<Trigger>()
+        if (hasTimeTrigger) {
+            Log.d("TaskCreation", "→ Adding TIME trigger: $timeValue")
+            triggers.add(Trigger.TimeTrigger(time = timeValue, days = listOf()))
+        }
+        if (hasWifiTrigger) {
+            Log.d("TaskCreation", "→ Adding WIFI trigger: $wifiState")
+            triggers.add(Trigger.WiFiTrigger(ssid = null, state = wifiState))
+        }
+        if (hasBluetoothTrigger) {
+            Log.d("TaskCreation", "→ Adding BLUETOOTH trigger: $bluetoothDeviceAddress")
+            triggers.add(Trigger.BluetoothTrigger(deviceAddress = bluetoothDeviceAddress, deviceName = null))
+        }
+        if (hasLocationTrigger) {
+            Log.d("TaskCreation", "→ Adding LOCATION trigger")
+            val parts = locationDetailsInput.split(",").map { it.trim() }
+            if (parts.size != 2) {
+                onError("Invalid coordinates. Use format: latitude,longitude")
+                return
             }
-
-            hasWifiTrigger -> {
-                Log.d("TaskCreation", "→ Creating WIFI trigger: $wifiState")
-                Trigger.WiFiTrigger(
-                    ssid = null, // Add SSID from UI if available
-                    state = wifiState
-                )
+            val lat = parts[0].toDoubleOrNull()
+            val lng = parts[1].toDoubleOrNull()
+            if (lat == null || lng == null) {
+                onError("Invalid coordinate values")
+                return
             }
-
-            hasBluetoothTrigger -> {
-                Log.d("TaskCreation", "→ Creating BLUETOOTH trigger: $bluetoothDeviceAddress")
-                Trigger.BluetoothTrigger(
-                    deviceAddress = bluetoothDeviceAddress,
-                    deviceName = null // Add device name from UI if available
-                )
-            }
-
-            hasLocationTrigger -> {
-                Log.d("TaskCreation", "→ Creating LOCATION trigger")
-                val parts = locationDetailsInput.split(",").map { it.trim() }
-                if (parts.size != 2) {
-                    onError("Invalid coordinates. Use format: latitude,longitude")
-                    return
-                }
-                val lat = parts[0].toDoubleOrNull()
-                val lng = parts[1].toDoubleOrNull()
-                if (lat == null || lng == null) {
-                    onError("Invalid coordinate values")
-                    return
-                }
-
+            triggers.add(
                 Trigger.LocationTrigger(
                     locationName = locationName.ifEmpty { "Unnamed Location" },
                     latitude = lat,
@@ -2495,206 +2596,131 @@ private suspend fun handleSaveTask(
                         else -> "enter"
                     }
                 )
-            }
-
-
-            else -> {
-                onError("Failed to create trigger")
-                return
-            }
+            )
         }
-        Log.d("TaskCreation", "✅ Trigger created: ${trigger.type}")
+        Log.d("TaskCreation", "✅ Total triggers created: ${triggers.size}")
 
         // 5. CHECK WHICH ACTIONS ARE CONFIGURED
         val hasNotificationAction = sendNotificationActionExpanded && notificationTitle.isNotBlank()
         val hasToggleAction = toggleSettingsActionExpanded
         val hasScriptAction = runScriptActionExpanded && scriptText.isNotBlank()
-        val hasSoundModeAction = setSoundModeActionExpanded  // ✅ FIXED
-
+        val hasSoundModeAction = setSoundModeActionExpanded
+        val hasBlockAppAction = blockAppsActionExpanded && selectedAppsToBlock.isNotEmpty()
         Log.d("TaskCreation", "=== ACTION CHECK ===")
         Log.d("TaskCreation", "Notification: $hasNotificationAction")
         Log.d("TaskCreation", "Toggle: $hasToggleAction")
         Log.d("TaskCreation", "Script: $hasScriptAction")
         Log.d("TaskCreation", "Sound Mode: $hasSoundModeAction")
+        Log.d("TaskCreation", "Block Apps: $hasBlockAppAction")
 
         // 6. VALIDATE AT LEAST ONE ACTION
-        if (!hasNotificationAction && !hasToggleAction && !hasScriptAction && !hasSoundModeAction) {
+        if (!hasNotificationAction && !hasToggleAction && !hasScriptAction && !hasSoundModeAction && !hasBlockAppAction) {
             Log.e("TaskCreation", "❌ No action configured")
             onError("Please configure at least ONE action")
             return
         }
         Log.d("TaskCreation", "✅ At least one action is configured")
 
-        // 7. CREATE ACTION (Priority: Notification > Toggle > SoundMode > Script)
-        val action = when {
-            hasNotificationAction -> {
-                Log.d("TaskCreation", "→ Creating NOTIFICATION action")
-                Action(
-                    Constants.ACTION_SEND_NOTIFICATION,
-                    notificationTitle,
-                    notificationMessage,
-                    notificationPriority
-                )
-            }
-            hasToggleAction -> {
-                Log.d("TaskCreation", "→ Creating TOGGLE action: $toggleSetting")
-                val actionType = when {
-                    toggleSetting.startsWith("WIFI") -> Constants.ACTION_TOGGLE_WIFI
-                    toggleSetting.startsWith("BLUETOOTH") -> Constants.ACTION_TOGGLE_BLUETOOTH
-                    else -> Constants.ACTION_TOGGLE_WIFI // default fallback
-                }
+        // 7. CREATE LIST OF ALL CONFIGURED ACTIONS
+        val actions = mutableListOf<Action>()
 
-                Action(actionType, null, null, null).apply {
-                    value = toggleSetting
-                }
-            }
-            hasSoundModeAction -> {
-                Log.d("TaskCreation", "→ Creating SOUND MODE action: $soundMode")
-                Action(Constants.ACTION_SET_SOUND_MODE, null, null, null).apply {
-                    value = soundMode
-                }
-            }
-            hasScriptAction -> {
-                Log.d("TaskCreation", "→ Creating SCRIPT action")
-                Action(Constants.ACTION_RUN_SCRIPT, null, null, null).apply {
-                    value = scriptText
-                }
-            }
-            else -> {
-                onError("Failed to create action")
-                return
-            }
+        if (hasNotificationAction) {
+            Log.d("TaskCreation", "→ Adding NOTIFICATION action")
+            actions.add(Action(Constants.ACTION_SEND_NOTIFICATION, notificationTitle, notificationMessage, notificationPriority))
         }
-        Log.d("TaskCreation", "✅ Action created: ${action.type}")
+        if (hasToggleAction) {
+            Log.d("TaskCreation", "→ Adding TOGGLE action: $toggleSetting")
+            val actionType = when {
+                toggleSetting.startsWith("WIFI") -> Constants.ACTION_TOGGLE_WIFI
+                toggleSetting.startsWith("BLUETOOTH") -> Constants.ACTION_TOGGLE_BLUETOOTH
+                else -> Constants.ACTION_TOGGLE_WIFI
+            }
+            actions.add(Action(actionType, null, null, null).apply { value = toggleSetting })
+        }
+        if (hasSoundModeAction) {
+            Log.d("TaskCreation", "→ Adding SOUND MODE action: $soundMode")
+            actions.add(Action(Constants.ACTION_SET_SOUND_MODE, null, null, null).apply { value = soundMode })
+        }
+        //  Block Apps Action
+        if (blockAppsActionExpanded && selectedAppsToBlock.isNotEmpty()) {
+            Log.d("TaskCreation", "→ Adding BLOCK APPS action: ${selectedAppsToBlock.size} apps")
+            Log.d("TaskCreation", "→ Apps: ${selectedAppsToBlock.joinToString()}")
+            // Store as comma-separated package names
+            val appsToBlock = selectedAppsToBlock.joinToString(",")
+            actions.add(Action(Constants.ACTION_BLOCK_APPS, null, null, null).apply {
+                value = appsToBlock
+            })
+        }
+        //  ADD UNBLOCK APPS ACTION
+        if (unblockAppsActionExpanded) {
+            Log.d("TaskCreation", "→ Adding UNBLOCK APPS action")
+            actions.add(Action(Constants.ACTION_UNBLOCK_APPS, null, null, null))
+        }
+        if (hasScriptAction) {
+            Log.d("TaskCreation", "→ Adding SCRIPT action")
+            actions.add(Action(Constants.ACTION_RUN_SCRIPT, null, null, null).apply { value = scriptText })
+        }
+        Log.d("TaskCreation", "✅ Total actions created: ${actions.size}")
 
-        // 8. SAVE TO DATABASE
-        Log.d("TaskCreation", "💾 Saving workflow...")
-
+        // 8. SAVE TO DATABASE (uses first trigger/action for compatibility)
         if (workflowId != null) {
-            // UPDATE existing
-            Log.d("TaskCreation", "→ Updating workflow ID: $workflowId")
-            viewModel.updateWorkflow(workflowId, taskName, trigger, action, null)
-            Log.d("TaskCreation", "✅ Update sent")
+            viewModel.updateWorkflow(
+                workflowId = workflowId,
+                workflowName = taskName,
+                triggers = triggers,
+                actions = actions,
+                callback = null
+            )
         } else {
-            // CREATE new
-            Log.d("TaskCreation", "→ Creating new workflow")
-            viewModel.addWorkflow(taskName, trigger, action)
-            Log.d("TaskCreation", "✅ Create sent")
+            viewModel.addWorkflow(
+                workflowName = taskName,
+                triggers = triggers,
+                actions = actions,
+                triggerLogic = "AND"
+            )
         }
 
-        // 9. SCHEDULE ALARM IF TIME TRIGGER
-        if (trigger.type == Constants.TRIGGER_TIME) {
+        // 9. SCHEDULE ALARMS FOR TIME TRIGGERS
+        triggers.filterIsInstance<Trigger.TimeTrigger>().forEach { timeTrigger ->
             try {
-                val triggerTimeSeconds = timeValue.toLongOrNull() ?: 0L
-                val triggerTimeMillis = triggerTimeSeconds * 1000L
-                val currentTimeMillis = System.currentTimeMillis()
-
-                val dateTimeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                Log.d("TaskCreation", "⏰ Time Check:")
-                Log.d("TaskCreation", "   Current:  ${dateTimeFormat.format(currentTimeMillis)}")
-                Log.d("TaskCreation", "   Selected: ${dateTimeFormat.format(triggerTimeMillis)}")
-
-                if (triggerTimeMillis > currentTimeMillis) {
-                    // ✅ FIXED: Route based on action type
-                    when (action.type) {
-                        Constants.ACTION_SEND_NOTIFICATION -> {
-                            AlarmScheduler.scheduleNotification(
-                                context,
-                                0L,
-                                triggerTimeMillis,
-                                action.title ?: "AutoFlow",
-                                action.message ?: "Triggered"
+                val triggerMillis = (timeTrigger.time.toLongOrNull() ?: 0L) * 1000L
+                if (triggerMillis > System.currentTimeMillis()) {
+                    actions.forEach { action ->
+                        when (action.type) {
+                            Constants.ACTION_SEND_NOTIFICATION -> AlarmScheduler.scheduleNotification(
+                                context, workflowId ?: 0L, triggerMillis,
+                                action.title ?: "AutoFlow", action.message ?: "Triggered"
                             )
-                        }
-                        Constants.ACTION_SET_SOUND_MODE -> {
-                            AlarmScheduler.scheduleSoundMode(
-                                context,
-                                0L,
-                                triggerTimeMillis,
-                                action.value ?: "Silent"
-                            )
-                        }
-                        Constants.ACTION_TOGGLE_WIFI -> {
-                            val wifiState = action.value == "WIFI_ON"  // ✅ Parse state
-                            AlarmScheduler.scheduleWiFiToggle(
-                                context,
-                                0L,
-                                triggerTimeMillis,
-                                wifiState
-                            )
-                        }
-                        Constants.ACTION_TOGGLE_BLUETOOTH -> {  // ✅ ADD THIS
-                            val bluetoothState = action.value == "BLUETOOTH_ON"  // ✅ Parse state
-                            AlarmScheduler.scheduleBluetoothToggle(
-                                context,
-                                0L,
-                                triggerTimeMillis,
-                                bluetoothState
-                            )
-                        }
-                        Constants.ACTION_RUN_SCRIPT -> {
-                            AlarmScheduler.scheduleScript(
-                                context,
-                                0L,
-                                triggerTimeMillis,
-                                action.value ?: ""
-                            )
+                            Constants.ACTION_SET_SOUND_MODE ->
+                                AlarmScheduler.scheduleSoundMode(context, workflowId ?: 0L, triggerMillis, action.value ?: "Silent")
+                            Constants.ACTION_TOGGLE_WIFI -> AlarmScheduler.scheduleWiFiToggle(context, workflowId ?: 0L, triggerMillis, action.value == "WIFI_ON")
+                            Constants.ACTION_TOGGLE_BLUETOOTH -> AlarmScheduler.scheduleBluetoothToggle(context, workflowId ?: 0L, triggerMillis, action.value == "BLUETOOTH_ON")
+                            Constants.ACTION_RUN_SCRIPT -> AlarmScheduler.scheduleScript(context, workflowId ?: 0L, triggerMillis, action.value ?: "")
                         }
                     }
-                    Log.d("TaskCreation", "✅ Alarm scheduled for ${action.type}")
-                } else {
-                    Log.w("TaskCreation", "⚠️ Time is in the past")
                 }
             } catch (e: Exception) {
                 Log.e("TaskCreation", "❌ Alarm scheduling failed", e)
             }
         }
-        // 10. ADD GEOFENCE IF LOCATION TRIGGER
-        if (trigger.type == Constants.TRIGGER_LOCATION) {
+
+        // 10. ADD GEOFENCES FOR LOCATION TRIGGERS
+        triggers.filterIsInstance<Trigger.LocationTrigger>().forEach { locationTrigger ->
             try {
-                val locationJson = JSONObject(trigger.value)
-                val lat = locationJson.getDouble("latitude")
-                val lng = locationJson.getDouble("longitude")
-                val radius = locationJson.optInt("radius", 100).toFloat()
-
-                //  Use the correct field names that match your JSON
-                val triggerOnEntry = locationJson.optBoolean("triggerOnEntry", false)
-                val triggerOnExit = locationJson.optBoolean("triggerOnExit", false)
-
-                //  Store triggerOn for GeofenceReceiver compatibility
-                val triggerOn = when {
-                    triggerOnEntry && triggerOnExit -> "both"
-                    triggerOnEntry -> "enter"
-                    triggerOnExit -> "exit"
-                    else -> "enter" // default
-                }
-
-                val geofenceAdded = GeofenceManager.addGeofence(
-                    context = context,
-                    workflowId = workflowId ?: 0L,
-                    latitude = lat,
-                    longitude = lng,
-                    radius = radius,
-                    triggerOnEntry = triggerOnEntry,
-                    triggerOnExit = triggerOnExit
+                GeofenceManager.addGeofence(
+                    context,
+                    workflowId ?: 0L,
+                    locationTrigger.latitude,
+                    locationTrigger.longitude,
+                    locationTrigger.radius.toFloat(),
+                    locationTrigger.triggerOnEntry,
+                    locationTrigger.triggerOnExit
                 )
-
-                if (geofenceAdded) {
-                    Log.d("TaskCreation", "✅ Geofence registered for workflow")
-                } else {
-                    Log.e("TaskCreation", "❌ Failed to register geofence")
-                }
             } catch (e: Exception) {
                 Log.e("TaskCreation", "❌ Geofence setup failed", e)
             }
         }
-
-
-
-
-        // 11. SUCCESS
         onSuccess()
-
     } catch (e: NumberFormatException) {
         Log.e("TaskCreation", "❌ Number format error", e)
         onError("Invalid number: ${e.message}")
@@ -2706,7 +2732,8 @@ private suspend fun handleSaveTask(
         onError("Error: ${e.message}")
     }
 }
-// ========== UTILITY FUNCTIONS ==========
+
+//  UTILITY FUNCTIONS 
 
 data class BluetoothDeviceInfo(val name: String, val address: String)
 
@@ -2932,8 +2959,7 @@ private fun validateScript(scriptCode: String) {
     }
 }
 
-// ========== PREVIEW ==========
-
+//  PREVIEW
 @Preview(showBackground = true, name = "Task Creation Screen Preview")
 @Composable
 fun TaskCreationScreenPreview() {

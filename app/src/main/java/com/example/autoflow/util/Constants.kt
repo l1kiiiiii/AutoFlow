@@ -7,6 +7,7 @@ package com.example.autoflow.util
 object Constants {
 
     const val ACTION_BLOCK_APPS = "BLOCK_APPS"
+    const val ACTION_UNBLOCK_APPS = "UNBLOCK_APPS"
 
     //  TRIGGER TYPES 
     const val TRIGGER_TIME = "TIME"

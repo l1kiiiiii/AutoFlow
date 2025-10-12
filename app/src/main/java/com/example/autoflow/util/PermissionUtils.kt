@@ -16,6 +16,7 @@ object PermissionUtils {
 
     private const val TAG = "PermissionUtils"
 
+
     //  PERMISSION REQUEST CODES 
 
     const val REQUEST_LOCATION_PERMISSION = 1001

@@ -14,7 +14,7 @@ import androidx.lifecycle.MutableLiveData
 import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.data.WorkflowRepository
-import com.example.autoflow.geofence.GeofenceManager  // ✅ ADD THIS IMPORT
+import com.example.autoflow.geofence.GeofenceManager
 import com.example.autoflow.integrations.BLEManager
 import com.example.autoflow.integrations.LocationManager
 import com.example.autoflow.integrations.WiFiManager
@@ -23,6 +23,8 @@ import com.example.autoflow.model.Trigger
 import com.example.autoflow.util.Constants
 import com.example.autoflow.util.PermissionUtils
 import org.json.JSONObject
+import com.example.autoflow.util.AlarmScheduler
+import org.json.JSONArray
 
 /**
  * Modern WorkflowViewModel using Coroutines
@@ -53,7 +55,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
     }
 
     init {
-        //  Get database instance first
+        // Get database instance first
         val database = AppDatabase.getDatabase(application)
         repository = WorkflowRepository(database)
 
@@ -61,10 +63,9 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         Log.d(TAG, "ViewModel initialized")
     }
 
-    // ========== WORKFLOW CRUD OPERATIONS ==========
+    // WORKFLOW CRUD OPERATIONS
 
     fun loadWorkflows() {
-        // : Use correct method name
         repository.getAllWorkflows(object : WorkflowRepository.WorkflowCallback {
             override fun onWorkflowsLoaded(workflows: MutableList<WorkflowEntity>) {
                 _workflows.postValue(workflows)
@@ -78,24 +79,44 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         })
     }
 
-    fun addWorkflow(workflowName: String, trigger: Trigger, action: Action) {
+    // Now accepts lists
+    /**
+     * Add workflow with multiple triggers and actions
+     */
+    fun addWorkflow(
+        workflowName: String,
+        triggers: List<Trigger>,
+        actions: List<Action>,
+        triggerLogic: String = "AND"
+    ) {
         // Validate inputs FIRST
         if (workflowName.isBlank()) {
             _errorMessage.postValue("Workflow name cannot be empty")
             return
         }
 
+        if (triggers.isEmpty()) {
+            _errorMessage.postValue("At least one trigger is required")
+            return
+        }
+
+        if (actions.isEmpty()) {
+            _errorMessage.postValue("At least one action is required")
+            return
+        }
+
         Log.d(TAG, "🔵 addWorkflow - Name: $workflowName")
-        Log.d(TAG, "  Trigger: ${trigger.type} = ${trigger.value}")
-        Log.d(TAG, "  Action: ${action.type}")
+        Log.d(TAG, "  Triggers: ${triggers.size}")
+        Log.d(TAG, "  Actions: ${actions.size}")
 
         try {
-            // Create workflow entity
-            val workflowEntity = WorkflowEntity.fromTriggerAndAction(
+            // Create workflow entity with multiple triggers/actions
+            val workflowEntity = WorkflowEntity.fromTriggersAndActions(
                 workflowName = workflowName.trim(),
                 isEnabled = true,
-                trigger = trigger,
-                action = action
+                triggers = triggers,
+                actions = actions,
+                triggerLogic = triggerLogic
             )
 
             if (workflowEntity == null) {
@@ -103,16 +124,20 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                 return
             }
 
-            // Insert workflow and register geofence with actual database ID
+            // Insert workflow and register triggers
             repository.insert(workflowEntity, object : WorkflowRepository.InsertCallback {
                 override fun onInsertComplete(insertedId: Long) {
                     Log.d(TAG, "🎉 Workflow inserted - ID: $insertedId")
 
-                    // Register geofence with ACTUAL database ID (not 0)
-                    if (trigger is Trigger.LocationTrigger) {
-                        val success = GeofenceManager.addGeofence(  // ✅ FIXED: Use GeofenceManager object
+                    // ✅ NEW: Schedule alarms for the inserted workflow
+                    val savedWorkflow = workflowEntity.copy(id = insertedId)
+                    AlarmScheduler.scheduleWorkflow(getApplication<Application>().applicationContext, savedWorkflow)
+
+                    // Register all location triggers (existing code)
+                    triggers.filterIsInstance<Trigger.LocationTrigger>().forEach { trigger ->
+                        val success = GeofenceManager.addGeofence(
                             context = getApplication<Application>().applicationContext,
-                            workflowId = insertedId,  // Use actual ID from database
+                            workflowId = insertedId,
                             latitude = trigger.latitude,
                             longitude = trigger.longitude,
                             radius = trigger.radius.toFloat(),
@@ -129,7 +154,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
 
                     // Reload workflows and show success message
                     loadWorkflows()
-                    _successMessage.postValue("Workflow '$workflowName' created")
+                    _successMessage.postValue("Workflow '$workflowName' created with ${triggers.size} trigger(s) and ${actions.size} action(s)")
                 }
 
                 override fun onInsertError(error: String) {
@@ -143,13 +168,16 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-
+    /**
+     * Update workflow with multiple triggers and actions
+     */
     fun updateWorkflow(
         workflowId: Long,
         workflowName: String,
-        trigger: Trigger,
-        action: Action,
-        callback: WorkflowOperationCallback? = null
+        triggers: List<Trigger>,  // ✅ Changed to List
+        actions: List<Action>,    // ✅ Changed to List
+        callback: WorkflowOperationCallback? = null,
+        triggerLogic: String = "AND"
     ) {
         if (workflowId <= 0) {
             val error = "Invalid workflow ID"
@@ -165,22 +193,71 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
+        if (triggers.isEmpty()) {
+            val error = "At least one trigger is required"
+            _errorMessage.postValue(error)
+            callback?.onError(error)
+            return
+        }
+
+        if (actions.isEmpty()) {
+            val error = "At least one action is required"
+            _errorMessage.postValue(error)
+            callback?.onError(error)
+            return
+        }
+
         try {
-            // Build JSON for trigger
-            val triggerJson = JSONObject().apply {
-                put("type", trigger.type)
-                put("value", trigger.value)
+            // Build triggers JSON array
+            val triggersJsonArray = JSONArray()
+            triggers.forEach { trigger ->
+                val triggerJson = JSONObject().apply {
+                    put("type", trigger.type)
+                    put("value", trigger.value)
+                    // Add specific fields based on trigger type
+                    when (trigger) {
+                        is Trigger.LocationTrigger -> {
+                            put("locationName", trigger.locationName)
+                            put("latitude", trigger.latitude)
+                            put("longitude", trigger.longitude)
+                            put("radius", trigger.radius)
+                            put("triggerOnEntry", trigger.triggerOnEntry)
+                            put("triggerOnExit", trigger.triggerOnExit)
+                        }
+                        is Trigger.TimeTrigger -> {
+                            put("time", trigger.time)
+                            put("days", JSONArray(trigger.days))
+                        }
+                        is Trigger.WiFiTrigger -> {
+                            trigger.ssid?.let { put("ssid", it) }
+                            put("state", trigger.state)
+                        }
+                        is Trigger.BluetoothTrigger -> {
+                            put("deviceAddress", trigger.deviceAddress)
+                            trigger.deviceName?.let { put("deviceName", it) }
+                        }
+                        is Trigger.BatteryTrigger -> {
+                            put("level", trigger.level)
+                            put("condition", trigger.condition)
+                        }
+                    }
+                }
+                triggersJsonArray.put(triggerJson)
             }
 
-            // Build JSON for action
-            val actionJson = JSONObject().apply {
-                put("type", action.type)
-                action.title?.let { put("title", it) }
-                action.message?.let { put("message", it) }
-                action.priority?.let { put("priority", it) }
+            // Build actions JSON array
+            val actionsJsonArray = JSONArray()
+            actions.forEach { action ->
+                val actionJson = JSONObject().apply {
+                    put("type", action.type)
+                    action.value?.let { put("value", it) }
+                    action.title?.let { put("title", it) }
+                    action.message?.let { put("message", it) }
+                    action.priority?.let { put("priority", it) }
+                }
+                actionsJsonArray.put(actionJson)
             }
 
-            // ✅ FIXED: Use correct method name
             repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
                 override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
                     if (workflow == null) {
@@ -192,8 +269,9 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
 
                     // Update fields
                     workflow.workflowName = workflowName.trim()
-                    workflow.triggerDetails = triggerJson.toString()
-                    workflow.actionDetails = actionJson.toString()
+                    workflow.triggerDetails = triggersJsonArray.toString()
+                    workflow.actionDetails = actionsJsonArray.toString()
+                    workflow.triggerLogic = triggerLogic
                     workflow.isEnabled = true
 
                     // Save
@@ -201,7 +279,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                         override fun onUpdateComplete(success: Boolean) {
                             if (success) {
                                 loadWorkflows()
-                                val msg = "Workflow updated"
+                                val msg = "Workflow updated with ${triggers.size} trigger(s) and ${actions.size} action(s)"
                                 _successMessage.postValue(msg)
                                 callback?.onSuccess(msg)
                             } else {
@@ -229,7 +307,6 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             callback?.onError(error)
         }
     }
-
     fun deleteWorkflow(workflowId: Long, callback: WorkflowOperationCallback? = null) {
         if (workflowId <= 0) {
             val error = "Invalid workflow ID"
@@ -238,22 +315,33 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
-        // ✅ Remove geofence before deleting workflow
         repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
             override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
                 if (workflow != null) {
-                    // Check if it's a location trigger and remove geofence
                     try {
                         val triggerJson = JSONObject(workflow.triggerDetails)
-                        if (triggerJson.optString("type") == "LOCATION") {
+                        val triggerType = triggerJson.optString("type")
+
+                        // Remove geofence for location triggers
+                        if (triggerType == Constants.TRIGGER_LOCATION) {
                             GeofenceManager.removeGeofence(
                                 getApplication<Application>().applicationContext,
                                 workflow.id
                             )
                             Log.d(TAG, "🗑️ Removed geofence for workflow ${workflow.id}")
                         }
+
+                        // ✅ NEW: Cancel alarm for time-based triggers
+                        if (triggerType == Constants.TRIGGER_TIME) {
+                            AlarmScheduler.cancelAlarm(
+                                getApplication<Application>().applicationContext,
+                                workflow.id
+                            )
+                            Log.d(TAG, "⏰ Cancelled alarm for workflow ${workflow.id}")
+                        }
+
                     } catch (e: Exception) {
-                        Log.e(TAG, "Error removing geofence: ${e.message}")
+                        Log.e(TAG, "Error cleaning up triggers: ${e.message}")
                     }
                 }
 
@@ -316,6 +404,32 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
+        //  Cancel alarm when disabling time-based workflows
+        if (!enabled) {
+            repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
+                override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
+                    workflow?.let {
+                        try {
+                            val triggerJson = JSONObject(it.triggerDetails)
+                            if (triggerJson.optString("type") == Constants.TRIGGER_TIME) {
+                                AlarmScheduler.cancelAlarm(
+                                    getApplication<Application>().applicationContext,
+                                    workflowId
+                                )
+                                Log.d(TAG, "⏰ Cancelled alarm for disabled workflow $workflowId")
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error cancelling alarm: ${e.message}")
+                        }
+                    }
+                }
+
+                override fun onWorkflowError(error: String) {
+                    Log.e(TAG, "Error fetching workflow for alarm cancellation: $error")
+                }
+            })
+        }
+
         repository.updateWorkflowEnabled(workflowId, enabled, object : WorkflowRepository.UpdateCallback {
             override fun onUpdateComplete(success: Boolean) {
                 if (success) {
@@ -356,7 +470,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         })
     }
 
-    // ========== TRIGGER MONITORING ==========
+    // TRIGGER MONITORING
 
     @SuppressLint("MissingPermission")
     @RequiresPermission(anyOf = [Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION])
@@ -507,7 +621,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    // ========== CALLBACK INTERFACES ==========
+    // CALLBACK INTERFACES
 
     interface WorkflowOperationCallback {
         fun onSuccess(message: String)
@@ -523,7 +637,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         fun onTriggerFired(trigger: Trigger, isFired: Boolean)
     }
 
-    // ========== LIFECYCLE ==========
+    // LIFECYCLE
 
     @SuppressLint("MissingPermission")
     override fun onCleared() {

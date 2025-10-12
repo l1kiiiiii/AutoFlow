@@ -6,6 +6,10 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import com.example.autoflow.data.WorkflowEntity
+import com.example.autoflow.data.toActions
+import com.example.autoflow.data.toTriggers
+import com.example.autoflow.model.Trigger
 import com.example.autoflow.receiver.AlarmReceiver
 
 object AlarmScheduler {
@@ -70,6 +74,95 @@ object AlarmScheduler {
             Log.e("AlarmScheduler", "❌ Error scheduling alarm: ${e.message}", e)
         }
     }
+
+
+    /**
+     *  Schedule alarm for a complete workflow
+     */
+    /**
+     * ✅ Schedule alarm for a complete workflow
+     */
+    /**
+     * ✅ Schedule alarm for a complete workflow
+     */
+    fun scheduleWorkflow(context: Context, workflow: WorkflowEntity) {
+        Log.d("AlarmScheduler", "⏰ scheduleWorkflow called for workflow ID: ${workflow.id}")
+
+        try {
+            val triggers = workflow.toTriggers()
+            val actions = workflow.toActions()
+
+            Log.d("AlarmScheduler", "Found ${triggers.size} triggers and ${actions.size} actions")
+
+            triggers.forEach { trigger ->
+                when (trigger) {
+                    is Trigger.TimeTrigger -> {
+                        // Convert trigger.time from String to Long
+                        val triggerTime = trigger.time.toLongOrNull() ?: return@forEach
+                        val triggerTimeMillis = triggerTime * 1000L // Convert to milliseconds
+
+                        Log.d("AlarmScheduler", "Scheduling TIME trigger at $triggerTime (${triggerTimeMillis}ms)")
+
+                        // Schedule alarm for ALL actions in this workflow
+                        actions.forEach { action ->
+                            //  Skip if action.type is null
+                            val actionType = action.type ?: return@forEach
+
+                            val actionData = mutableMapOf<String, String>()
+
+                            when (actionType) {
+                                Constants.ACTION_SEND_NOTIFICATION -> {
+                                    actionData["notification_title"] = action.title ?: "AutoFlow"
+                                    actionData["notification_message"] = action.message ?: "Automation triggered"
+                                }
+                                Constants.ACTION_BLOCK_APPS -> {
+                                    actionData["app_packages"] = action.value ?: ""
+                                }
+                                Constants.ACTION_UNBLOCK_APPS -> {
+                                    // No extra data needed
+                                }
+                                Constants.ACTION_SET_SOUND_MODE -> {
+                                    actionData["sound_mode"] = action.value ?: "Normal"
+                                }
+                                Constants.ACTION_TOGGLE_WIFI -> {
+                                    actionData["wifi_state"] = action.value ?: "Toggle"
+                                }
+                                Constants.ACTION_TOGGLE_BLUETOOTH -> {
+                                    actionData["bluetooth_state"] = action.value ?: "Toggle"
+                                }
+                            }
+
+                            //  Use actionType (non-null) instead of action.type
+                            scheduleAlarm(
+                                context,
+                                workflow.id,
+                                triggerTimeMillis,
+                                actionType,  // Non-null String
+                                actionData
+                            )
+                        }
+                    }
+                    // Handle other trigger types
+                    is Trigger.LocationTrigger -> {
+                        Log.d("AlarmScheduler", "Location triggers are handled by GeofenceManager")
+                    }
+                    is Trigger.WiFiTrigger -> {
+                        Log.d("AlarmScheduler", "WiFi triggers are handled by WiFiManager")
+                    }
+                    is Trigger.BluetoothTrigger -> {
+                        Log.d("AlarmScheduler", "Bluetooth triggers are handled by BLEManager")
+                    }
+                    is Trigger.BatteryTrigger -> {
+                        Log.d("AlarmScheduler", "Battery triggers not yet implemented")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("AlarmScheduler", "❌ Error scheduling workflow: ${e.message}", e)
+        }
+    }
+
+
 
     /**
      * BACKWARD COMPATIBLE: Schedule notification (existing method)

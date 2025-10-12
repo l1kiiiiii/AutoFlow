@@ -1,7 +1,4 @@
 <resources>
     <string name="app_name">AutoFlow</string>
-        <string name="accessibility_service_description">When enabled, prevents opening selected
-            apps at restricted locations. This helps maintain focus in specific areas like work or
-            study zones.
-        </string>
+    <string name="accessibility_service_description">AutoFlow needs this permission to block apps when triggered by your automation workflows. This service monitors which apps are opened and blocks them according to your configured rules.</string>
 </resources>

@@ -364,7 +364,7 @@ fun Dashboard(modifier: Modifier = Modifier) {
     }
 }
 
-// ========== SUCCESS ANIMATION OVERLAY ==========
+//  SUCCESS ANIMATION OVERLAY 
 
 @Composable
 fun SuccessAnimationOverlay(message: String) {
@@ -425,7 +425,7 @@ fun SuccessAnimationOverlay(message: String) {
     }
 }
 
-// ========== DATA CLASSES ==========
+//  DATA CLASSES 
 
 data class BottomNavItem(
     val route: String,
@@ -435,7 +435,7 @@ data class BottomNavItem(
     val badgeCount: Int? = null
 )
 
-// ========== HELPER FUNCTIONS ==========
+//  HELPER FUNCTIONS 
 
 private fun getScreenTitle(route: String): String {
     return when {

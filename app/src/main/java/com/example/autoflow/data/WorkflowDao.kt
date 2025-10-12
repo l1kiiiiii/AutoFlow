@@ -10,21 +10,21 @@ import androidx.room.Update
 @Dao
 interface WorkflowDao {
 
-    // ========== INSERT ==========
+    //  INSERT 
     @Insert
     fun insert(workflowEntity: WorkflowEntity): Long
 
     @Insert
     fun insertAll(vararg workflows: WorkflowEntity): List<Long>
 
-    // ========== UPDATE ==========
+    //  UPDATE 
     @Update
     fun update(workflowEntity: WorkflowEntity): Int
 
     @Query("UPDATE workflows SET is_enabled = :enabled WHERE id = :workflowId")
     fun updateEnabled(workflowId: Long, enabled: Boolean): Int
 
-    // ========== DELETE ==========
+    //  DELETE 
     @Delete
     fun delete(workflowEntity: WorkflowEntity)
 
@@ -34,7 +34,7 @@ interface WorkflowDao {
     @Query("DELETE FROM workflows")
     fun deleteAll()
 
-    // ========== SYNCHRONOUS QUERIES (NO @JvmField!) ==========
+    //  SYNCHRONOUS QUERIES (NO @JvmField!) 
     @Query("SELECT * FROM workflows")
     fun getAllWorkflowsSync(): List<WorkflowEntity>
 
@@ -47,7 +47,7 @@ interface WorkflowDao {
     @Query("SELECT COUNT(*) FROM workflows")
     fun getCount(): Int
 
-    // ========== LIVEDATA QUERIES ==========
+    //  LIVEDATA QUERIES 
     @Query("SELECT * FROM workflows")
     fun getAllWorkflows(): LiveData<List<WorkflowEntity>>
 
