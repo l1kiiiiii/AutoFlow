@@ -45,7 +45,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 Constants.ACTION_TOGGLE_WIFI -> handleWiFiToggle(context, intent)
                 Constants.ACTION_TOGGLE_BLUETOOTH -> handleBluetoothToggle(context, intent)
                 Constants.ACTION_RUN_SCRIPT -> handleScript(context, intent)
-                Constants.ACTION_BLOCK_APPS -> handleBlockApps(context, intent)
+                Constants.ACTION_BLOCK_APPS -> handleBlockApps(context, intent) 
                 Constants.ACTION_UNBLOCK_APPS -> handleUnblockApps(context, intent)
                 else -> {
                     Log.w(TAG, "⚠️ Unknown action type: $actionType")

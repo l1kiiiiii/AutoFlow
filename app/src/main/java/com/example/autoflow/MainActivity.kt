@@ -16,6 +16,7 @@ import androidx.annotation.RequiresApi
 import com.example.autoflow.ui.theme.AutoFlowTheme
 import com.example.autoflow.ui.theme.screens.Dashboard
 import com.example.autoflow.util.NotificationHelper
+import com.example.autoflow.util.AlarmScheduler  // ✅ Import AlarmScheduler
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -32,6 +33,9 @@ class MainActivity : ComponentActivity() {
 
         // Initialize notification channels
         NotificationHelper.createNotificationChannels(this)
+
+        // ✅ Clean up invalid alarms (workflow ID 0)
+        AlarmScheduler.cancelWorkflowAlarms(this, 0)
 
         // Request exact alarm permission for Android 12+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -77,9 +81,11 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
     override fun onDestroy() {
         super.onDestroy()
     }
+
     override fun onResume() {
         super.onResume()
     }

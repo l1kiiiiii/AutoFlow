@@ -87,6 +87,10 @@ object AlarmScheduler {
      */
     fun scheduleWorkflow(context: Context, workflow: WorkflowEntity) {
         Log.d("AlarmScheduler", "⏰ scheduleWorkflow called for workflow ID: ${workflow.id}")
+        if (workflow.id <= 0) {
+            Log.w("AlarmScheduler", "⚠️ Cannot schedule workflow with invalid ID: ${workflow.id}")
+            return
+        }
 
         try {
             val triggers = workflow.toTriggers()
@@ -292,4 +296,42 @@ object AlarmScheduler {
         pendingIntent.cancel()
         Log.d("AlarmScheduler", "✅ Alarm cancelled for workflow $workflowId")
     }
+    /**
+     *  Cancel alarms for a specific workflow
+     */
+    fun cancelWorkflowAlarms(context: Context, workflowId: Long) {
+        Log.d("AlarmScheduler", "🚫 Cancelling alarms for workflow ID: $workflowId")
+
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+        // Cancel alarm for all possible action types
+        val actionTypes = listOf(
+            Constants.ACTION_SEND_NOTIFICATION,
+            Constants.ACTION_BLOCK_APPS,
+            Constants.ACTION_UNBLOCK_APPS,
+            Constants.ACTION_SET_SOUND_MODE,
+            Constants.ACTION_TOGGLE_WIFI,
+            Constants.ACTION_TOGGLE_BLUETOOTH
+        )
+
+        actionTypes.forEach { actionType ->
+            val intent = Intent(context, AlarmReceiver::class.java).apply {
+                putExtra("workflow_id", workflowId)
+                putExtra("action_type", actionType)
+            }
+
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                workflowId.toInt() + actionType.hashCode(),
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            alarmManager.cancel(pendingIntent)
+            Log.d("AlarmScheduler", "   Cancelled: $actionType")
+        }
+
+        Log.d("AlarmScheduler", "✅ All alarms cancelled for workflow $workflowId")
+    }
+
 }

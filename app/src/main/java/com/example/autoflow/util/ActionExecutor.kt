@@ -270,9 +270,14 @@ object ActionExecutor {
         }
     }
     /**
-     * Block specified apps using BlockPolicy
+     *  ENHANCED: Block apps with optional notification
      */
-    private fun blockApps(context: Context, packageNames: String): Boolean {
+    private fun blockApps(
+        context: Context,
+        packageNames: String,
+        durationMinutes: Int = 0,
+        sendNotification: Boolean = false  // Make notification optional
+    ): Boolean {
         return try {
             if (packageNames.isBlank()) {
                 Log.w(TAG, "No apps specified for blocking")
@@ -290,22 +295,29 @@ object ActionExecutor {
 
             Log.d(TAG, "🚫 Blocking ${appsToBlock.size} apps: $appsToBlock")
 
+            // Update BlockPolicy
             BlockPolicy.setBlockedPackages(context, appsToBlock.toSet())
             BlockPolicy.setBlockingEnabled(context, true)
 
-            val appNames = appsToBlock.map { getAppName(context, it) }
-            val appNamesText = if (appNames.size <= 3) {
-                appNames.joinToString(", ")
-            } else {
-                "${appNames.take(3).joinToString(", ")} +${appNames.size - 3} more"
+            // ✅ Only send notification if requested
+            if (sendNotification) {
+                if (durationMinutes > 0) {
+                    scheduleAutoUnblock(context, durationMinutes)
+                    sendNotification(
+                        context,
+                        "🚫 App Blocking Active",
+                        "Blocking for $durationMinutes minutes",
+                        "High"
+                    )
+                } else {
+                    sendNotification(
+                        context,
+                        "🚫 App Blocking Active",
+                        "Now blocking ${appsToBlock.size} app(s)",
+                        "High"
+                    )
+                }
             }
-
-            sendNotification(
-                context,
-                "🚫 App Blocking Active",
-                "Now blocking: $appNamesText",
-                "High"
-            )
 
             Log.d(TAG, "✅ App blocking enabled for: ${appsToBlock.joinToString()}")
             true
@@ -314,6 +326,7 @@ object ActionExecutor {
             false
         }
     }
+
 
     /**
      *  Unblock all apps
