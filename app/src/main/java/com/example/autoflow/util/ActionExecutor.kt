@@ -5,7 +5,6 @@ import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
@@ -20,105 +19,132 @@ import androidx.core.app.NotificationCompat
 import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.data.toActions
 import com.example.autoflow.model.Action
-import com.example.autoflow.blocker.BlockActivity
 import com.example.autoflow.policy.BlockPolicy
 import com.example.autoflow.receiver.AlarmReceiver
 
 object ActionExecutor {
+
     private const val TAG = "ActionExecutor"
-    private const val CHANNEL_ID_URGENT = "autoflow_urgent"
     private const val CHANNEL_ID_HIGH = "autoflow_high"
     private const val CHANNEL_ID_NORMAL = "autoflow_normal"
     private const val CHANNEL_ID_LOW = "autoflow_low"
 
+    /**
+     * ✅ Execute a single action
+     */
     fun executeAction(context: Context, action: Action): Boolean {
-        return try {
-            Log.d(TAG, "Executing action: ${action.type}")
+        Log.d(TAG, "Executing action: ${action.type}")
 
+        return try {
             when (action.type) {
                 Constants.ACTION_SEND_NOTIFICATION -> {
-                    sendNotification(
-                        context,
-                        action.title ?: "AutoFlow",
-                        action.message ?: "Automation triggered",
-                        action.priority ?: "Normal"
+                    val title = action.title ?: "AutoFlow"
+                    val message = action.message ?: "Automation triggered"
+                    val priority = action.priority ?: "Normal"
+                    sendNotification(context, title, message, priority)
+                }
+
+                Constants.ACTION_BLOCK_APPS -> {
+                    // ✅ FIXED: Don't send notification from blockApps()
+                    // User should add a separate notification action if they want one
+                    blockApps(
+                        context = context,
+                        packageNames = action.value ?: "",
+                        durationMinutes = 0,
+                        sendNotification = false  // ✅ Set to false to avoid duplicate
                     )
                 }
-                Constants.ACTION_TOGGLE_WIFI -> {
-                    toggleWifi(context, action.value ?: "Toggle")
-                }
-                Constants.ACTION_TOGGLE_BLUETOOTH -> {
-                    toggleBluetooth(context, action.value ?: "Toggle")
-                }
-                Constants.ACTION_SET_SOUND_MODE -> {
-                    setSoundMode(context, action.value ?: "Normal")
-                }
-                Constants.ACTION_BLOCK_APPS -> {
-                    blockApps(context, action.value ?: "")
-                }
+
                 Constants.ACTION_UNBLOCK_APPS -> {
                     unblockApps(context)
                 }
-                Constants.ACTION_RUN_SCRIPT -> {
-                    runScript(context, action.value ?: "")
+
+                Constants.ACTION_SET_SOUND_MODE -> {
+                    val mode = action.value ?: "Normal"
+                    setSoundMode(context, mode)
                 }
+
+                Constants.ACTION_TOGGLE_WIFI -> {
+                    val state = action.value ?: "Toggle"
+                    toggleWiFi(context, state)
+                }
+
+                Constants.ACTION_TOGGLE_BLUETOOTH -> {
+                    val state = action.value ?: "Toggle"
+                    toggleBluetooth(context, state)
+                }
+
                 else -> {
                     Log.w(TAG, "Unknown action type: ${action.type}")
                     false
                 }
             }
-            true
         } catch (e: Exception) {
-            Log.e(TAG, "Error executing action: ${action.type}", e)
+            Log.e(TAG, "Error executing action ${action.type}", e)
             false
         }
     }
 
-    private fun sendNotification(
+    /**
+     * ✅ Execute multiple actions from a workflow
+     */
+    fun executeWorkflow(context: Context, workflow: WorkflowEntity): Boolean {
+        Log.d(TAG, "Executing workflow: ${workflow.workflowName}")
+
+        val actions = workflow.toActions()
+        if (actions.isEmpty()) {
+            Log.w(TAG, "No actions to execute")
+            return false
+        }
+
+        var successCount = 0
+        actions.forEach { action ->
+            if (executeAction(context, action)) {
+                successCount++
+            }
+        }
+
+        Log.d(TAG, "Executed $successCount/${actions.size} actions successfully")
+        return successCount > 0
+    }
+
+    // ==================== ACTION IMPLEMENTATIONS ====================
+
+    /**
+     * ✅ Send notification with priority levels
+     */
+    fun sendNotification(
         context: Context,
         title: String,
         message: String,
-        priority: String
+        priority: String = "Normal"
     ): Boolean {
         return try {
             createNotificationChannels(context)
 
-            val channelId = when (priority) {
-                "Urgent", "Max" -> CHANNEL_ID_URGENT
-                "High" -> CHANNEL_ID_HIGH
-                "Low" -> CHANNEL_ID_LOW
+            val channelId = when (priority.lowercase()) {
+                "high" -> CHANNEL_ID_HIGH
+                "low" -> CHANNEL_ID_LOW
                 else -> CHANNEL_ID_NORMAL
             }
 
-            val notificationPriority = when (priority) {
-                "Urgent", "Max" -> NotificationCompat.PRIORITY_MAX
-                "High" -> NotificationCompat.PRIORITY_HIGH
-                "Low" -> NotificationCompat.PRIORITY_LOW
+            val notificationPriority = when (priority.lowercase()) {
+                "high" -> NotificationCompat.PRIORITY_HIGH
+                "low" -> NotificationCompat.PRIORITY_LOW
                 else -> NotificationCompat.PRIORITY_DEFAULT
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                if (ActivityCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.POST_NOTIFICATIONS
-                    ) != PackageManager.PERMISSION_GRANTED
-                ) {
-                    Log.w(TAG, "Notification permission not granted")
-                    return false
-                }
             }
 
             val notification = NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle(title)
                 .setContentText(message)
-                .setStyle(NotificationCompat.BigTextStyle().bigText(message))
                 .setPriority(notificationPriority)
                 .setAutoCancel(true)
                 .build()
 
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.notify(System.currentTimeMillis().toInt(), notification)
+            val notificationId = System.currentTimeMillis().toInt()
+            notificationManager.notify(notificationId, notification)
 
             Log.d(TAG, "Notification sent: $title")
             true
@@ -128,155 +154,14 @@ object ActionExecutor {
         }
     }
 
-    private fun createNotificationChannels(context: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-            val channels = listOf(
-                NotificationChannel(
-                    CHANNEL_ID_URGENT,
-                    "Urgent Notifications",
-                    NotificationManager.IMPORTANCE_HIGH
-                ).apply {
-                    description = "Critical automation alerts"
-                    enableVibration(true)
-                    enableLights(true)
-                },
-                NotificationChannel(
-                    CHANNEL_ID_HIGH,
-                    "High Priority",
-                    NotificationManager.IMPORTANCE_HIGH
-                ),
-                NotificationChannel(
-                    CHANNEL_ID_NORMAL,
-                    "Normal",
-                    NotificationManager.IMPORTANCE_DEFAULT
-                ),
-                NotificationChannel(
-                    CHANNEL_ID_LOW,
-                    "Low Priority",
-                    NotificationManager.IMPORTANCE_LOW
-                )
-            )
-
-            channels.forEach { notificationManager.createNotificationChannel(it) }
-        }
-    }
-
-    private fun toggleWifi(context: Context, action: String): Boolean {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val panelIntent = Intent(Settings.Panel.ACTION_WIFI)
-                panelIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(panelIntent)
-                return true
-            }
-
-            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-
-            @Suppress("DEPRECATION")
-            val enable = when (action) {
-                "Turn ON" -> true
-                "Turn OFF" -> false
-                else -> !wifiManager.isWifiEnabled
-            }
-
-            @Suppress("DEPRECATION")
-            wifiManager.isWifiEnabled = enable
-            Log.d(TAG, "WiFi toggled: $enable")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Error toggling WiFi", e)
-            false
-        }
-    }
-
-    private fun toggleBluetooth(context: Context, action: String): Boolean {
-        return try {
-            val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-            val bluetoothAdapter = bluetoothManager.adapter ?: return false
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                if (ActivityCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.BLUETOOTH_CONNECT
-                    ) != PackageManager.PERMISSION_GRANTED
-                ) {
-                    val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(intent)
-                    return true
-                }
-            }
-
-            val enable = when (action) {
-                "Turn ON" -> true
-                "Turn OFF" -> false
-                else -> !bluetoothAdapter.isEnabled
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-            } else {
-                @Suppress("DEPRECATION")
-                if (enable) bluetoothAdapter.enable() else bluetoothAdapter.disable()
-            }
-
-            Log.d(TAG, "Bluetooth action: $action")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Error toggling Bluetooth", e)
-            false
-        }
-    }
-
-    private fun setSoundMode(context: Context, mode: String): Boolean {
-        return try {
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-            when (mode) {
-                "Normal", Constants.SOUND_MODE_RING -> {
-                    audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
-                }
-                "Silent", Constants.SOUND_MODE_SILENT -> {
-                    audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
-                }
-                "Vibrate", Constants.SOUND_MODE_VIBRATE -> {
-                    audioManager.ringerMode = AudioManager.RINGER_MODE_VIBRATE
-                }
-                "Do Not Disturb" -> {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        if (!notificationManager.isNotificationPolicyAccessGranted) {
-                            val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            context.startActivity(intent)
-                            return false
-                        }
-                        notificationManager.setInterruptionFilter(
-                            NotificationManager.INTERRUPTION_FILTER_PRIORITY
-                        )
-                    }
-                }
-            }
-
-            Log.d(TAG, "Sound mode set to: $mode")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Error setting sound mode", e)
-            false
-        }
-    }
     /**
-     *  ENHANCED: Block apps with optional notification
+     * ✅ FIXED: Block apps with optional notification
      */
     private fun blockApps(
         context: Context,
         packageNames: String,
         durationMinutes: Int = 0,
-        sendNotification: Boolean = false  // Make notification optional
+        sendNotification: Boolean = false  // ✅ Optional notification
     ): Boolean {
         return try {
             if (packageNames.isBlank()) {
@@ -299,7 +184,7 @@ object ActionExecutor {
             BlockPolicy.setBlockedPackages(context, appsToBlock.toSet())
             BlockPolicy.setBlockingEnabled(context, true)
 
-            // ✅ Only send notification if requested
+            // ✅ Only send notification if explicitly requested
             if (sendNotification) {
                 if (durationMinutes > 0) {
                     scheduleAutoUnblock(context, durationMinutes)
@@ -327,28 +212,15 @@ object ActionExecutor {
         }
     }
 
-
     /**
-     *  Unblock all apps
+     * ✅ Unblock all apps
      */
     private fun unblockApps(context: Context): Boolean {
         return try {
-            Log.d(TAG, "🔓 Unblocking all apps")
-
-            val blockedApps = BlockPolicy.getBlockedPackages(context)
-            val appCount = blockedApps.size
-
-            BlockPolicy.clearBlockedPackages(context)
             BlockPolicy.setBlockingEnabled(context, false)
+            BlockPolicy.clearBlockedPackages(context)
 
-            sendNotification(
-                context,
-                "✅ App Blocking Disabled",
-                "Unblocked $appCount app(s)",
-                "Normal"
-            )
-
-            Log.d(TAG, "✅ Successfully unblocked $appCount apps")
+            Log.d(TAG, "✅ All apps unblocked")
             true
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error unblocking apps", e)
@@ -357,108 +229,229 @@ object ActionExecutor {
     }
 
     /**
-     * Helper to get app name from package name
-     */
-    private fun getAppName(context: Context, packageName: String): String {
-        return try {
-            val pm = context.packageManager
-            val appInfo = pm.getApplicationInfo(packageName, 0)
-            pm.getApplicationLabel(appInfo).toString()
-        } catch (e: Exception) {
-            packageName.split(".").lastOrNull()?.replaceFirstChar { it.uppercase() } ?: packageName
-        }
-    }
-
-    /**
-     *  Schedule automatic unblock using WorkManager
-     */
-    /**
-     * Schedule automatic unblock using AlarmManager
+     * ✅ Schedule auto-unblock after duration
      */
     private fun scheduleAutoUnblock(context: Context, durationMinutes: Int) {
         try {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-
-            // ✅ Check if we can schedule exact alarms (Android 12+)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                if (!alarmManager.canScheduleExactAlarms()) {
-                    Log.w(TAG, "❌ Cannot schedule exact alarms. Permission not granted.")
-                    // Optionally prompt user to grant permission
-                    val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(intent)
-                    return
-                }
-            }
-
-            val unblockTime = System.currentTimeMillis() + (durationMinutes * 60 * 1000)
-
             val intent = Intent(context, AlarmReceiver::class.java).apply {
-                action = "com.example.autoflow.ACTION_AUTO_UNBLOCK"
+                action = "com.example.autoflow.UNBLOCK_APPS"
             }
 
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
-                99999, // Unique ID for unblock alarm
+                System.currentTimeMillis().toInt(),
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            // ✅ Wrap in try-catch to handle SecurityException
-            try {
+            val triggerTime = System.currentTimeMillis() + (durationMinutes * 60 * 1000L)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (alarmManager.canScheduleExactAlarms()) {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerTime,
+                        pendingIntent
+                    )
+                } else {
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerTime,
+                        pendingIntent
+                    )
+                }
+            } else {
                 alarmManager.setExactAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
-                    unblockTime,
+                    triggerTime,
                     pendingIntent
                 )
-                Log.d(TAG, "⏰ Auto-unblock scheduled for $durationMinutes minutes from now")
-            } catch (e: SecurityException) {
-                Log.e(TAG, "❌ SecurityException: Cannot schedule exact alarm", e)
-                // Fall back to inexact alarm if exact alarm fails
-                alarmManager.set(
-                    AlarmManager.RTC_WAKEUP,
-                    unblockTime,
-                    pendingIntent
-                )
-                Log.d(TAG, "⏰ Fallback: Inexact unblock alarm scheduled")
             }
 
+            Log.d(TAG, "⏰ Auto-unblock scheduled for $durationMinutes minutes")
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error scheduling auto-unblock", e)
+            Log.e(TAG, "Error scheduling auto-unblock", e)
         }
     }
 
-
-    private fun runScript(context: Context, script: String): Boolean {
+    /**
+     * ✅ Set sound mode (Silent/Vibrate/Normal)
+     */
+    private fun setSoundMode(context: Context, mode: String): Boolean {
         return try {
-            // Basic script execution - implement according to your needs
-            Log.d(TAG, "Script execution: $script")
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+            // Check Do Not Disturb permission
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                if (!notificationManager.isNotificationPolicyAccessGranted) {
+                    Log.w(TAG, "⚠️ Do Not Disturb permission not granted")
+                    return false
+                }
+            }
+
+            val ringerMode = when (mode.lowercase()) {
+                "silent" -> AudioManager.RINGER_MODE_SILENT
+                "vibrate" -> AudioManager.RINGER_MODE_VIBRATE
+                "normal" -> AudioManager.RINGER_MODE_NORMAL
+                else -> AudioManager.RINGER_MODE_NORMAL
+            }
+
+            audioManager.ringerMode = ringerMode
+            Log.d(TAG, "🔊 Sound mode set to: $mode")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Error running script", e)
+            Log.e(TAG, "Error setting sound mode", e)
             false
         }
     }
+
     /**
-     * Execute multiple actions for a workflow
+     * ✅ Toggle WiFi (requires CHANGE_WIFI_STATE permission)
      */
-    fun executeWorkflow(context: Context, workflow: WorkflowEntity): Boolean {
-        val actions = workflow.toActions()
+    private fun toggleWiFi(context: Context, state: String): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Android 10+ doesn't allow programmatic WiFi control
+                Log.w(TAG, "⚠️ WiFi control not available on Android 10+")
 
-        if (actions.isEmpty()) {
-            Log.w(TAG, "⚠️ No actions to execute for workflow ${workflow.id}")
-            return false
+                // Open WiFi settings instead
+                val intent = Intent(Settings.Panel.ACTION_WIFI)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                return true
+            }
+
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+
+            when (state.lowercase()) {
+                "on" -> {
+                    @Suppress("DEPRECATION")
+                    wifiManager.isWifiEnabled = true
+                    Log.d(TAG, "📶 WiFi enabled")
+                }
+                "off" -> {
+                    @Suppress("DEPRECATION")
+                    wifiManager.isWifiEnabled = false
+                    Log.d(TAG, "📶 WiFi disabled")
+                }
+                "toggle" -> {
+                    @Suppress("DEPRECATION")
+                    wifiManager.isWifiEnabled = !wifiManager.isWifiEnabled
+                    Log.d(TAG, "📶 WiFi toggled")
+                }
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error toggling WiFi", e)
+            false
         }
-
-        Log.d(TAG, "🚀 Executing ${actions.size} actions for workflow: ${workflow.workflowName}")
-
-        var allSuccessful = true
-        actions.forEachIndexed { index, action ->
-            val success = executeAction(context, action)
-            Log.d(TAG, "Action ${index + 1}/${actions.size}: ${if (success) "✅" else "❌"}")
-            if (!success) allSuccessful = false
-        }
-        return allSuccessful
     }
 
+    /**
+     * ✅ Toggle Bluetooth
+     */
+    private fun toggleBluetooth(context: Context, state: String): Boolean {
+        return try {
+            val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            val bluetoothAdapter = bluetoothManager.adapter
+
+            if (bluetoothAdapter == null) {
+                Log.w(TAG, "Bluetooth not supported")
+                return false
+            }
+
+            // Check permissions
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (ActivityCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.BLUETOOTH_CONNECT
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    Log.w(TAG, "⚠️ BLUETOOTH_CONNECT permission not granted")
+                    return false
+                }
+            }
+
+            when (state.lowercase()) {
+                "on" -> {
+                    if (!bluetoothAdapter.isEnabled) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            // Open Bluetooth settings
+                            val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(intent)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            bluetoothAdapter.enable()
+                        }
+                    }
+                    Log.d(TAG, "📡 Bluetooth enabled")
+                }
+                "off" -> {
+                    if (bluetoothAdapter.isEnabled) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            // Open Bluetooth settings
+                            val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(intent)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            bluetoothAdapter.disable()
+                        }
+                    }
+                    Log.d(TAG, "📡 Bluetooth disabled")
+                }
+                "toggle" -> {
+                    val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                    Log.d(TAG, "📡 Bluetooth settings opened")
+                }
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error toggling Bluetooth", e)
+            false
+        }
+    }
+
+    /**
+     * ✅ Create notification channels
+     */
+    private fun createNotificationChannels(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+            // High priority channel
+            val highChannel = NotificationChannel(
+                CHANNEL_ID_HIGH,
+                "High Priority",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "High priority notifications"
+            }
+
+            // Normal priority channel
+            val normalChannel = NotificationChannel(
+                CHANNEL_ID_NORMAL,
+                "Normal Priority",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Normal priority notifications"
+            }
+
+            // Low priority channel
+            val lowChannel = NotificationChannel(
+                CHANNEL_ID_LOW,
+                "Low Priority",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Low priority notifications"
+            }
+
+            notificationManager.createNotificationChannels(listOf(highChannel, normalChannel, lowChannel))
+        }
+    }
 }

@@ -4,6 +4,9 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 
+/**
+ * This is the recommended Android pattern
+ */
 object BlockPolicy {
     private const val TAG = "BlockPolicy"
     private const val PREFS = "block_policy_prefs"
@@ -33,17 +36,11 @@ object BlockPolicy {
             ?.toSet()
             ?: emptySet()
 
-    /**
-     * ✅ FIXED: Clear all blocked packages
-     */
     fun clearBlockedPackages(ctx: Context) {
         prefs(ctx).edit().remove(KEY_PACKAGES).apply()
         Log.d(TAG, "🗑️ Cleared all blocked packages")
     }
 
-    /**
-     * Add packages to the block list
-     */
     fun addBlockedPackages(ctx: Context, packages: List<String>) {
         val current = getBlockedPackages(ctx).toMutableSet()
         current.addAll(packages)
@@ -51,9 +48,6 @@ object BlockPolicy {
         Log.d(TAG, "➕ Added ${packages.size} apps to block list")
     }
 
-    /**
-     * Remove packages from the block list
-     */
     fun removeBlockedPackages(ctx: Context, packages: List<String>) {
         val current = getBlockedPackages(ctx).toMutableSet()
         current.removeAll(packages.toSet())

@@ -36,6 +36,10 @@ object GeofenceManager {
         triggerOnEntry: Boolean,
         triggerOnExit: Boolean
     ): Boolean {
+        if (activeGeofences.size >= MAX_GEOFENCES) {
+            Log.e(TAG, "❌ Geofence limit reached! Maximum: $MAX_GEOFENCES")
+            return false
+        }
         Log.d(TAG, "🌍 Adding geofence for workflow $workflowId")
         Log.d(TAG, "   Location: $latitude, $longitude")
 
