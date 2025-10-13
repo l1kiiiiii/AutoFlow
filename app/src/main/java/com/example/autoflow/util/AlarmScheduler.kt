@@ -2,327 +2,95 @@ package com.example.autoflow.util
 
 import android.app.AlarmManager
 import android.app.PendingIntent
-import android.content.ContentValues.TAG
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Log
 import com.example.autoflow.data.WorkflowEntity
-import com.example.autoflow.data.toActions
 import com.example.autoflow.data.toTriggers
 import com.example.autoflow.model.Trigger
 import com.example.autoflow.receiver.AlarmReceiver
+import java.text.SimpleDateFormat
+import java.util.*
 
 object AlarmScheduler {
+    private const val TAG = "AlarmScheduler"
+    private const val PREFS_NAME = "alarm_prefs"
+    private const val KEY_ALARM_IDS = "alarm_ids"
 
     /**
-     * Schedule an alarm for any action type
-     * @param context Context
-     * @param workflowId Unique workflow ID
-     * @param triggerTimeMillis When to trigger (in milliseconds)
-     * @param actionType Type of action (SEND_NOTIFICATION, SET_SOUND_MODE, TOGGLE_WIFI, etc.)
-     * @param actionData Map of action-specific data
-     */
-    fun scheduleAlarm(
-        context: Context,
-        workflowId: Long,
-        triggerTimeMillis: Long,
-        actionType: String,
-        actionData: Map<String, String> = emptyMap()
-    ) {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-
-        val intent = Intent(context, AlarmReceiver::class.java).apply {
-            putExtra("workflow_id", workflowId)
-            putExtra("action_type", actionType)
-
-            // Add all action data as extras
-            actionData.forEach { (key, value) ->
-                putExtra(key, value)
-            }
-        }
-
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            workflowId.toInt(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                if (alarmManager.canScheduleExactAlarms()) {
-                    alarmManager.setExactAndAllowWhileIdle(
-                        AlarmManager.RTC_WAKEUP,
-                        triggerTimeMillis,
-                        pendingIntent
-                    )
-                    Log.d("AlarmScheduler", "✅ Exact alarm scheduled for workflow $workflowId ($actionType)")
-                } else {
-                    Log.e("AlarmScheduler", "❌ Cannot schedule exact alarms - permission not granted")
-                    alarmManager.set(AlarmManager.RTC_WAKEUP, triggerTimeMillis, pendingIntent)
-                    Log.d("AlarmScheduler", "⚠️ Fallback: Inexact alarm scheduled")
-                }
-            } else {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerTimeMillis,
-                    pendingIntent
-                )
-                Log.d("AlarmScheduler", "✅ Alarm scheduled for workflow $workflowId ($actionType)")
-            }
-        } catch (e: Exception) {
-            Log.e("AlarmScheduler", "❌ Error scheduling alarm: ${e.message}", e)
-        }
-    }
-
-
-    /**
-     *  Schedule alarm for a complete workflow
-     */
-    /**
-     * ✅ Schedule alarm for a complete workflow
-     */
-    /**
-     * ✅ Schedule alarm for a complete workflow
+     * Schedule all alarms for a workflow
      */
     fun scheduleWorkflow(context: Context, workflow: WorkflowEntity) {
-        Log.d("AlarmScheduler", "⏰ scheduleWorkflow called for workflow ID: ${workflow.id}")
+        // ✅ FIXED: Validate workflow ID
         if (workflow.id <= 0) {
-            Log.w("AlarmScheduler", "⚠️ Cannot schedule workflow with invalid ID: ${workflow.id}")
+            Log.w(TAG, "⚠️ Invalid workflow ID: ${workflow.id}. Skipping alarm scheduling.")
+            return
+        }
+
+        if (!workflow.isEnabled) {
+            Log.d(TAG, "⚠️ Workflow ${workflow.id} is disabled. Skipping alarm scheduling.")
             return
         }
 
         try {
             val triggers = workflow.toTriggers()
-            val actions = workflow.toActions()
+            val timeTriggers = triggers.filterIsInstance<Trigger.TimeTrigger>()
 
-            Log.d("AlarmScheduler", "Found ${triggers.size} triggers and ${actions.size} actions")
-
-            triggers.forEach { trigger ->
-                when (trigger) {
-                    is Trigger.TimeTrigger -> {
-                        // Convert trigger.time from String to Long
-                        val triggerTime = trigger.time.toLongOrNull() ?: return@forEach
-                        val triggerTimeMillis = triggerTime * 1000L // Convert to milliseconds
-
-                        Log.d("AlarmScheduler", "Scheduling TIME trigger at $triggerTime (${triggerTimeMillis}ms)")
-
-                        // Schedule alarm for ALL actions in this workflow
-                        actions.forEach { action ->
-                            //  Skip if action.type is null
-                            val actionType = action.type ?: return@forEach
-
-                            val actionData = mutableMapOf<String, String>()
-
-                            when (actionType) {
-                                Constants.ACTION_SEND_NOTIFICATION -> {
-                                    actionData["notification_title"] = action.title ?: "AutoFlow"
-                                    actionData["notification_message"] = action.message ?: "Automation triggered"
-                                }
-                                Constants.ACTION_BLOCK_APPS -> {
-                                    actionData["app_packages"] = action.value ?: ""
-                                }
-                                Constants.ACTION_UNBLOCK_APPS -> {
-                                    // No extra data needed
-                                }
-                                Constants.ACTION_SET_SOUND_MODE -> {
-                                    actionData["sound_mode"] = action.value ?: "Normal"
-                                }
-                                Constants.ACTION_TOGGLE_WIFI -> {
-                                    actionData["wifi_state"] = action.value ?: "Toggle"
-                                }
-                                Constants.ACTION_TOGGLE_BLUETOOTH -> {
-                                    actionData["bluetooth_state"] = action.value ?: "Toggle"
-                                }
-                            }
-
-                            //  Use actionType (non-null) instead of action.type
-                            scheduleAlarm(
-                                context,
-                                workflow.id,
-                                triggerTimeMillis,
-                                actionType,  // Non-null String
-                                actionData
-                            )
-                        }
-                    }
-                    // Handle other trigger types
-                    is Trigger.LocationTrigger -> {
-                        Log.d("AlarmScheduler", "Location triggers are handled by GeofenceManager")
-                    }
-                    is Trigger.WiFiTrigger -> {
-                        Log.d("AlarmScheduler", "WiFi triggers are handled by WiFiManager")
-                    }
-                    is Trigger.BluetoothTrigger -> {
-                        Log.d("AlarmScheduler", "Bluetooth triggers are handled by BLEManager")
-                    }
-                    is Trigger.BatteryTrigger -> {
-                        Log.d("AlarmScheduler", "Battery triggers not yet implemented")
-                    }
-                }
+            if (timeTriggers.isEmpty()) {
+                Log.d(TAG, "⚠️ No time triggers found for workflow ${workflow.id}")
+                return
             }
+
+            timeTriggers.forEach { trigger ->
+                scheduleAlarmForTrigger(context, workflow.id, trigger)
+            }
+
+            Log.d(TAG, "✅ Scheduled ${timeTriggers.size} alarms for workflow ${workflow.id}")
         } catch (e: Exception) {
-            Log.e("AlarmScheduler", "❌ Error scheduling workflow: ${e.message}", e)
+            Log.e(TAG, "❌ Error scheduling workflow alarms", e)
         }
     }
 
-
-
     /**
-     * BACKWARD COMPATIBLE: Schedule notification (existing method)
-     * This keeps your existing code working without changes!
+     * Schedule a single alarm for a time trigger
      */
-    fun scheduleNotification(
+    private fun scheduleAlarmForTrigger(
         context: Context,
         workflowId: Long,
-        triggerTimeMillis: Long,
-        notificationTitle: String,
-        notificationMessage: String
+        trigger: Trigger.TimeTrigger
     ) {
-        val actionData = mapOf(
-            "notification_title" to notificationTitle,
-            "notification_message" to notificationMessage
-        )
+        try {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val triggerTime = parseTime(trigger.time)
 
-        scheduleAlarm(
-            context,
-            workflowId,
-            triggerTimeMillis,
-            "SEND_NOTIFICATION",
-            actionData
-        )
-    }
-
-    /**
-     * Schedule sound mode change
-     */
-    fun scheduleSoundMode(
-        context: Context,
-        workflowId: Long,
-        triggerTimeMillis: Long,
-        soundMode: String  // "Normal", "Silent", "Vibrate", "DND"
-    ) {
-        val actionData = mapOf(
-            "sound_mode" to soundMode
-        )
-
-        scheduleAlarm(
-            context,
-            workflowId,
-            triggerTimeMillis,
-            "SET_SOUND_MODE",
-            actionData
-        )
-    }
-    /**
-     * Schedule Bluetooth toggle
-     */
-    fun scheduleBluetoothToggle(
-        context: Context,
-        workflowId: Long,
-        triggerTimeMillis: Long,
-        bluetoothState: Boolean  // true = turn on, false = turn off
-    ) {
-        val actionData = mapOf(
-            "bluetooth_state" to bluetoothState.toString()
-        )
-
-        scheduleAlarm(
-            context,
-            workflowId,
-            triggerTimeMillis,
-            Constants.ACTION_TOGGLE_BLUETOOTH,
-            actionData
-        )
-    }
-
-    /**
-     * Schedule WiFi toggle
-     */
-    fun scheduleWiFiToggle(
-        context: Context,
-        workflowId: Long,
-        triggerTimeMillis: Long,
-        wifiState: Boolean  // true = turn on, false = turn off
-    ) {
-        val actionData = mapOf(
-            "wifi_state" to wifiState.toString()
-        )
-
-        scheduleAlarm(
-            context,
-            workflowId,
-            triggerTimeMillis,
-            "TOGGLE_WIFI",
-            actionData
-        )
-    }
-
-    /**
-     * Schedule script execution
-     */
-    fun scheduleScript(
-        context: Context,
-        workflowId: Long,
-        triggerTimeMillis: Long,
-        scriptText: String
-    ) {
-        val actionData = mapOf(
-            "script_text" to scriptText
-        )
-
-        scheduleAlarm(
-            context,
-            workflowId,
-            triggerTimeMillis,
-            "RUN_SCRIPT",
-            actionData
-        )
-    }
-
-    /**
-     * Cancel alarm for a workflow
-     */
-    fun cancelAlarm(context: Context, workflowId: Long) {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(context, AlarmReceiver::class.java)
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            workflowId.toInt(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        alarmManager.cancel(pendingIntent)
-        pendingIntent.cancel()
-        Log.d("AlarmScheduler", "✅ Alarm cancelled for workflow $workflowId")
-    }
-
-    /**
-     * ✅ Cancel all alarms for a specific workflow
-     */
-    fun cancelWorkflowAlarms(context: Context, workflowId: Long) {
-        Log.d(TAG, "🚫 Cancelling alarms for workflow ID: $workflowId")
-
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-
-        // Cancel alarms for all action types
-        val actionTypes = listOf(
-            Constants.ACTION_SEND_NOTIFICATION,
-            Constants.ACTION_BLOCK_APPS,
-            Constants.ACTION_UNBLOCK_APPS,
-            Constants.ACTION_SET_SOUND_MODE,
-            Constants.ACTION_TOGGLE_WIFI,
-            Constants.ACTION_TOGGLE_BLUETOOTH
-        )
-
-        actionTypes.forEach { actionType ->
-            val intent = Intent(context, AlarmReceiver::class.java).apply {
-                putExtra("workflow_id", workflowId)
-                putExtra("action_type", actionType)
+            if (triggerTime == null) {
+                Log.e(TAG, "❌ Failed to parse time: ${trigger.time}")
+                return
             }
 
-            val requestCode = (workflowId.toString() + actionType.hashCode()).toInt()
+            // Calculate next occurrence
+            val calendar = Calendar.getInstance().apply {
+                timeInMillis = System.currentTimeMillis()
+                set(Calendar.HOUR_OF_DAY, triggerTime.first)
+                set(Calendar.MINUTE, triggerTime.second)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+
+                // If time has passed today, schedule for tomorrow
+                if (timeInMillis <= System.currentTimeMillis()) {
+                    add(Calendar.DAY_OF_MONTH, 1)
+                }
+            }
+
+            // Create unique request code
+            val requestCode = generateRequestCode(workflowId, trigger.time)
+
+            // Create pending intent
+            val intent = Intent(context, AlarmReceiver::class.java).apply {
+                putExtra(Constants.KEY_WORKFLOW_ID, workflowId)
+                putExtra(Constants.KEY_TIME_TRIGGER, trigger.time)
+            }
+
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
                 requestCode,
@@ -330,11 +98,144 @@ object AlarmScheduler {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            alarmManager.cancel(pendingIntent)
-            pendingIntent.cancel()
-        }
+            // Schedule alarm
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                calendar.timeInMillis,
+                pendingIntent
+            )
 
-        Log.d(TAG, "✅ Cancelled all alarms for workflow $workflowId")
+            // Save alarm ID
+            saveAlarmId(context, workflowId, requestCode)
+
+            Log.d(TAG, "✅ Scheduled alarm for workflow $workflowId at ${trigger.time} (requestCode: $requestCode)")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error scheduling alarm", e)
+        }
     }
 
+    /**
+     * Cancel all alarms for a workflow
+     * ✅ FIXED: Proper error handling
+     */
+    fun cancelWorkflowAlarms(context: Context, workflowId: Long) {
+        // ✅ FIXED: Validate workflow ID
+        if (workflowId <= 0) {
+            Log.d(TAG, "🚫 Cancelling alarms for workflow ID: $workflowId (skipping - invalid ID)")
+            return
+        }
+
+        Log.d(TAG, "🚫 Cancelling alarms for workflow ID: $workflowId")
+
+        try {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val alarmIds = getAlarmIds(context, workflowId)
+
+            if (alarmIds.isEmpty()) {
+                Log.d(TAG, "⚠️ No alarms found for workflow $workflowId")
+                return
+            }
+
+            alarmIds.forEach { requestCode ->
+                try {
+                    val intent = Intent(context, AlarmReceiver::class.java)
+                    val pendingIntent = PendingIntent.getBroadcast(
+                        context,
+                        requestCode,
+                        intent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                    alarmManager.cancel(pendingIntent)
+                    pendingIntent.cancel()
+                    Log.d(TAG, "✅ Cancelled alarm with requestCode: $requestCode")
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Error cancelling alarm $requestCode", e)
+                }
+            }
+
+            // Clear saved IDs
+            clearAlarmIds(context, workflowId)
+            Log.d(TAG, "✅ Cancelled ${alarmIds.size} alarms for workflow $workflowId")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error cancelling workflow alarms", e)
+        }
+    }
+
+    /**
+     * Generate unique request code for alarm
+     * ✅ FIXED: Better hash generation
+     */
+    private fun generateRequestCode(workflowId: Long, time: String): Int {
+        return "$workflowId-$time".hashCode()
+    }
+
+    /**
+     * Parse time string (HH:mm) to hour and minute
+     */
+    private fun parseTime(timeString: String): Pair<Int, Int>? {
+        return try {
+            val parts = timeString.split(":")
+            if (parts.size == 2) {
+                val hour = parts[0].toInt()
+                val minute = parts[1].toInt()
+                if (hour in 0..23 && minute in 0..59) {
+                    Pair(hour, minute)
+                } else {
+                    null
+                }
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Save alarm ID to shared preferences
+     */
+    private fun saveAlarmId(context: Context, workflowId: Long, requestCode: Int) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val key = "workflow_$workflowId"
+        val existingIds = prefs.getStringSet(key, mutableSetOf())?.toMutableSet() ?: mutableSetOf()
+        existingIds.add(requestCode.toString())
+        prefs.edit().putStringSet(key, existingIds).apply()
+    }
+
+    /**
+     * Get saved alarm IDs for a workflow
+     * ✅ FIXED: Proper error handling for parsing
+     */
+    private fun getAlarmIds(context: Context, workflowId: Long): List<Int> {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val key = "workflow_$workflowId"
+        val idsSet = prefs.getStringSet(key, emptySet()) ?: emptySet()
+
+        return idsSet.mapNotNull { idString ->
+            try {
+                idString.toInt()
+            } catch (e: NumberFormatException) {
+                Log.e(TAG, "❌ Failed to parse alarm ID: $idString", e)
+                null
+            }
+        }
+    }
+
+    /**
+     * Clear saved alarm IDs for a workflow
+     */
+    private fun clearAlarmIds(context: Context, workflowId: Long) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val key = "workflow_$workflowId"
+        prefs.edit().remove(key).apply()
+    }
+
+    /**
+     * Clear all alarm IDs (for testing/debugging)
+     */
+    fun clearAllAlarmIds(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().clear().apply()
+        Log.d(TAG, "🧹 Cleared all alarm IDs")
+    }
 }

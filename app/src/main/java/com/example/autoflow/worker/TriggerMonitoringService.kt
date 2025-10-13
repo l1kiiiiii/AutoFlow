@@ -5,7 +5,6 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.autoflow.data.AppDatabase
-import com.example.autoflow.data.toAction
 import com.example.autoflow.data.toActions
 import com.example.autoflow.data.toTriggers
 import com.example.autoflow.util.ActionExecutor

@@ -30,6 +30,7 @@ import org.json.JSONArray
  * Modern WorkflowViewModel using Coroutines
  * Manages workflow CRUD operations and trigger monitoring
  */
+@Suppress("unused", "MemberVisibilityCanBePrivate") // Public API for UI components
 class WorkflowViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: WorkflowRepository
@@ -55,12 +56,12 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
 
     init {
         val database = AppDatabase.getDatabase(application)
-        repository = WorkflowRepository(database)
+        repository = WorkflowRepository(database.workflowDao())  
         loadWorkflows()
         Log.d(TAG, "ViewModel initialized")
     }
 
-    // ==================== WORKFLOW CRUD OPERATIONS ====================
+    //  WORKFLOW CRUD OPERATIONS 
 
     fun loadWorkflows() {
         repository.getAllWorkflows(object : WorkflowRepository.WorkflowCallback {
@@ -77,7 +78,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * ✅ FIXED: Add workflow with proper ID handling
+     *  Add workflow with proper ID handling
      * Geofences and alarms are now registered AFTER insertion
      */
     fun addWorkflow(
@@ -349,12 +350,10 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
      * ✅ FIXED: Delete workflow with proper cleanup
      */
     fun deleteWorkflow(workflowId: Long, callback: WorkflowOperationCallback? = null) {
-        // ✅ Validate workflow ID
         if (workflowId <= 0) {
-            val error = "Invalid workflow ID: $workflowId"
-            _errorMessage.postValue(error)
+            val error = "Invalid workflow ID"
+            _errorMessage.value = error  // ✅ Use .value
             callback?.onError(error)
-            Log.w(TAG, "⚠️ $error")
             return
         }
 
@@ -362,77 +361,83 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
                 if (workflow != null) {
                     try {
-                        // ✅ Clean up all triggers
-                        val triggerJson = JSONObject(workflow.triggerDetails)
-                        val triggerType = triggerJson.optString("type")
+                        // ✅ FIXED: Parse as JSONArray, not JSONObject
+                        val triggersArray = org.json.JSONArray(workflow.triggerDetails)
 
-                        when (triggerType) {
-                            Constants.TRIGGER_LOCATION -> {
-                                GeofenceManager.removeGeofence(
-                                    getApplication<Application>().applicationContext,
-                                    workflow.id
-                                )
-                                Log.d(TAG, "🗑️ Removed geofence for workflow ${workflow.id}")
-                            }
-                            Constants.TRIGGER_TIME -> {
-                                AlarmScheduler.cancelWorkflowAlarms(
-                                    getApplication<Application>().applicationContext,
-                                    workflow.id
-                                )
-                                Log.d(TAG, "⏰ Cancelled alarm for workflow ${workflow.id}")
+                        // Clean up each trigger
+                        for (i in 0 until triggersArray.length()) {
+                            val triggerJson = triggersArray.getJSONObject(i)
+                            val triggerType = triggerJson.optString("type")
+
+                            when (triggerType) {
+                                Constants.TRIGGER_LOCATION -> {
+                                    GeofenceManager.removeGeofence(
+                                        getApplication<Application>().applicationContext,
+                                        workflow.id
+                                    )
+                                    Log.d(TAG, "🚫 Removed geofence for workflow ${workflow.id}")
+                                }
+                                Constants.TRIGGER_TIME -> {
+                                    AlarmScheduler.cancelWorkflowAlarms(
+                                        getApplication<Application>().applicationContext,
+                                        workflow.id
+                                    )
+                                    Log.d(TAG, "🚫 Cancelled alarms for workflow ${workflow.id}")
+                                }
                             }
                         }
                     } catch (e: Exception) {
-                        Log.e(TAG, "Error cleaning up triggers: ${e.message}")
+                        Log.e(TAG, "❌ Error cleaning up triggers: ${e.message}", e)
                     }
                 }
 
-                // Delete the workflow
+                // Now delete the workflow
                 repository.delete(workflowId, object : WorkflowRepository.DeleteCallback {
                     override fun onDeleteComplete(success: Boolean) {
                         if (success) {
                             loadWorkflows()
                             val msg = "Workflow deleted"
-                            _successMessage.postValue(msg)
+                            _successMessage.value = msg  // ✅ Use .value
                             callback?.onSuccess(msg)
                         } else {
                             val error = "Delete failed"
-                            _errorMessage.postValue(error)
+                            _errorMessage.value = error  // ✅ Use .value
                             callback?.onError(error)
                         }
                     }
 
                     override fun onDeleteError(error: String) {
-                        _errorMessage.postValue(error)
+                        _errorMessage.value = error  // ✅ Use .value
                         callback?.onError(error)
                     }
                 })
             }
 
             override fun onWorkflowError(error: String) {
-                // Try to delete anyway
+                // Still try to delete even if we can't load the workflow
                 repository.delete(workflowId, object : WorkflowRepository.DeleteCallback {
                     override fun onDeleteComplete(success: Boolean) {
                         if (success) {
                             loadWorkflows()
                             val msg = "Workflow deleted"
-                            _successMessage.postValue(msg)
+                            _successMessage.value = msg  // ✅ Use .value
                             callback?.onSuccess(msg)
                         } else {
                             val error = "Delete failed"
-                            _errorMessage.postValue(error)
+                            _errorMessage.value = error  // ✅ Use .value
                             callback?.onError(error)
                         }
                     }
 
                     override fun onDeleteError(error: String) {
-                        _errorMessage.postValue(error)
+                        _errorMessage.value = error  // ✅ Use .value
                         callback?.onError(error)
                     }
                 })
             }
         })
     }
+
 
     /**
      * ✅ FIXED: Update workflow enabled state with alarm handling

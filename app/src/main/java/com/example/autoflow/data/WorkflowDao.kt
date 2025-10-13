@@ -1,46 +1,36 @@
 package com.example.autoflow.data
 
 import androidx.lifecycle.LiveData
-import androidx.room.Dao
-import androidx.room.Delete
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
-import androidx.room.Query
-import androidx.room.Update
+import androidx.room.*
 
 @Dao
 interface WorkflowDao {
     // INSERT
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(workflowEntity: WorkflowEntity): Long  // ✅ Made suspend for coroutines
-
-    @Insert
-    fun insertAll(vararg workflows: WorkflowEntity): List<Long>
+    fun insert(workflowEntity: WorkflowEntity): Long
 
     // UPDATE
     @Update
-    suspend fun update(workflowEntity: WorkflowEntity): Int  // ✅ Made suspend
+    fun update(workflowEntity: WorkflowEntity): Int
 
-    // ✅ FIXED: Use camelCase property name, not snake_case SQL column name
-    @Query("UPDATE workflows SET isEnabled = :enabled WHERE id = :workflowId")
-    suspend fun updateEnabled(workflowId: Long, enabled: Boolean): Int
+    @Query("UPDATE workflows SET is_enabled = :enabled WHERE id = :workflowId")
+    fun updateEnabled(workflowId: Long, enabled: Boolean): Int
 
     // DELETE
     @Delete
-    suspend fun delete(workflowEntity: WorkflowEntity)  // ✅ Made suspend
+    fun delete(workflowEntity: WorkflowEntity)
 
     @Query("DELETE FROM workflows WHERE id = :workflowId")
-    suspend fun deleteById(workflowId: Long): Int
+    fun deleteById(workflowId: Long): Int
 
     @Query("DELETE FROM workflows")
-    suspend fun deleteAll()
+    fun deleteAll()
 
     // SYNCHRONOUS QUERIES
-    @Query("SELECT * FROM workflows")
+    @Query("SELECT * FROM workflows ORDER BY created_at DESC")
     fun getAllWorkflowsSync(): List<WorkflowEntity>
 
-    // ✅ FIXED: Use camelCase property name
-    @Query("SELECT * FROM workflows WHERE isEnabled = 1")
+    @Query("SELECT * FROM workflows WHERE is_enabled = 1")
     fun getEnabledWorkflowsSync(): List<WorkflowEntity>
 
     @Query("SELECT * FROM workflows WHERE id = :id")
@@ -50,17 +40,15 @@ interface WorkflowDao {
     fun getCount(): Int
 
     // LIVEDATA QUERIES
-    @Query("SELECT * FROM workflows")
+    @Query("SELECT * FROM workflows ORDER BY created_at DESC")
     fun getAllWorkflows(): LiveData<List<WorkflowEntity>>
 
-    // ✅ FIXED: Use camelCase property name
-    @Query("SELECT * FROM workflows WHERE isEnabled = 1")
+    @Query("SELECT * FROM workflows WHERE is_enabled = 1")
     fun getEnabledWorkflows(): LiveData<List<WorkflowEntity>>
 
     @Query("SELECT * FROM workflows WHERE id = :id")
-    fun getById(id: Long): LiveData<WorkflowEntity>
+    fun getById(id: Long): LiveData<WorkflowEntity?>
 
-    // ✅ FIXED: Use camelCase property name
-    @Query("SELECT * FROM workflows WHERE workflowName LIKE :query")
+    @Query("SELECT * FROM workflows WHERE workflow_name LIKE '%' || :query || '%'")
     fun search(query: String): List<WorkflowEntity>
 }
