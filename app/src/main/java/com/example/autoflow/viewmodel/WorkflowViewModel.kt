@@ -126,23 +126,22 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                 override fun onInsertComplete(insertedId: Long) {
                     Log.d(TAG, "🎉 Workflow inserted - ID: $insertedId")
 
-                    // ✅ CRITICAL FIX: Create workflow with REAL ID
+                    // ✅ Create workflow with REAL ID
                     val savedWorkflow = workflowEntity.copy(id = insertedId)
 
-                    // ✅ NOW register triggers with correct workflow ID
+                    // ✅ Register triggers with correct ID
                     triggers.forEach { trigger ->
                         when (trigger) {
                             is Trigger.LocationTrigger -> {
                                 val success = GeofenceManager.addGeofence(
                                     context = getApplication<Application>().applicationContext,
-                                    workflowId = insertedId,  // ✅ Use real ID, not 0
+                                    workflowId = insertedId,  // ✅ Use real ID
                                     latitude = trigger.latitude,
                                     longitude = trigger.longitude,
                                     radius = trigger.radius.toFloat(),
                                     triggerOnEntry = trigger.triggerOnEntry,
                                     triggerOnExit = trigger.triggerOnExit
                                 )
-
                                 if (success) {
                                     Log.d(TAG, "✅ Geofence registered for workflow $insertedId")
                                 } else {
@@ -154,21 +153,24 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                                 Log.d(TAG, "⏰ Time trigger will be scheduled by AlarmScheduler")
                             }
                             is Trigger.WiFiTrigger -> {
-                                Log.d(TAG, "📶 WiFi trigger registered")
+                                // WiFi triggers handled by TriggerMonitoringService
+                                Log.d(TAG, "📶 WiFi trigger registered for workflow $insertedId")
                             }
                             is Trigger.BluetoothTrigger -> {
-                                Log.d(TAG, "📡 Bluetooth trigger registered")
+                                // Bluetooth triggers handled by BLETriggerWorker
+                                Log.d(TAG, "📡 Bluetooth trigger registered for workflow $insertedId")
                             }
-                            else -> {
-                                Log.d(TAG, "ℹ️ ${trigger.type} trigger registered")
+                            is Trigger.BatteryTrigger -> {
+                                // Battery triggers handled by TriggerMonitoringService
+                                Log.d(TAG, "🔋 Battery trigger registered for workflow $insertedId")
                             }
                         }
                     }
 
-                    // ✅ Schedule alarms for time-based triggers (with real ID)
+                    // ✅ Schedule alarms for time-based triggers (with correct ID)
                     AlarmScheduler.scheduleWorkflow(
                         getApplication<Application>().applicationContext,
-                        savedWorkflow  // ✅ Use workflow with real ID
+                        savedWorkflow  // ✅ Has real ID, not 0
                     )
 
                     // Reload workflows and show success
@@ -177,6 +179,8 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                         "Workflow '$workflowName' created with ${triggers.size} trigger(s) and ${actions.size} action(s)"
                     )
                 }
+
+
 
                 override fun onInsertError(error: String) {
                     _errorMessage.postValue("Failed to create workflow: $error")
