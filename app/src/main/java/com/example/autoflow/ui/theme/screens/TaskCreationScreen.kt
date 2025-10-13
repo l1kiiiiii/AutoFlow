@@ -2035,55 +2035,52 @@ private fun TimeTriggerContent(
 
         // Show scheduled time
         if (selectedDate != null && selectedTime != null) {
-            val dateTime = LocalDateTime.of(selectedDate, selectedTime)
+            // ✅ Create local variable to avoid smart cast issue
+            val timeValue = selectedTime  // This makes a copy
+            val dateValue = selectedDate
 
-            // ADD THESE DEBUG LOGS
-            Log.d("TimeTriggerContent", "========== TIME DEBUG ==========")
-            Log.d("TimeTriggerContent", "Current System Time: ${LocalDateTime.now()}")
-            Log.d("TimeTriggerContent", "Selected Date: $selectedDate")
-            Log.d("TimeTriggerContent", "Selected Time: $selectedTime")
-            Log.d("TimeTriggerContent", "Combined DateTime: $dateTime")
-            Log.d("TimeTriggerContent", "System TimeZone: ${java.time.ZoneId.systemDefault()}")
+            if (timeValue != null && dateValue != null) {
+                val dateTime = LocalDateTime.of(dateValue, timeValue)
 
-            val timestamp = dateTime
-                .atZone(java.time.ZoneId.systemDefault())
-                .toEpochSecond()
+                // DEBUG LOGS
+                Log.d("TimeTriggerContent", "Selected Date: $dateValue")
+                Log.d("TimeTriggerContent", "Selected Time: $timeValue")
+                Log.d("TimeTriggerContent", "Combined DateTime: $dateTime")
 
-            //  ADD THIS TOO
-            Log.d("TimeTriggerContent", "Expected (now): ${LocalDateTime.now().atZone(java.time.ZoneId.systemDefault()).toEpochSecond()}")
-            Log.d("TimeTriggerContent", "Calculated timestamp: $timestamp")
-            Log.d("TimeTriggerContent", "Difference (seconds): ${timestamp - LocalDateTime.now().atZone(java.time.ZoneId.systemDefault()).toEpochSecond()}")
+                // ✅ FIXED: Format as HH:mm (e.g., "22:11")
+                val formattedTime = String.format("%02d:%02d", timeValue.hour, timeValue.minute)
+                onTimeValueChange(formattedTime)
 
-            // Save the timestamp
-            onTimeValueChange(timestamp.toString())
+                Log.d("TimeTriggerContent", "✅ Formatted time: $formattedTime")
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        "Scheduled for:",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
                     )
-                    Text(
-                        // ✅ Display in user's preferred format
-                        if (is24HourFormat) {
-                            dateTime.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
-                        } else {
-                            dateTime.format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, yyyy h:mm a"))
-                        },
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        "Format: ${if (is24HourFormat) "24-hour" else "12-hour"}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "Scheduled for",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            // Display in user's preferred format
+                            if (is24HourFormat) {
+                                dateTime.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+                            } else {
+                                dateTime.format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, yyyy h:mm a"))
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            "Format: ${if (is24HourFormat) "24-hour" else "12-hour"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
@@ -2681,29 +2678,7 @@ private suspend fun handleSaveTask(
         }
 
         // 9. SCHEDULE ALARMS FOR TIME TRIGGERS
-        triggers.filterIsInstance<Trigger.TimeTrigger>().forEach { timeTrigger ->
-            try {
-                val triggerMillis = (timeTrigger.time.toLongOrNull() ?: 0L) * 1000L
-                if (triggerMillis > System.currentTimeMillis()) {
-                    actions.forEach { action ->
-                        when (action.type) {
-                            Constants.ACTION_SEND_NOTIFICATION -> AlarmScheduler.scheduleNotification(
-                                context, workflowId ?: 0L, triggerMillis,
-                                action.title ?: "AutoFlow", action.message ?: "Triggered"
-                            )
-                            Constants.ACTION_SET_SOUND_MODE ->
-                                AlarmScheduler.scheduleSoundMode(context, workflowId ?: 0L, triggerMillis, action.value ?: "Silent")
-                            Constants.ACTION_TOGGLE_WIFI -> AlarmScheduler.scheduleWiFiToggle(context, workflowId ?: 0L, triggerMillis, action.value == "WIFI_ON")
-                            Constants.ACTION_TOGGLE_BLUETOOTH -> AlarmScheduler.scheduleBluetoothToggle(context, workflowId ?: 0L, triggerMillis, action.value == "BLUETOOTH_ON")
-                            Constants.ACTION_RUN_SCRIPT -> AlarmScheduler.scheduleScript(context, workflowId ?: 0L, triggerMillis, action.value ?: "")
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e("TaskCreation", "❌ Alarm scheduling failed", e)
-            }
-        }
-
+        Log.d("TaskCreation", "✅ Workflow saved. Triggers will be automatically registered.")
         // 10. ADD GEOFENCES FOR LOCATION TRIGGERS
         triggers.filterIsInstance<Trigger.LocationTrigger>().forEach { locationTrigger ->
             try {

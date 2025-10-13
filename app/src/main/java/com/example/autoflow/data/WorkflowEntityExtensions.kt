@@ -6,48 +6,48 @@ import com.example.autoflow.model.Trigger
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * Extension functions for WorkflowEntity
- * Parse JSON to Action and Trigger objects
- */
-
 private const val TAG = "WorkflowEntityExt"
 
 /**
- * Convert WorkflowEntity to Action object
+ * Convert WorkflowEntity to list of Actions
+ * ✅ This is the MISSING function causing the error
  */
-fun WorkflowEntity.toAction(): Action? {
+fun WorkflowEntity.toActions(): List<Action> {
     return try {
         if (actionDetails.isBlank()) {
             Log.e(TAG, "❌ Empty action details")
-            return null
+            return emptyList()
         }
 
-        val json = JSONObject(actionDetails)
-        val type = json.optString("type", "")
+        val actionsArray = JSONArray(actionDetails)
+        val actions = mutableListOf<Action>()
 
-        if (type.isBlank()) {
-            Log.e(TAG, "❌ Action type missing")
-            return null
+        for (i in 0 until actionsArray.length()) {
+            val json = actionsArray.getJSONObject(i)
+            val type = json.optString("type", "")
+
+            if (type.isNotBlank()) {
+                val action = Action(
+                    type = type,
+                    title = json.optString("title"),
+                    message = json.optString("message"),
+                    priority = json.optString("priority")
+                )
+
+                // Set value if it exists
+                json.optString("value").takeIf { it.isNotEmpty() }?.let {
+                    action.value = it
+                }
+
+                actions.add(action)
+            }
         }
 
-        // Create Action with correct constructor
-        val action = Action(
-            type = type,
-            title = json.optString("title"),
-            message = json.optString("message"),
-            priority = json.optString("priority")
-        )
-
-        // Set value separately if it exists
-        json.optString("value").takeIf { it.isNotEmpty() }?.let {
-            action.value = it
-        }
-
-        action
+        Log.d(TAG, "✅ Parsed ${actions.size} actions")
+        actions
     } catch (e: Exception) {
-        Log.e(TAG, "❌ Error parsing action: ${e.message}")
-        null
+        Log.e(TAG, "❌ Error parsing actions: ${e.message}", e)
+        emptyList()
     }
 }
 
@@ -91,6 +91,14 @@ fun WorkflowEntity.toTriggers(): List<Trigger> {
                         days = days
                     )
                 }
+                "WIFI" -> Trigger.WiFiTrigger(
+                    ssid = json.optString("ssid"),
+                    state = json.optString("state", "connected")
+                )
+                "BLUETOOTH" -> Trigger.BluetoothTrigger(
+                    deviceAddress = json.optString("deviceAddress", ""),
+                    deviceName = json.optString("deviceName")
+                )
                 "BATTERY" -> Trigger.BatteryTrigger(
                     level = json.optInt("level", 20),
                     condition = json.optString("condition", "below")
@@ -104,50 +112,10 @@ fun WorkflowEntity.toTriggers(): List<Trigger> {
             trigger?.let { triggers.add(it) }
         }
 
+        Log.d(TAG, "✅ Parsed ${triggers.size} triggers")
         triggers
     } catch (e: Exception) {
         Log.e(TAG, "❌ Error parsing triggers: ${e.message}", e)
         emptyList()
     }
 }
-
-/**
- * Convert WorkflowEntity to list of Actions
- */
-fun WorkflowEntity.toActions(): List<Action> {
-    return try {
-        if (actionDetails.isBlank()) {
-            Log.e(TAG, "❌ Empty action details")
-            return emptyList()
-        }
-
-        val actionsArray = JSONArray(actionDetails)
-        val actions = mutableListOf<Action>()
-
-        for (i in 0 until actionsArray.length()) {
-            val json = actionsArray.getJSONObject(i)
-            val type = json.optString("type", "")
-
-            if (type.isNotBlank()) {
-                val action = Action(
-                    type = type,
-                    title = json.optString("title"),
-                    message = json.optString("message"),
-                    priority = json.optString("priority")
-                )
-
-                json.optString("value").takeIf { it.isNotEmpty() }?.let {
-                    action.value = it
-                }
-
-                actions.add(action)
-            }
-        }
-
-        actions
-    } catch (e: Exception) {
-        Log.e(TAG, "❌ Error parsing actions: ${e.message}", e)
-        emptyList()
-    }
-}
-

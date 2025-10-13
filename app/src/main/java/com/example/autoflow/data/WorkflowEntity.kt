@@ -38,6 +38,10 @@ data class WorkflowEntity(
     companion object {
         private const val TAG = "WorkflowEntity"
 
+        /**
+         * Create WorkflowEntity from triggers and actions
+         * ✅ FIXED: No alarm scheduling here (moved to ViewModel)
+         */
         fun fromTriggersAndActions(
             workflowName: String,
             isEnabled: Boolean,
@@ -45,7 +49,7 @@ data class WorkflowEntity(
             actions: List<Action>,
             triggerLogic: String = "AND"
         ): WorkflowEntity? {
-            try {
+            return try {
                 Log.d(TAG, "🔨 Creating WorkflowEntity with ${triggers.size} triggers and ${actions.size} actions")
 
                 // Build triggers JSON
@@ -110,11 +114,13 @@ data class WorkflowEntity(
                 )
 
                 Log.d(TAG, "✅ WorkflowEntity created successfully")
-                return entity
+                Log.d(TAG, "   Triggers JSON: ${entity.triggerDetails}")
+                Log.d(TAG, "   Actions JSON: ${entity.actionDetails}")
 
+                entity
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error creating WorkflowEntity", e)
-                return null
+                null
             }
         }
     }

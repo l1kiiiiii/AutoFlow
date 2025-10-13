@@ -14,14 +14,19 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.ui.test.isEnabled
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.example.autoflow.R
+import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.integrations.SoundModeManager
 import com.example.autoflow.model.Action
 import com.example.autoflow.util.ActionExecutor
 import com.example.autoflow.util.Constants
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class AlarmReceiver : BroadcastReceiver() {
 
@@ -32,29 +37,56 @@ class AlarmReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        val workflowId = intent.getLongExtra("workflow_id", -1L)
-        val actionType = intent.getStringExtra("action_type") ?: Constants.ACTION_SEND_NOTIFICATION
+        // Extract workflow ID from intent
+        val workflowId = intent.getLongExtra(Constants.KEY_WORKFLOW_ID, -1L)
+
+        if (workflowId == -1L) {
+            Log.e(TAG, "❌ Invalid workflow ID received")
+            return
+        }
 
         Log.d(TAG, "⏰ Alarm triggered for workflow: $workflowId")
-        Log.d(TAG, "   Action type: $actionType")
 
-        try {
-            when (actionType) {
-                Constants.ACTION_SEND_NOTIFICATION -> handleNotification(context, intent)
-                Constants.ACTION_SET_SOUND_MODE -> handleSoundMode(context, intent)
-                Constants.ACTION_TOGGLE_WIFI -> handleWiFiToggle(context, intent)
-                Constants.ACTION_TOGGLE_BLUETOOTH -> handleBluetoothToggle(context, intent)
-                Constants.ACTION_RUN_SCRIPT -> handleScript(context, intent)
-                Constants.ACTION_BLOCK_APPS -> handleBlockApps(context, intent) 
-                Constants.ACTION_UNBLOCK_APPS -> handleUnblockApps(context, intent)
-                else -> {
-                    Log.w(TAG, "⚠️ Unknown action type: $actionType")
-                    Toast.makeText(context, "Unknown action: $actionType", Toast.LENGTH_SHORT).show()
+        // Use goAsync() to allow coroutine to complete before receiver dies
+        val pendingResult = goAsync()
+
+        // Execute workflow in background thread
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // Load workflow from database
+                val database = AppDatabase.getDatabase(context)
+                val workflow = database.workflowDao().getByIdSync(workflowId)  // ✅ FIXED: getByIdSync
+
+                if (workflow == null) {
+                    Log.e(TAG, "❌ Workflow $workflowId not found in database")
+                    pendingResult.finish()
+                    return@launch
                 }
+
+                // Check if workflow is enabled
+                if (!workflow.isEnabled) {
+                    Log.d(TAG, "⚠️ Workflow $workflowId is disabled, skipping execution")
+                    pendingResult.finish()
+                    return@launch
+                }
+
+                Log.d(TAG, "✅ Executing workflow: ${workflow.workflowName}")
+                Log.d(TAG, "   Triggers: ${workflow.triggerDetails}")
+                Log.d(TAG, "   Actions: ${workflow.actionDetails}")
+
+                // Execute all actions in the workflow
+                // ActionExecutor will parse the actionDetails JSON and execute each action
+                // with its proper title, message, priority, etc.
+                ActionExecutor.executeWorkflow(context, workflow)
+
+                Log.d(TAG, "✅ Workflow execution completed")
+
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error executing workflow $workflowId: ${e.message}", e)
+            } finally {
+                // Always finish the pending result
+                pendingResult.finish()
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Error executing action: ${e.message}", e)
-            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
