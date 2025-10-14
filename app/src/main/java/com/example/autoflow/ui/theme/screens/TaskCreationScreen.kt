@@ -149,8 +149,13 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import com.example.autoflow.model.SavedBluetoothDevice
 import com.example.autoflow.model.SavedLocation
-
+import com.example.autoflow.model.SavedWiFiNetwork
+import com.example.autoflow.viewmodel.WiFiViewModel
+import com.example.autoflow.viewmodel.BluetoothViewModel
+import android.widget.Toast
+import android.net.wifi.WifiManager
 
 /**
  * Production-ready Task Creation Screen with comprehensive error handling
@@ -192,14 +197,8 @@ fun TaskCreationScreen(
     var radiusValue: Float by remember { mutableFloatStateOf(100f) }
     var triggerOnOption: String by remember { mutableStateOf("Entry") }
 
-    var wifiTriggerExpanded: Boolean by remember { mutableStateOf(false) }
-    var wifiState: String by remember { mutableStateOf("On") }
-
     var timeTriggerExpanded: Boolean by remember { mutableStateOf(false) }
     var timeValue: String by remember { mutableStateOf("") }
-
-    var bluetoothDeviceTriggerExpanded: Boolean by remember { mutableStateOf(false) }
-    var bluetoothDeviceAddress: String by remember { mutableStateOf("") }
 
     //   Action states with explicit types
     var sendNotificationActionExpanded: Boolean by remember { mutableStateOf(false) }
@@ -229,6 +228,21 @@ fun TaskCreationScreen(
     //  UnBlock Apps Action states with explicit types
     var unblockAppsActionExpanded: Boolean by remember { mutableStateOf(false) }
 
+    var wifiTriggerExpanded by remember { mutableStateOf(false) }
+    var wifiState by remember { mutableStateOf("On") }
+
+    var selectedWifiNetwork by remember { mutableStateOf<SavedWiFiNetwork?>(null) }
+    var wifiSsid by remember { mutableStateOf("") }
+    var wifiTriggerType by remember { mutableStateOf("connect") }
+
+    var bluetoothDeviceTriggerExpanded by remember { mutableStateOf(false) }
+    var bluetoothDeviceAddress by remember { mutableStateOf("") }
+
+
+    var selectedBluetoothDevice by remember { mutableStateOf<SavedBluetoothDevice?>(null) }
+    var bluetoothMacAddress by remember { mutableStateOf("") }
+    var bluetoothDeviceName by remember { mutableStateOf("") }
+    var bluetoothTriggerType by remember { mutableStateOf("connect") }
 
     // Pre-populate fields if editing
     LaunchedEffect(existingWorkflow) {
@@ -339,7 +353,22 @@ fun TaskCreationScreen(
                 bluetoothDeviceTriggerExpanded = bluetoothDeviceTriggerExpanded,
                 onBluetoothExpandedChange = { bluetoothDeviceTriggerExpanded = it },
                 bluetoothDeviceAddress = bluetoothDeviceAddress,
-                onBluetoothAddressChange = { bluetoothDeviceAddress = it }
+                onBluetoothAddressChange = { bluetoothDeviceAddress = it },
+                selectedWifiNetwork = selectedWifiNetwork,
+                wifiSsid = wifiSsid,
+                onWifiSsidChange = { wifiSsid = it },
+                onWifiNetworkSelected = { selectedWifiNetwork = it },
+                wifiTriggerType = wifiTriggerType,
+                onWifiTriggerTypeChange = { wifiTriggerType = it },
+                selectedBluetoothDevice = selectedBluetoothDevice,
+                bluetoothMacAddress = bluetoothMacAddress,
+                bluetoothDeviceName = bluetoothDeviceName,
+                onBluetoothDeviceNameChange = { bluetoothDeviceName = it },
+                onBluetoothMacAddressChange = { bluetoothMacAddress = it },
+                onBluetoothDeviceSelected = { selectedBluetoothDevice = it },
+                bluetoothTriggerType = bluetoothTriggerType,
+                onBluetoothTriggerTypeChange = { bluetoothTriggerType = it },
+                context = context
             )
 
             // Actions Card
@@ -489,8 +518,31 @@ private fun TriggersCard(
     bluetoothDeviceTriggerExpanded: Boolean,
     onBluetoothExpandedChange: (Boolean) -> Unit,
     bluetoothDeviceAddress: String,
-    onBluetoothAddressChange: (String) -> Unit
+    onBluetoothAddressChange: (String) -> Unit,
+    selectedWifiNetwork: SavedWiFiNetwork?,
+    wifiSsid: String,
+    onWifiSsidChange: (String) -> Unit,
+    onWifiNetworkSelected: (SavedWiFiNetwork) -> Unit,
+    wifiTriggerType: String,
+    onWifiTriggerTypeChange: (String) -> Unit,
+    selectedBluetoothDevice: SavedBluetoothDevice?,
+    bluetoothMacAddress: String,
+    bluetoothDeviceName: String,
+    onBluetoothDeviceNameChange: (String) -> Unit,
+    onBluetoothMacAddressChange: (String) -> Unit,
+    onBluetoothDeviceSelected: (SavedBluetoothDevice) -> Unit,
+    bluetoothTriggerType: String,
+    onBluetoothTriggerTypeChange: (String) -> Unit,
+    context: Context
 ) {
+    // Find this section in TaskCreationScreen (around line 500-600)
+    val availableTriggers = listOf(
+        "Time" to Icons.Default.Schedule,
+        "Location" to Icons.Default.LocationOn,
+        "WiFi" to Icons.Default.Wifi,           // ✅ ADD THIS
+        "Bluetooth" to Icons.Default.Bluetooth  // ✅ ADD THIS
+    )
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -541,8 +593,13 @@ private fun TriggersCard(
                 onExpandedChange = onWifiExpandedChange
             ) {
                 WiFiTriggerContent(
-                    wifiState = wifiState,
-                    onWifiStateChange = onWifiStateChange
+                    selectedWifiNetwork = selectedWifiNetwork,
+                    wifiSsid = wifiSsid,
+                    onWifiSsidChange = onWifiSsidChange,
+                    onWifiNetworkSelected = onWifiNetworkSelected,
+                    triggerType = wifiTriggerType,
+                    onTriggerTypeChange = onWifiTriggerTypeChange,
+                    context = context
                 )
             }
 
@@ -554,8 +611,15 @@ private fun TriggersCard(
                 onExpandedChange = onBluetoothExpandedChange
             ) {
                 BluetoothTriggerContent(
-                    bluetoothDeviceAddress = bluetoothDeviceAddress,
-                    onBluetoothAddressChange = onBluetoothAddressChange
+                    selectedDevice = selectedBluetoothDevice,
+                    deviceName = bluetoothDeviceName,
+                    macAddress = bluetoothMacAddress,
+                    onDeviceNameChange = onBluetoothDeviceNameChange,
+                    onMacAddressChange = onBluetoothMacAddressChange,
+                    onDeviceSelected = onBluetoothDeviceSelected,
+                    triggerType = bluetoothTriggerType,
+                    onTriggerTypeChange = onBluetoothTriggerTypeChange,
+                    context = context
                 )
             }
         }
@@ -2321,202 +2385,285 @@ private fun TimeTriggerContent(
 
 
 @Composable
-private fun WiFiTriggerContent(
-    wifiState: String,
-    onWifiStateChange: (String) -> Unit
+fun WiFiTriggerContent(
+    selectedWifiNetwork: SavedWiFiNetwork?,
+    wifiSsid: String,
+    onWifiSsidChange: (String) -> Unit,
+    onWifiNetworkSelected: (SavedWiFiNetwork) -> Unit,
+    triggerType: String,
+    onTriggerTypeChange: (String) -> Unit,
+    context: Context
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Target State:", style = MaterialTheme.typography.labelLarge)
-        Row(
-            modifier = Modifier.fillMaxWidth().selectableGroup(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            listOf("On", "Off").forEach { state ->
+    val wifiViewModel: WiFiViewModel = viewModel()
+    val savedNetworks by wifiViewModel.allNetworks.observeAsState(emptyList())
+    var showNetworkPicker by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "📶 WiFi Network Trigger",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // WiFi Network Selection
+            OutlinedTextField(
+                value = wifiSsid,
+                onValueChange = onWifiSsidChange,
+                label = { Text("WiFi Network (SSID)") },
+                placeholder = { Text("Enter WiFi name") },
+                modifier = Modifier.fillMaxWidth(),
+                leadingIcon = {
+                    Icon(Icons.Default.Wifi, contentDescription = null)
+                },
+                trailingIcon = {
+                    IconButton(onClick = { showNetworkPicker = true }) {
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Pick saved")
+                    }
+                }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Trigger Type Selection
+            Text("Trigger When:", style = MaterialTheme.typography.labelMedium)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 FilterChip(
-                    selected = wifiState == state,
-                    onClick = { onWifiStateChange(state) },
-                    label = { Text(state) }
+                    selected = triggerType == "connect",
+                    onClick = { onTriggerTypeChange("connect") },
+                    label = { Text("Connected") },
+                    leadingIcon = if (triggerType == "connect") {
+                        { Icon(Icons.Default.Check, null, modifier = Modifier.size(18.dp)) }
+                    } else null,
+                    modifier = Modifier.weight(1f)
+                )
+
+                FilterChip(
+                    selected = triggerType == "disconnect",
+                    onClick = { onTriggerTypeChange("disconnect") },
+                    label = { Text("Disconnected") },
+                    leadingIcon = if (triggerType == "disconnect") {
+                        { Icon(Icons.Default.Check, null, modifier = Modifier.size(18.dp)) }
+                    } else null,
+                    modifier = Modifier.weight(1f)
                 )
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Get Current WiFi Button
+            Button(
+                onClick = {
+                    val wifiManager = context.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+                    val wifiInfo = wifiManager?.connectionInfo
+                    if (wifiInfo != null) {
+                        onWifiSsidChange(wifiInfo.ssid.removeSurrounding("\""))
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.MyLocation, null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Use Current WiFi")
+            }
         }
+    }
+
+    // WiFi Network Picker Dialog
+    if (showNetworkPicker) {
+        AlertDialog(
+            onDismissRequest = { showNetworkPicker = false },
+            title = { Text("Select WiFi Network") },
+            text = {
+                LazyColumn {
+                    items(savedNetworks.size) { index ->
+                        val network = savedNetworks[index]
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clickable {
+                                    onWifiNetworkSelected(network)
+                                    onWifiSsidChange(network.ssid)
+                                    showNetworkPicker = false
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Wifi, null)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(network.displayName)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showNetworkPicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
+// ✅ BLUETOOTH TRIGGER CONTENT
 @Composable
-private fun BluetoothTriggerContent(
-    bluetoothDeviceAddress: String,
-    onBluetoothAddressChange: (String) -> Unit
+fun BluetoothTriggerContent(
+    selectedDevice: SavedBluetoothDevice?,
+    deviceName: String,
+    macAddress: String,
+    onDeviceNameChange: (String) -> Unit,
+    onMacAddressChange: (String) -> Unit,
+    onDeviceSelected: (SavedBluetoothDevice) -> Unit,
+    triggerType: String,
+    onTriggerTypeChange: (String) -> Unit,
+    context: Context
 ) {
-    val context = LocalContext.current
+    val bluetoothViewModel: BluetoothViewModel = viewModel()
+    val savedDevices by bluetoothViewModel.allDevices.observeAsState(emptyList())
     var showDevicePicker by remember { mutableStateOf(false) }
-    var pairedDevices by remember { mutableStateOf<List<BluetoothDeviceInfo>>(emptyList()) }
-    var showPermissionRationale by remember { mutableStateOf(false) }
 
-    // ✅ Permission launcher for Bluetooth Connect (Android 12+)
-    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            try {
-                pairedDevices = getPairedBluetoothDevices(context)
-                showDevicePicker = true
-            } catch (e: Exception) {
-                Log.e("Bluetooth", "Error fetching devices", e)
-            }
-        } else {
-            showPermissionRationale = true
-        }
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Select device button
-        OutlinedButton(
-            onClick = {
-                // Check if permission is needed (Android 12+)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val hasPermission = ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.BLUETOOTH_CONNECT
-                    ) == PackageManager.PERMISSION_GRANTED
-
-                    if (hasPermission) {
-                        try {
-                            pairedDevices = getPairedBluetoothDevices(context)
-                            showDevicePicker = true
-                        } catch (e: Exception) {
-                            Log.e("Bluetooth", "Error fetching devices", e)
-                        }
-                    } else {
-                        // Request permission
-                        bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
-                    }
-                } else {
-                    // Android 11 and below - no BLUETOOTH_CONNECT needed
-                    try {
-                        pairedDevices = getPairedBluetoothDevices(context)
-                        showDevicePicker = true
-                    } catch (e: Exception) {
-                        Log.e("Bluetooth", "Error fetching devices", e)
-                    }
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Default.Bluetooth, null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Select Paired Device")
-        }
-
-        // Manual address input
-        OutlinedTextField(
-            value = bluetoothDeviceAddress,
-            onValueChange = onBluetoothAddressChange,
-            label = { Text("Device MAC Address") },
-            placeholder = { Text("XX:XX:XX:XX:XX:XX") },
-            modifier = Modifier.fillMaxWidth()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
         )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "📲 Bluetooth Device Trigger",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
 
-        // Show selected device
-        if (bluetoothDeviceAddress.isNotBlank()) {
-            Card(
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Device Name
+            OutlinedTextField(
+                value = deviceName,
+                onValueChange = onDeviceNameChange,
+                label = { Text("Device Name") },
+                placeholder = { Text("e.g., Car Bluetooth") },
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Column {
-                        Text(
-                            "Device Selected",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            bluetoothDeviceAddress,
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                leadingIcon = {
+                    Icon(Icons.Default.Bluetooth, contentDescription = null)
+                }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // MAC Address
+            OutlinedTextField(
+                value = macAddress,
+                onValueChange = onMacAddressChange,
+                label = { Text("MAC Address") },
+                placeholder = { Text("AA:BB:CC:DD:EE:FF") },
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    IconButton(onClick = { showDevicePicker = true }) {
+                        Icon(Icons.Default.ArrowDropDown, "Pick saved device")
                     }
                 }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Trigger Type
+            Text("Trigger When:", style = MaterialTheme.typography.labelMedium)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = triggerType == "connect",
+                    onClick = { onTriggerTypeChange("connect") },
+                    label = { Text("Connected") },
+                    modifier = Modifier.weight(1f)
+                )
+
+                FilterChip(
+                    selected = triggerType == "disconnect",
+                    onClick = { onTriggerTypeChange("disconnect") },
+                    label = { Text("Disconnected") },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Scan for Devices Button
+            Button(
+                onClick = {
+                    // Scan for Bluetooth devices
+                    Toast.makeText(context, "Scanning for Bluetooth devices...", Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Search, null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Scan Nearby Devices")
             }
         }
     }
 
-    // Device picker dialog
+    // Device Picker Dialog
     if (showDevicePicker) {
         AlertDialog(
             onDismissRequest = { showDevicePicker = false },
-            confirmButton = {
-                TextButton(onClick = { showDevicePicker = false }) {
-                    Text("Cancel")
-                }
-            },
-            title = { Text("Paired Bluetooth Devices") },
+            title = { Text("Select Bluetooth Device") },
             text = {
-                if (pairedDevices.isEmpty()) {
-                    Text("No paired devices found")
-                } else {
-                    LazyColumn {
-                        items(pairedDevices) { device ->
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                                    .clickable {
-                                        onBluetoothAddressChange(device.address)
-                                        showDevicePicker = false
-                                    }
+                LazyColumn {
+                    items(savedDevices.size) { index ->
+                        val device = savedDevices[index]
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clickable {
+                                    onDeviceSelected(device)
+                                    onDeviceNameChange(device.deviceName)
+                                    onMacAddressChange(device.macAddress)
+                                    showDevicePicker = false
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Text(device.name, fontWeight = FontWeight.Bold)
-                                    Text(
-                                        device.address,
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
+                                Icon(Icons.Default.Bluetooth, null)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(device.displayName, fontWeight = FontWeight.Bold)
+                                    Text(device.macAddress, style = MaterialTheme.typography.bodySmall)
                                 }
                             }
                         }
                     }
                 }
-            }
-        )
-    }
-
-    // Permission rationale dialog
-    if (showPermissionRationale) {
-        AlertDialog(
-            onDismissRequest = { showPermissionRationale = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showPermissionRationale = false
-                        bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
-                    }
-                ) {
-                    Text("Grant Permission")
-                }
             },
-            dismissButton = {
-                TextButton(onClick = { showPermissionRationale = false }) {
+            confirmButton = {
+                TextButton(onClick = { showDevicePicker = false }) {
                     Text("Cancel")
                 }
-            },
-            title = { Text("Bluetooth Permission Required") },
-            text = {
-                Text("AutoFlow needs Bluetooth permission to scan for paired devices. This allows you to select a device as a trigger.")
             }
         )
     }
 }
-
 
 //  ACTION CONTENT COMPONENTS 
 
