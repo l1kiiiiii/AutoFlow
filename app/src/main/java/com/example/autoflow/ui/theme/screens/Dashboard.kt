@@ -1,5 +1,11 @@
 package com.example.autoflow.ui.theme.screens
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.os.Build
 import android.util.Log
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -16,8 +22,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -25,9 +34,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.autoflow.integrations.SoundModeManager
+import com.example.autoflow.model.ModeTemplate
+import com.example.autoflow.receiver.ModeDeactivateReceiver
 import com.example.autoflow.ui.screens.TaskCreationScreen
+import com.example.autoflow.util.PredefinedModes
+import com.example.autoflow.viewmodel.WorkflowViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import android.R as AndroidR
 
 /**
  * Enhanced Dashboard with smooth navigation and success feedback
@@ -62,10 +77,10 @@ fun Dashboard(modifier: Modifier = Modifier) {
                 selectedIcon = Icons.Filled.Add
             ),
             BottomNavItem(
-                route = "profile",
-                label = "Profile",
-                icon = Icons.Default.Person,
-                selectedIcon = Icons.Filled.Person
+                route = "modes",
+                label = "Modes",
+                icon = Icons.Default.Category,
+                selectedIcon = Icons.Filled.Category
             ),
             BottomNavItem(
                 route = "settings",
@@ -190,6 +205,12 @@ fun Dashboard(modifier: Modifier = Modifier) {
         ) {
             // Home screen
             composable("home") {
+                val workflowViewModel: WorkflowViewModel = viewModel()
+
+                // Force reload workflows when home screen is opened
+                LaunchedEffect(Unit) {
+                    workflowViewModel.loadWorkflows()
+                }
                 HomeScreen(
                     onNavigateToCreateTask = {
                         try {
@@ -345,10 +366,78 @@ fun Dashboard(modifier: Modifier = Modifier) {
                     )
                 }
             }
+            // Inside NavHost, replace the existing modes composable:
+            composable("modes") {
+                val workflowViewModel: WorkflowViewModel = viewModel()
+                val context = LocalContext.current
 
-            // Profile screen
-            composable("profile") {
-                ProfileManagment()
+                ModesScreen(
+                    viewModel = workflowViewModel,
+                    onModeSelected = { mode ->
+                        // Check if it's a manual mode
+                        if (PredefinedModes.isManualMode(mode)) {
+                            scope.launch {
+                                val soundModeManager = SoundModeManager(context)
+
+                                // ✅ CHECK PERMISSION FIRST
+                                if (!soundModeManager.hasDndPermission()) {
+                                    snackbarHostState.showSnackbar(
+                                        message = "Grant Do Not Disturb permission to use ${mode.name}",
+                                        actionLabel = "Grant",
+                                        duration = SnackbarDuration.Long
+                                    ).let { result ->
+                                        if (result == SnackbarResult.ActionPerformed) {
+                                            soundModeManager.requestDndPermission()
+                                        }
+                                    }
+                                    return@launch
+                                }
+
+                                // Permission granted, activate mode
+                                val actionValue = mode.defaultActions.firstOrNull()?.config?.get("value") as? String
+                                val success = soundModeManager.setRingerMode(actionValue ?: "DND")
+
+                                if (success) {
+                                    snackbarHostState.showSnackbar(
+                                        message = "${mode.name} activated!",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                    showModeActiveNotification(context, mode)
+                                } else {
+                                    snackbarHostState.showSnackbar("Failed to activate ${mode.name}")
+                                }
+                            }
+                        } else {
+                            // Auto modes - create workflow
+                            workflowViewModel.createWorkflowFromMode(
+                                mode = mode,
+                                callback = object : WorkflowViewModel.WorkflowOperationCallback {
+                                    override fun onSuccess(message: String) {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar(message)
+                                            navController.navigate("home") {
+                                                popUpTo(navController.graph.findStartDestination().id) {
+                                                    saveState = true
+                                                }
+                                                launchSingleTop = true
+                                                restoreState = true
+                                            }
+                                        }
+                                    }
+
+                                    override fun onError(error: String) {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Unable to create workflow: $error")
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
             }
 
             // Settings screen
@@ -442,8 +531,50 @@ private fun getScreenTitle(route: String): String {
         route.startsWith("home") -> "AutoFlow"
         route.startsWith("create_task") -> "Create Task"
         route.startsWith("edit_task") -> "Edit Task"
-        route.startsWith("profile") -> "Profile"
+        route.startsWith("modes") -> "Modes" // CHANGED FROM "profile"
         route.startsWith("settings") -> "Settings"
         else -> "AutoFlow"
     }
+}
+private fun showModeActiveNotification(context: Context, mode: ModeTemplate) {
+    val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+    // Create notification channel for Android O+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val channel = NotificationChannel(
+            "mode_active",
+            "Active Modes",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Notifications for active manual modes"
+        }
+        notificationManager.createNotificationChannel(channel)
+    }
+
+    // Intent to deactivate mode
+    val deactivateIntent = Intent(context, ModeDeactivateReceiver::class.java).apply {
+        putExtra("mode_name", mode.name)
+    }
+    val deactivatePendingIntent = PendingIntent.getBroadcast(
+        context,
+        0,
+        deactivateIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    // Build notification - using system icon
+    val notification = NotificationCompat.Builder(context, "mode_active")
+        .setSmallIcon(android.R.drawable.ic_lock_silent_mode) // ✅ System icon
+        .setContentTitle("${mode.name} Active") // ✅ Fixed
+        .setContentText("Your phone is in ${mode.name}. Tap to deactivate.")
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setOngoing(true)
+        .addAction(
+            android.R.drawable.ic_menu_close_clear_cancel, // ✅ System icon
+            "Deactivate",
+            deactivatePendingIntent
+        )
+        .build()
+
+    notificationManager.notify(1001, notification)
 }

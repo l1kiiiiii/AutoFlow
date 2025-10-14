@@ -26,6 +26,9 @@ import org.json.JSONObject
 import com.example.autoflow.util.AlarmScheduler
 import org.json.JSONArray
 import com.example.autoflow.data.toTriggers
+import com.example.autoflow.model.ActionTemplate
+import com.example.autoflow.model.ModeTemplate
+import com.example.autoflow.model.TriggerTemplate
 
 
 /**
@@ -68,9 +71,11 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
     fun loadWorkflows() {
         repository.getAllWorkflows(object : WorkflowRepository.WorkflowCallback {
             override fun onWorkflowsLoaded(workflows: MutableList<WorkflowEntity>) {
+                Log.d(TAG, "✅ Loaded ${workflows.size} workflows from database")
+                workflows.forEach {
+                    Log.d(TAG, "  - ${it.workflowName} (ID: ${it.id})")
+                }
                 _workflows.postValue(workflows)
-                Log.d(TAG, "✅ Loaded ${workflows.size} workflows")
-                // ✅ NOTHING ELSE - NO GEOFENCE REGISTRATION HERE
             }
 
             override fun onWorkflowsError(error: String) {
@@ -78,6 +83,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             }
         })
     }
+
 
 
 
@@ -663,6 +669,179 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             false
         }
     }
+    fun createWorkflowFromMode(mode: ModeTemplate, callback: WorkflowOperationCallback? = null) {
+        try {
+            // Convert templates to actual triggers and actions
+            val triggers = mode.defaultTriggers.map { convertTemplateToTrigger(it) }
+            val actions = mode.defaultActions.map { convertTemplateToAction(it) }
+
+            // Validate
+            if (triggers.isEmpty() || actions.isEmpty()) {
+                val error = "Mode must have at least one trigger and one action"
+                _errorMessage.postValue(error)
+                callback?.onError(error)
+                return
+            }
+
+            // Create workflow entity
+            val workflowEntity = WorkflowEntity.fromTriggersAndActions(
+                workflowName = mode.name,
+                isEnabled = true, // ✅ ADDED: Missing parameter
+                triggers = triggers,
+                actions = actions,
+                triggerLogic = "AND"
+            )
+
+            if (workflowEntity == null) {
+                val error = "Failed to create workflow from mode"
+                _errorMessage.postValue(error)
+                callback?.onError(error)
+                return
+            }
+
+            // Mark as mode workflow
+            workflowEntity.isModeWorkflow = true
+
+            // Insert workflow
+            repository.insert(workflowEntity, object : WorkflowRepository.InsertCallback {
+                override fun onInsertComplete(insertedId: Long) {
+                    Log.d(TAG, "🎉 Mode workflow created - ID: $insertedId")
+
+                    // Create workflow with real ID
+                    val savedWorkflow = workflowEntity.copy(id = insertedId)
+
+                    // Register triggers with correct ID
+                    triggers.forEach { trigger ->
+                        when (trigger) {
+                            is Trigger.LocationTrigger -> {
+                                GeofenceManager.addGeofence(
+                                    context = getApplication<Application>().applicationContext,
+                                    workflowId = insertedId,
+                                    latitude = trigger.latitude,
+                                    longitude = trigger.longitude,
+                                    radius = trigger.radius.toFloat(),
+                                    triggerOnEntry = trigger.triggerOnEntry,
+                                    triggerOnExit = trigger.triggerOnExit
+                                )
+                            }
+                            is Trigger.TimeTrigger -> {
+                                // Time triggers handled by AlarmScheduler
+                                Log.d(TAG, "⏰ Time trigger for mode workflow")
+                            }
+                            else -> {
+                                Log.d(TAG, "Other trigger type: ${trigger.type}")
+                            }
+                        }
+                    }
+
+                    // Schedule alarms
+                    AlarmScheduler.scheduleWorkflow(
+                        getApplication<Application>().applicationContext,
+                        savedWorkflow
+                    )
+
+                    // Reload and notify
+                    loadWorkflows()
+                    val msg = "Mode '${mode.name}' created successfully"
+                    _successMessage.postValue(msg)
+                    callback?.onSuccess(msg)
+                }
+
+                override fun onInsertError(error: String) {
+                    _errorMessage.postValue("Failed to create mode: $error")
+                    callback?.onError(error)
+                }
+            })
+        } catch (e: Exception) {
+            val error = "Error creating mode: ${e.message}"
+            _errorMessage.postValue(error)
+            callback?.onError(error)
+            Log.e(TAG, "❌ Error creating mode", e)
+        }
+    }
+
+    private fun convertTemplateToTrigger(template: TriggerTemplate): Trigger {
+        return when (template.type) {
+            "TIME" -> {
+                val time = template.config["time"] as? String ?: "00:00"
+                val daysString = template.config["days"] as? String ?: ""
+                val days = if (daysString.isBlank()) emptyList()
+                else daysString.split(",").map { it.trim() }
+
+                Trigger.TimeTrigger(
+                    time = time,
+                    days = days
+                )
+            }
+            "LOCATION" -> {
+                val locationName = template.config["locationName"] as? String ?: "Set Location"
+                val latitude = when (val lat = template.config["latitude"]) {
+                    is Number -> lat.toDouble()
+                    is String -> lat.toDoubleOrNull() ?: 0.0
+                    else -> 0.0
+                }
+                val longitude = when (val lng = template.config["longitude"]) {
+                    is Number -> lng.toDouble()
+                    is String -> lng.toDoubleOrNull() ?: 0.0
+                    else -> 0.0
+                }
+                val radius = when (val rad = template.config["radius"]) {
+                    is Number -> rad.toDouble() // ✅ CHANGED: Convert to Double, not Int
+                    is String -> rad.toDoubleOrNull() ?: 100.0
+                    else -> 100.0
+                }
+
+                Trigger.LocationTrigger(
+                    locationName = locationName,
+                    latitude = latitude,
+                    longitude = longitude,
+                    radius = radius, // Now it's Double
+                    triggerOnEntry = template.config["triggerOnEntry"] as? Boolean ?: true,
+                    triggerOnExit = template.config["triggerOnExit"] as? Boolean ?: false,
+                    triggerOn = template.config["triggerOn"] as? String ?: "enter"
+                )
+            }
+            "WIFI" -> {
+                Trigger.WiFiTrigger(
+                    ssid = template.config["ssid"] as? String,
+                    state = template.config["state"] as? String ?: "connected"
+                )
+            }
+            "BLUETOOTH" -> {
+                Trigger.BluetoothTrigger(
+                    deviceAddress = template.config["deviceAddress"] as? String ?: "",
+                    deviceName = template.config["deviceName"] as? String
+                )
+            }
+            else -> throw IllegalArgumentException("Unknown trigger type: ${template.type}")
+        }
+    }
+    private fun convertTemplateToAction(template: ActionTemplate): Action {
+        return when (template.type) {
+            "SEND_NOTIFICATION" -> {
+                // Use 4-parameter constructor for notifications
+                Action(
+                    type = template.type,
+                    title = template.config["title"] as? String ?: "AutoFlow",
+                    message = template.config["message"] as? String ?: "Notification",
+                    priority = template.config["priority"] as? String ?: "default"
+                )
+            }
+            "SET_SOUND_MODE", "TOGGLE_WIFI", "TOGGLE_BLUETOOTH" -> {
+                // Use simple constructor, then set value manually
+                val action = Action(type = template.type)
+                action.value = template.config["value"] as? String
+                action
+            }
+            else -> {
+                // Default: simple constructor with optional value
+                val action = Action(type = template.type)
+                action.value = template.config["value"] as? String
+                action
+            }
+        }
+    }
+
 
     @SuppressLint("MissingPermission")
     fun stopAllTriggers() {

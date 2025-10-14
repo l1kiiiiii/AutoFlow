@@ -33,7 +33,13 @@ data class WorkflowEntity(
     var createdAt: Long = System.currentTimeMillis(),
 
     @ColumnInfo(name = "updated_at")
-    var updatedAt: Long = System.currentTimeMillis()
+    var updatedAt: Long = System.currentTimeMillis(),
+
+    @ColumnInfo(name = "mode_id")
+    var modeId: Long? = null, // NULL for custom workflows, ID for mode-based
+
+    @ColumnInfo(name = "is_mode_workflow")
+    var isModeWorkflow: Boolean = false
 ) {
     companion object {
         private const val TAG = "WorkflowEntity"
