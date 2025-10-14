@@ -33,12 +33,13 @@ object GeofenceManager {
         triggerOnExit: Boolean = false
     ): Boolean {
         // Check permissions
-        if (ActivityCompat.checkSelfPermission(
-                context,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
         ) {
             Log.e(TAG, "❌ Location permission not granted")
+            return false
+        }
+        if (workflowId <= 0L) {
+            Log.e(TAG, "❌ Invalid workflowId ($workflowId). Aborting geofence registration.")
             return false
         }
 

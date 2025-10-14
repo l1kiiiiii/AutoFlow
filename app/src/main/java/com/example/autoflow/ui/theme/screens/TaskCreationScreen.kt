@@ -2536,7 +2536,8 @@ private suspend fun handleSaveTask(
         val hasLocationTrigger = locationTriggerExpanded && locationDetailsInput.isNotBlank()
         val hasWifiTrigger = wifiTriggerExpanded
         val hasTimeTrigger = timeTriggerExpanded && timeValue.isNotBlank()
-        val hasBluetoothTrigger = bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank()
+        val hasBluetoothTrigger =
+            bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank()
         Log.d("TaskCreation", "=== TRIGGER CHECK ===")
         Log.d("TaskCreation", "Location: $hasLocationTrigger")
         Log.d("TaskCreation", "WiFi: $hasWifiTrigger")
@@ -2563,7 +2564,12 @@ private suspend fun handleSaveTask(
         }
         if (hasBluetoothTrigger) {
             Log.d("TaskCreation", "→ Adding BLUETOOTH trigger: $bluetoothDeviceAddress")
-            triggers.add(Trigger.BluetoothTrigger(deviceAddress = bluetoothDeviceAddress, deviceName = null))
+            triggers.add(
+                Trigger.BluetoothTrigger(
+                    deviceAddress = bluetoothDeviceAddress,
+                    deviceName = null
+                )
+            )
         }
         if (hasLocationTrigger) {
             Log.d("TaskCreation", "→ Adding LOCATION trigger")
@@ -2623,7 +2629,14 @@ private suspend fun handleSaveTask(
 
         if (hasNotificationAction) {
             Log.d("TaskCreation", "→ Adding NOTIFICATION action")
-            actions.add(Action(Constants.ACTION_SEND_NOTIFICATION, notificationTitle, notificationMessage, notificationPriority))
+            actions.add(
+                Action(
+                    Constants.ACTION_SEND_NOTIFICATION,
+                    notificationTitle,
+                    notificationMessage,
+                    notificationPriority
+                )
+            )
         }
         if (hasToggleAction) {
             Log.d("TaskCreation", "→ Adding TOGGLE action: $toggleSetting")
@@ -2636,7 +2649,9 @@ private suspend fun handleSaveTask(
         }
         if (hasSoundModeAction) {
             Log.d("TaskCreation", "→ Adding SOUND MODE action: $soundMode")
-            actions.add(Action(Constants.ACTION_SET_SOUND_MODE, null, null, null).apply { value = soundMode })
+            actions.add(Action(Constants.ACTION_SET_SOUND_MODE, null, null, null).apply {
+                value = soundMode
+            })
         }
         //  Block Apps Action
         if (blockAppsActionExpanded && selectedAppsToBlock.isNotEmpty()) {
@@ -2655,7 +2670,9 @@ private suspend fun handleSaveTask(
         }
         if (hasScriptAction) {
             Log.d("TaskCreation", "→ Adding SCRIPT action")
-            actions.add(Action(Constants.ACTION_RUN_SCRIPT, null, null, null).apply { value = scriptText })
+            actions.add(Action(Constants.ACTION_RUN_SCRIPT, null, null, null).apply {
+                value = scriptText
+            })
         }
         Log.d("TaskCreation", "✅ Total actions created: ${actions.size}")
 
@@ -2680,21 +2697,25 @@ private suspend fun handleSaveTask(
         // 9. SCHEDULE ALARMS FOR TIME TRIGGERS
         Log.d("TaskCreation", "✅ Workflow saved. Triggers will be automatically registered.")
         // 10. ADD GEOFENCES FOR LOCATION TRIGGERS
-        triggers.filterIsInstance<Trigger.LocationTrigger>().forEach { locationTrigger ->
-            try {
-                GeofenceManager.addGeofence(
-                    context,
-                    workflowId ?: 0L,
-                    locationTrigger.latitude,
-                    locationTrigger.longitude,
-                    locationTrigger.radius.toFloat(),
-                    locationTrigger.triggerOnEntry,
-                    locationTrigger.triggerOnExit
-                )
-            } catch (e: Exception) {
-                Log.e("TaskCreation", "❌ Geofence setup failed", e)
+        if (workflowId == null || workflowId <= 0L) {
+            Log.w("TaskCreation", "Skipping geofence registration: invalid workflowId=$workflowId")
+        } else{
+            triggers.filterIsInstance<Trigger.LocationTrigger>().forEach { locationTrigger ->
+                try {
+                    GeofenceManager.addGeofence(
+                        context,
+                        workflowId,
+                        locationTrigger.latitude,
+                        locationTrigger.longitude,
+                        locationTrigger.radius.toFloat(),
+                        locationTrigger.triggerOnEntry,
+                        locationTrigger.triggerOnExit
+                    )
+                } catch (e: Exception) {
+                    Log.e("TaskCreation", "❌ Geofence setup failed", e)
+                }
             }
-        }
+    }
         onSuccess()
     } catch (e: NumberFormatException) {
         Log.e("TaskCreation", "❌ Number format error", e)
