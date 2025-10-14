@@ -43,13 +43,14 @@ class GeofenceReceiver : BroadcastReceiver() {
             Log.w(TAG, "⚠️ Unhandled geofence transition: ${geofencingEvent.geofenceTransition}")
             return
         }
+        val pendingResult = goAsync()
 
         // Process each geofence that triggered the event
         geofencingEvent.triggeringGeofences?.forEach { geofence ->
             val workflowId = geofence.requestId.substringAfter("workflow_").toLongOrNull()
             if (workflowId != null && workflowId != 0L) {
                 Log.d(TAG, "✅ Geofence transition '$transitionType' for workflow ID: $workflowId")
-                handleGeofenceTransition(context, workflowId, transitionType)
+                handleGeofenceTransition(context, workflowId, transitionType, pendingResult)
             } else {
                 Log.e(TAG, "❌ Invalid geofence ID format: ${geofence.requestId}")
             }
@@ -63,7 +64,8 @@ class GeofenceReceiver : BroadcastReceiver() {
     private fun handleGeofenceTransition(
         context: Context,
         workflowId: Long,
-        transitionType: String
+        transitionType: String,
+        pendingResult: PendingResult
     ) {
         // Use a coroutine to perform a quick database check off the main thread
         CoroutineScope(Dispatchers.IO).launch {

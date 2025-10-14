@@ -127,6 +127,24 @@
             </intent-filter>
         </receiver>
 
+        <!-- WiFi Trigger Receiver -->
+        <receiver
+            android:name=".receiver.WiFiReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.net.wifi.STATE_CHANGE" />
+            </intent-filter>
+        </receiver>
+        <!-- Bluetooth Trigger Receiver -->
+        <receiver
+            android:name=".receiver.BluetoothReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+                <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
+            </intent-filter>
+        </receiver>
+
         <!--  SERVICES  -->
         <service
             android:name=".blocker.AppBlockAccessibilityService"
