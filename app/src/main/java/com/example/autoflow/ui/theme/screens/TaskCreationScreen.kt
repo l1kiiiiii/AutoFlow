@@ -137,9 +137,20 @@ import com.example.autoflow.data.toTriggers
 import com.example.autoflow.ui.components.AppSelectorComposable
 import android.content.Intent
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Surface
 import com.example.autoflow.ui.components.getAppNameFromPackage
+import com.example.autoflow.viewmodel.LocationViewModel
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import com.example.autoflow.model.SavedLocation
+
 
 /**
  * Production-ready Task Creation Screen with comprehensive error handling
@@ -1338,6 +1349,7 @@ private fun ExpandableActionSection(
 
 // Add to your LocationTriggerContent composable
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LocationTriggerContent(
     locationName: String,
@@ -1866,6 +1878,169 @@ private fun LocationTriggerContent(
                 }
             }
         }
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // SAVE LOCATION SECTION
+        // Add this RIGHT BEFORE the "Get Current Location" button in LocationTriggerContent
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+// ✅ PICK FROM SAVED LOCATIONS BUTTON
+        val locationViewModel: LocationViewModel = viewModel()
+        val savedLocations by locationViewModel.allLocations.observeAsState(emptyList())
+        var showLocationDropdown by remember { mutableStateOf(false) }
+        var selectedSavedLocation by remember { mutableStateOf<SavedLocation?>(null) }
+
+// Location Name with Dropdown
+        ExposedDropdownMenuBox(
+            expanded = showLocationDropdown,
+            onExpandedChange = { showLocationDropdown = it }
+        ) {
+            OutlinedTextField(
+                value = locationName,
+                onValueChange = { newValue ->
+                    onLocationNameChange(newValue)
+                    selectedSavedLocation = null // Clear selection when manually typing
+                },
+                label = { Text("Location Name") },
+                placeholder = { Text("Select saved or enter new") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(),
+                trailingIcon = {
+                    Row {
+                        if (savedLocations.isNotEmpty()) {
+                            IconButton(onClick = { showLocationDropdown = !showLocationDropdown }) {
+                                Icon(
+                                    if (showLocationDropdown) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                    contentDescription = "Select saved location"
+                                )
+                            }
+                        }
+                    }
+                },
+                leadingIcon = {
+                    Icon(
+                        if (selectedSavedLocation != null) Icons.Default.Star else Icons.Default.Place,
+                        contentDescription = null,
+                        tint = if (selectedSavedLocation != null)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = if (selectedSavedLocation != null)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.outline
+                )
+            )
+
+            // Dropdown Menu with Saved Locations
+            ExposedDropdownMenu(
+                expanded = showLocationDropdown,
+                onDismissRequest = { showLocationDropdown = false }
+            ) {
+                if (savedLocations.isEmpty()) {
+                    // No saved locations message
+                    DropdownMenuItem(
+                        text = {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    Icons.Default.LocationOn,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    "No saved locations",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        onClick = { /* Do nothing */ }
+                    )
+                } else {
+                    // List all saved locations
+                    savedLocations.forEach { location ->
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        if (location.isFavorite) Icons.Filled.Star else Icons.Default.LocationOn,
+                                        contentDescription = null,
+                                        tint = if (location.isFavorite)
+                                            MaterialTheme.colorScheme.primary
+                                        else
+                                            MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            location.name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            "${
+                                                String.format(
+                                                    "%.4f",
+                                                    location.latitude
+                                                )
+                                            }, ${String.format("%.4f", location.longitude)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            },
+                            onClick = {
+                                // Auto-fill all fields when location is selected
+                                selectedSavedLocation = location
+                                onLocationNameChange(location.name)
+
+                                // ✅ FIX: Ensure proper coordinate format with consistent decimal places
+                                val formattedCoords = "${location.latitude},${location.longitude}"
+                                onLocationDetailsChange(formattedCoords)
+
+                                // ✅ FIX: Make sure to update radius value from saved location
+                                onRadiusChange(location.radius.toFloat())
+
+                                showLocationDropdown = false
+
+                                // Show success feedback
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "✓ Loaded: ${location.name}",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            },
+                            leadingIcon = {
+                                if (selectedSavedLocation?.id == location.id) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
     }
 }
 
