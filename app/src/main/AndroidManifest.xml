@@ -145,6 +145,11 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".receiver.EmergencyUnblockReceiver"
+            android:exported="false" />
+
+
         <!--  SERVICES  -->
         <service
             android:name=".blocker.AppBlockAccessibilityService"
