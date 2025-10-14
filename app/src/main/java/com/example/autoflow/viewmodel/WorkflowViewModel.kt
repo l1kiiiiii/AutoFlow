@@ -25,6 +25,8 @@ import com.example.autoflow.util.PermissionUtils
 import org.json.JSONObject
 import com.example.autoflow.util.AlarmScheduler
 import org.json.JSONArray
+import com.example.autoflow.data.toTriggers
+
 
 /**
  * Modern WorkflowViewModel using Coroutines
@@ -68,14 +70,16 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             override fun onWorkflowsLoaded(workflows: MutableList<WorkflowEntity>) {
                 _workflows.postValue(workflows)
                 Log.d(TAG, "✅ Loaded ${workflows.size} workflows")
+                // ✅ NOTHING ELSE - NO GEOFENCE REGISTRATION HERE
             }
 
             override fun onWorkflowsError(error: String) {
-                _errorMessage.postValue("Failed to load workflows: $error")
-                Log.e(TAG, "❌ Load error: $error")
+                Log.e(TAG, "Failed to load workflows: $error")
             }
         })
     }
+
+
 
     /**
      *  Add workflow with proper ID handling
@@ -687,6 +691,60 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         fun onTriggerFired(trigger: Trigger, isFired: Boolean)
     }
 
+    /**
+     * Restore all geofences for enabled workflows
+     * Call this ONLY when app starts (e.g., in MainActivity.onCreate())
+     */
+    /**
+     * Restore all geofences for enabled workflows
+     * Call this ONLY when app starts (e.g., in MainActivity.onCreate())
+     */
+    fun restoreGeofences() {
+        Log.d(TAG, "🔄 Restoring geofences for all enabled workflows...")
+
+        repository.getAllWorkflows(object : WorkflowRepository.WorkflowCallback {
+            override fun onWorkflowsLoaded(workflows: MutableList<WorkflowEntity>) {
+                var restoredCount = 0
+
+                workflows.forEach { workflow ->
+                    // ✅ Only restore if workflow is enabled AND has valid ID
+                    if (workflow.isEnabled && workflow.id > 0) {
+                        try {
+                            // ✅ Use toTriggers() extension function
+                            val triggers = workflow.toTriggers()
+
+                            triggers.forEach { trigger ->
+                                if (trigger is Trigger.LocationTrigger) {
+                                    val success = GeofenceManager.addGeofence(
+                                        context = getApplication<Application>().applicationContext,
+                                        workflowId = workflow.id,
+                                        latitude = trigger.latitude,
+                                        longitude = trigger.longitude,
+                                        radius = trigger.radius.toFloat(),
+                                        triggerOnEntry = trigger.triggerOnEntry,
+                                        triggerOnExit = trigger.triggerOnExit
+                                    )
+
+                                    if (success) {
+                                        restoredCount++
+                                        Log.d(TAG, "✅ Restored geofence for workflow ${workflow.id}: ${workflow.workflowName}")
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "❌ Error restoring geofence for workflow ${workflow.id}: ${e.message}", e)
+                        }
+                    }
+                }
+
+                Log.d(TAG, "✅ Restored $restoredCount geofences")
+            }
+
+            override fun onWorkflowsError(error: String) {
+                Log.e(TAG, "❌ Failed to restore geofences: $error")
+            }
+        })
+    }
     // LIFECYCLE
 
     @SuppressLint("MissingPermission")

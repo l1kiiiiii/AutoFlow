@@ -12,17 +12,23 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels  // ✅ ADD THIS IMPORT
 import androidx.annotation.RequiresApi
-import com.example.autoflow.ui.theme.AutoFlowTheme
-import com.example.autoflow.ui.theme.screens.Dashboard
-import com.example.autoflow.util.NotificationHelper
-import com.example.autoflow.util.AlarmScheduler  // ✅ Import AlarmScheduler
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import com.example.autoflow.ui.theme.AutoFlowTheme
+import com.example.autoflow.ui.theme.screens.Dashboard
+import com.example.autoflow.util.NotificationHelper
+import com.example.autoflow.util.AlarmScheduler
+import com.example.autoflow.viewmodel.WorkflowViewModel
 
 class MainActivity : ComponentActivity() {
+
+    // ✅ Initialize ViewModel using viewModels() delegate
+    private val workflowViewModel: WorkflowViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -37,10 +43,14 @@ class MainActivity : ComponentActivity() {
         // ✅ Clean up invalid alarms (workflow ID 0)
         AlarmScheduler.cancelWorkflowAlarms(this, 0)
 
+        // ✅ Restore geofences when app starts
+        workflowViewModel.restoreGeofences()
+
         // Request exact alarm permission for Android 12+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             requestExactAlarmPermission()
         }
+
         enableEdgeToEdge()
 
         setContent {

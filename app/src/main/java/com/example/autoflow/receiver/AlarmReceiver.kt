@@ -40,7 +40,7 @@ class AlarmReceiver : BroadcastReceiver() {
         // Extract workflow ID from intent
         val workflowId = intent.getLongExtra(Constants.KEY_WORKFLOW_ID, -1L)
 
-        if (workflowId == -1L) {
+        if (workflowId == -1L|| workflowId == 0L) {
             Log.e(TAG, "❌ Invalid workflow ID received")
             return
         }
