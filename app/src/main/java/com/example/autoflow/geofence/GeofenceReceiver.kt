@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.example.autoflow.data.AppDatabase
+import com.example.autoflow.data.toTriggers
 import com.example.autoflow.receiver.AlarmReceiver
 import com.example.autoflow.util.Constants
 import com.google.android.gms.location.Geofence
@@ -13,7 +14,7 @@ import com.google.android.gms.location.GeofencingEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.json.JSONObject
+import org.json.JSONArray
 
 class GeofenceReceiver : BroadcastReceiver() {
 
@@ -25,177 +26,122 @@ class GeofenceReceiver : BroadcastReceiver() {
         Log.d(TAG, "📍 Geofence event received")
 
         val geofencingEvent = GeofencingEvent.fromIntent(intent)
-
-        if (geofencingEvent == null) {
-            Log.e(TAG, "❌ Geofencing event is null")
+        if (geofencingEvent == null || geofencingEvent.hasError()) {
+            val errorMessage = GeofenceStatusCodes.getStatusCodeString(geofencingEvent?.errorCode ?: -1)
+            Log.e(TAG, "❌ Geofence error: $errorMessage")
             return
         }
 
-        if (geofencingEvent.hasError()) {
-            val errorMessage = GeofenceStatusCodes.getStatusCodeString(geofencingEvent.errorCode)
-            Log.e(TAG, "❌ Geofence error: $errorMessage (code: ${geofencingEvent.errorCode})")
+        // Determine the transition type from the event
+        val transitionType = when (geofencingEvent.geofenceTransition) {
+            Geofence.GEOFENCE_TRANSITION_ENTER -> "enter"
+            Geofence.GEOFENCE_TRANSITION_EXIT -> "exit"
+            else -> null // We don't handle DWELL or other types
+        }
+
+        if (transitionType == null) {
+            Log.w(TAG, "⚠️ Unhandled geofence transition: ${geofencingEvent.geofenceTransition}")
             return
         }
 
-        // Get the transition type
-        val geofenceTransition = geofencingEvent.geofenceTransition
-
-        // Get triggering geofences
-        val triggeringGeofences = geofencingEvent.triggeringGeofences
-
-        if (triggeringGeofences == null || triggeringGeofences.isEmpty()) {
-            Log.e(TAG, "❌ No triggering geofences")
-            return
-        }
-
-        // Handle each geofence
-        when (geofenceTransition) {
-            Geofence.GEOFENCE_TRANSITION_ENTER -> {
-                triggeringGeofences.forEach { geofence ->
-                    Log.d(TAG, "✅ ENTERED geofence: ${geofence.requestId}")
-                    handleGeofenceTransition(context, geofence.requestId, "enter")
-                }
-            }
-
-            Geofence.GEOFENCE_TRANSITION_EXIT -> {
-                triggeringGeofences.forEach { geofence ->
-                    Log.d(TAG, "✅ EXITED geofence: ${geofence.requestId}")
-                    handleGeofenceTransition(context, geofence.requestId, "exit")
-                }
-            }
-
-            Geofence.GEOFENCE_TRANSITION_DWELL -> {
-                triggeringGeofences.forEach { geofence ->
-                    Log.d(TAG, "✅ DWELLING in geofence: ${geofence.requestId}")
-                    // Optionally handle dwell as enter
-                    // handleGeofenceTransition(context, geofence.requestId, "dwell")
-                }
-            }
-
-            else -> {
-                Log.w(TAG, "⚠️ Unknown geofence transition: $geofenceTransition")
+        // Process each geofence that triggered the event
+        geofencingEvent.triggeringGeofences?.forEach { geofence ->
+            val workflowId = geofence.requestId.substringAfter("workflow_").toLongOrNull()
+            if (workflowId != null && workflowId != 0L) {
+                Log.d(TAG, "✅ Geofence transition '$transitionType' for workflow ID: $workflowId")
+                handleGeofenceTransition(context, workflowId, transitionType)
+            } else {
+                Log.e(TAG, "❌ Invalid geofence ID format: ${geofence.requestId}")
             }
         }
     }
 
     /**
-     * Handle geofence transition by executing workflow action
+     * Handles the geofence transition by checking the workflow's trigger conditions
+     * and executing the action through AlarmReceiver.
      */
     private fun handleGeofenceTransition(
         context: Context,
-        geofenceId: String,
+        workflowId: Long,
         transitionType: String
     ) {
-        // Extract workflow ID from geofence request ID
-        val workflowId = geofenceId.substringAfter("workflow_").toLongOrNull()
-
-        if (workflowId == null) {
-            Log.e(TAG, "❌ Invalid geofence ID format: $geofenceId")
-            return
-        }
-
-        Log.d(TAG, "🎯 Processing workflow ID: $workflowId (transition: $transitionType)")
-
-        // Query database asynchronously
+        // Use a coroutine to perform a quick database check off the main thread
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val database = AppDatabase.getDatabase(context)
-                val workflow = database.workflowDao().getByIdSync(workflowId)
+                val dao = AppDatabase.getDatabase(context).workflowDao()
+                // FIXED: Use getByIdSync instead of getWorkflowById
+                val workflow = dao.getByIdSync(workflowId)
 
                 if (workflow == null) {
                     Log.e(TAG, "❌ Workflow $workflowId not found in database")
                     return@launch
                 }
-
                 if (!workflow.isEnabled) {
-                    Log.w(TAG, "⚠️ Workflow $workflowId is disabled, skipping")
+                    Log.w(TAG, "⚠️ Workflow $workflowId is disabled, skipping.")
                     return@launch
                 }
 
-                // Parse trigger details - structure is {"type":"LOCATION","value":"{...}"}
-                val triggerDetails = workflow.triggerDetails
-                if (triggerDetails.isEmpty()) {
-                    Log.e(TAG, "❌ No trigger details found")
+                // Find the specific location trigger within the workflow's trigger list
+                val locationTrigger = workflow.toTriggers()
+                    .filterIsInstance<com.example.autoflow.model.Trigger.LocationTrigger>()
+                    .firstOrNull()
+
+                if (locationTrigger == null) {
+                    Log.e(TAG, "❌ No location trigger found for workflow $workflowId")
                     return@launch
                 }
 
-                val triggerJson = JSONObject(triggerDetails)
-                val triggerType = triggerJson.optString("type", "")
-
-                // The actual trigger data is nested in the "value" field as a JSON string
-                val triggerValueString = triggerJson.optString("value", "{}")
-                val triggerValueJson = JSONObject(triggerValueString)
-
-                // NOW we can access triggerOn from the nested JSON
-                val triggerOn = triggerValueJson.optString("triggerOn", "enter")
-
-                Log.d(TAG, "🔍 Trigger type: $triggerType, triggerOn: $triggerOn")
-
-                // Handle "both", "enter", "exit" options
-                val shouldExecute = when (triggerOn.lowercase()) {
-                    "both" -> true  // Execute on both entry and exit
+                // Check if the workflow should execute for this specific transition
+                val shouldExecute = when (locationTrigger.triggerOn.lowercase()) {
+                    "both" -> true
                     "enter" -> transitionType == "enter"
                     "exit" -> transitionType == "exit"
-                    else -> {
-                        Log.w(TAG, "⚠️ Unknown triggerOn value: '$triggerOn', defaulting to 'enter'")
-                        transitionType == "enter"
-                    }
+                    else -> false
                 }
 
-                if (!shouldExecute) {
-                    Log.d(TAG, "⏭️ Skipping: workflow expects '$triggerOn' but got '$transitionType'")
-                    return@launch
-                }
+                if (shouldExecute) {
+                    Log.d(TAG, "✅ Condition met. Executing action for workflow: ${workflow.workflowName}")
 
-                Log.d(TAG, "✅ Executing action for workflow: ${workflow.workflowName}")
-
-                // Execute the action through AlarmReceiver
-                val actionIntent = Intent(context, AlarmReceiver::class.java).apply {
-                    putExtra("workflow_id", workflowId)
-
-                    val actionDetails = workflow.actionDetails
-                    if (actionDetails.isNotEmpty()) {
-                        val actionJson = JSONObject(actionDetails)
+                    // FIXED: Execute action using AlarmReceiver (your existing architecture)
+                    val actionArray = JSONArray(workflow.actionDetails)
+                    if (actionArray.length() > 0) {
+                        val actionJson = actionArray.getJSONObject(0)
                         val actionType = actionJson.optString("type", Constants.ACTION_SEND_NOTIFICATION)
-                        putExtra("action_type", actionType)
 
-                        when (actionType) {
-                            Constants.ACTION_SEND_NOTIFICATION -> {
-                                putExtra(
-                                    "notification_title",
-                                    actionJson.optString("title", "AutoFlow")
-                                )
-                                putExtra(
-                                    "notification_message",
-                                    actionJson.optString("message", "Location trigger activated")
-                                )
-                            }
+                        val actionIntent = Intent(context, AlarmReceiver::class.java).apply {
+                            putExtra(Constants.KEY_WORKFLOW_ID, workflowId)
+                            putExtra("action_type", actionType)
 
-                            Constants.ACTION_SET_SOUND_MODE -> {
-                                putExtra("sound_mode", actionJson.optString("value", "Silent"))
-                            }
-
-                            Constants.ACTION_TOGGLE_WIFI -> {
-                                val wifiState = actionJson.optString("value", "OFF")
-                                    .contains("ON", ignoreCase = true)
-                                putExtra("wifi_state", wifiState.toString())
-                            }
-
-                            Constants.ACTION_TOGGLE_BLUETOOTH -> {
-                                val btState = actionJson.optString("value", "OFF")
-                                    .contains("ON", ignoreCase = true)
-                                putExtra("bluetooth_state", btState.toString())
+                            when (actionType) {
+                                Constants.ACTION_SEND_NOTIFICATION -> {
+                                    putExtra("notification_title", actionJson.optString("title", "AutoFlow"))
+                                    putExtra("notification_message", actionJson.optString("message", "Location trigger activated"))
+                                }
+                                Constants.ACTION_SET_SOUND_MODE -> {
+                                    putExtra("sound_mode", actionJson.optString("value", "Silent"))
+                                }
+                                Constants.ACTION_TOGGLE_WIFI -> {
+                                    val wifiState = actionJson.optString("value", "OFF").contains("ON", ignoreCase = true)
+                                    putExtra("wifi_state", wifiState.toString())
+                                }
+                                Constants.ACTION_TOGGLE_BLUETOOTH -> {
+                                    val btState = actionJson.optString("value", "OFF").contains("ON", ignoreCase = true)
+                                    putExtra("bluetooth_state", btState.toString())
+                                }
                             }
                         }
+
+                        // Send broadcast to AlarmReceiver for execution
+                        context.sendBroadcast(actionIntent)
+                        Log.d(TAG, "📤 Action broadcast sent for workflow $workflowId")
                     }
+
+                } else {
+                    Log.d(TAG, "⏭️ Skipping execution: workflow expects '${locationTrigger.triggerOn}' but transition was '$transitionType'")
                 }
 
-                // Send broadcast to AlarmReceiver
-                context.sendBroadcast(actionIntent)
-                Log.d(TAG, "📤 Action broadcast sent for workflow $workflowId")
-
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Error handling geofence transition: ${e.message}", e)
+                Log.e(TAG, "❌ Error handling geofence transition for workflow $workflowId", e)
             }
         }
     }

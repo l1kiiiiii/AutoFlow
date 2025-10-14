@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import com.google.android.gms.location.Geofence
@@ -44,23 +45,23 @@ object GeofenceManager {
         try {
             val geofencingClient = LocationServices.getGeofencingClient(context)
 
-            // ✅ FIXED: Use actual workflow ID, not hardcoded 0
+            // FIXED: Use actual workflow ID (not "workflow_0")
             val requestId = "workflow_$workflowId"
+
+            // Determine transition types
+            val transitionTypes = when {
+                triggerOnEntry && triggerOnExit -> Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_EXIT
+                triggerOnEntry -> Geofence.GEOFENCE_TRANSITION_ENTER
+                triggerOnExit -> Geofence.GEOFENCE_TRANSITION_EXIT
+                else -> Geofence.GEOFENCE_TRANSITION_ENTER // Default
+            }
 
             // Build geofence
             val geofence = Geofence.Builder()
                 .setRequestId(requestId)
                 .setCircularRegion(latitude, longitude, radius)
                 .setExpirationDuration(Geofence.NEVER_EXPIRE)
-                .setTransitionTypes(
-                    if (triggerOnEntry && triggerOnExit) {
-                        Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_EXIT
-                    } else if (triggerOnEntry) {
-                        Geofence.GEOFENCE_TRANSITION_ENTER
-                    } else {
-                        Geofence.GEOFENCE_TRANSITION_EXIT
-                    }
-                )
+                .setTransitionTypes(transitionTypes)
                 .build()
 
             // Build request
@@ -69,21 +70,32 @@ object GeofenceManager {
                 .addGeofence(geofence)
                 .build()
 
-            // Create pending intent with workflow ID
-            val intent = Intent(context, GeofenceReceiver::class.java).apply {
-                putExtra("workflow_id", workflowId)  // ✅ Pass actual workflow ID
-            }
+            // Create pending intent - FIXED for Android 12+
+            val intent = Intent(context, GeofenceReceiver::class.java)
 
-            val pendingIntent = PendingIntent.getBroadcast(
-                context,
-                workflowId.toInt(),  // ✅ Use workflow ID as request code
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-            )
+            // CRITICAL FIX: Use correct flags based on Android version
+            val pendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // Android 12+ (API 31+) requires explicit mutability
+                PendingIntent.getBroadcast(
+                    context,
+                    workflowId.toInt(), // Use workflow ID as request code
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+                )
+            } else {
+                // Android 11 and below
+                PendingIntent.getBroadcast(
+                    context,
+                    workflowId.toInt(),
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT
+                )
+            }
 
             // Add geofence
             geofencingClient.addGeofences(geofencingRequest, pendingIntent)
                 .addOnSuccessListener {
+                    activeGeofences.add(requestId)
                     Log.d(TAG, "✅ Geofence added: $requestId at ($latitude, $longitude) radius=${radius}m")
                 }
                 .addOnFailureListener { e ->
@@ -91,6 +103,7 @@ object GeofenceManager {
                 }
 
             return true
+
         } catch (e: SecurityException) {
             Log.e(TAG, "❌ SecurityException: ${e.message}", e)
             return false
@@ -99,6 +112,8 @@ object GeofenceManager {
             return false
         }
     }
+
+
 
 
     /**
