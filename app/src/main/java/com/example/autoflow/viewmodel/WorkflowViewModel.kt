@@ -3,6 +3,7 @@ package com.example.autoflow.viewmodel
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Application
+import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
 import android.util.Log
@@ -26,9 +27,11 @@ import org.json.JSONObject
 import com.example.autoflow.util.AlarmScheduler
 import org.json.JSONArray
 import com.example.autoflow.data.toTriggers
+import com.example.autoflow.integrations.PhoneStateManager
 import com.example.autoflow.model.ActionTemplate
 import com.example.autoflow.model.ModeTemplate
 import com.example.autoflow.model.TriggerTemplate
+import com.example.autoflow.util.AutoReplyManager
 
 
 /**
@@ -926,19 +929,78 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
     }
     // LIFECYCLE
 
+    // Fix the Action constructor calls in createMeetingModeWorkflow()
+    fun createMeetingModeWorkflow(
+        workflowName: String = "Meeting Mode",
+        autoReplyMessage: String = Constants.DEFAULT_AUTO_REPLY_MESSAGE,
+        callback: WorkflowOperationCallback? = null
+    ) {
+        val triggers = listOf<Trigger>() // Manual trigger - user enables it
+
+        val actions = listOf(
+            // ✅ FIXED: Use explicit constructor with proper parameters
+            Action(
+                type = Constants.ACTION_SET_SOUND_MODE,
+                title = "Set Sound Mode",
+                message = "DND mode activated",
+                priority = "high"
+            ).apply {
+                value = "DND" // Set value after construction
+            },
+
+            Action(
+                type = Constants.ACTION_AUTO_REPLY_SMS,
+                title = "Auto-reply enabled",
+                message = autoReplyMessage,
+                priority = "normal"
+            ).apply {
+                value = "true" // Enable auto-reply
+            }
+        )
+
+        addWorkflow(workflowName, triggers, actions, "AND")
+    }
+
+
+    // ✅ NEW: Toggle auto-reply for existing workflows
+    fun toggleAutoReply(enabled: Boolean, message: String = Constants.DEFAULT_AUTO_REPLY_MESSAGE) {
+        val prefs = getApplication<Application>().getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putBoolean(Constants.PREF_AUTO_REPLY_ENABLED, enabled)
+            .putString(Constants.PREF_AUTO_REPLY_MESSAGE, message)
+            .apply()
+
+        val phoneStateManager = PhoneStateManager.getInstance(getApplication())
+        if (enabled) {
+            phoneStateManager.startListening()
+            _successMessage.postValue("Auto-reply enabled: \"$message\"")
+        } else {
+            phoneStateManager.stopListening()
+            _successMessage.postValue("Auto-reply disabled")
+        }
+    }
+
+    // SINGLE onCleared() method combining both implementations
     @SuppressLint("MissingPermission")
     override fun onCleared() {
         super.onCleared()
         Log.d(TAG, "🧹 Cleaning up ViewModel")
 
         try {
+            // Clean up integration managers
             bleManager.cleanup()
             wifiManager.cleanup()
             locationManager.cleanup()
             repository.cleanup()
+
+            // Clean up phone state and auto-reply managers
+            PhoneStateManager.getInstance(getApplication()).cleanup()
+            AutoReplyManager.getInstance(getApplication()).cleanup()
+
             Log.d(TAG, "✅ Cleanup complete")
         } catch (e: Exception) {
-            Log.e(TAG, "Cleanup error", e)
+            Log.e(TAG, "❌ Cleanup error", e)
         }
     }
+
 }

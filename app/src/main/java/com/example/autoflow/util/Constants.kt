@@ -226,4 +226,17 @@ object Constants {
     const val VOLUME_MEDIUM = 50
     const val VOLUME_HIGH = 75
     const val VOLUME_MAXIMUM = 100
+
+    const val ACTION_AUTO_REPLY_SMS = "AUTO_REPLY_SMS"
+    const val TRIGGER_INCOMING_CALL = "INCOMING_CALL"
+    const val AUTO_REPLY_COOLDOWN_MS = 5 * 60 * 1000L // 5 minutes
+    const val DEFAULT_AUTO_REPLY_MESSAGE = "I am in a meeting. I'll call you back later."
+
+    // Preferences keys
+    const val PREF_AUTO_REPLY_ENABLED = "auto_reply_enabled"
+    const val PREF_AUTO_REPLY_MESSAGE = "auto_reply_message"
+    const val PREF_AUTO_REPLY_ONLY_IN_DND = "auto_reply_only_in_dnd"
+
+
+
 }

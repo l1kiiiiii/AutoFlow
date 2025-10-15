@@ -51,4 +51,7 @@ interface WorkflowDao {
 
     @Query("SELECT * FROM workflows WHERE workflow_name LIKE '%' || :query || '%'")
     fun search(query: String): List<WorkflowEntity>
+
+    @Query("SELECT * FROM workflows WHERE is_enabled = 1")
+    suspend fun getAllEnabledSync(): List<WorkflowEntity>
 }

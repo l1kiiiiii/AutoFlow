@@ -156,6 +156,7 @@ import com.example.autoflow.viewmodel.WiFiViewModel
 import com.example.autoflow.viewmodel.BluetoothViewModel
 import android.widget.Toast
 import android.net.wifi.WifiManager
+import androidx.compose.material3.Switch
 
 /**
  * Production-ready Task Creation Screen with comprehensive error handling
@@ -3276,6 +3277,111 @@ private fun validateScript(scriptCode: String) {
         Log.i("ScriptValidation", "Validation passed")
     }
 }
+
+@Composable
+fun AutoReplySettingsCard(
+    workflowViewModel: WorkflowViewModel,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE) }
+
+    var autoReplyEnabled by remember {
+        mutableStateOf(prefs.getBoolean(Constants.PREF_AUTO_REPLY_ENABLED, false))
+    }
+    var autoReplyMessage by remember {
+        mutableStateOf(prefs.getString(Constants.PREF_AUTO_REPLY_MESSAGE, Constants.DEFAULT_AUTO_REPLY_MESSAGE) ?: Constants.DEFAULT_AUTO_REPLY_MESSAGE)
+    }
+    var onlyInDnd by remember {
+        mutableStateOf(prefs.getBoolean(Constants.PREF_AUTO_REPLY_ONLY_IN_DND, true))
+    }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Auto-Reply SMS",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Text(
+                text = "Automatically reply to callers when busy",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // Enable/Disable toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Enable Auto-Reply")
+                Switch(
+                    checked = autoReplyEnabled,
+                    onCheckedChange = { enabled ->
+                        autoReplyEnabled = enabled
+                        workflowViewModel.toggleAutoReply(enabled, autoReplyMessage)
+
+                        // Save to preferences
+                        prefs.edit()
+                            .putBoolean(Constants.PREF_AUTO_REPLY_ENABLED, enabled)
+                            .apply()
+                    }
+                )
+            }
+
+            if (autoReplyEnabled) {
+                // Message input
+                OutlinedTextField(
+                    value = autoReplyMessage,
+                    onValueChange = { message ->
+                        autoReplyMessage = message
+                        prefs.edit()
+                            .putString(Constants.PREF_AUTO_REPLY_MESSAGE, message)
+                            .apply()
+                    },
+                    label = { Text("Auto-Reply Message") },
+                    placeholder = { Text(Constants.DEFAULT_AUTO_REPLY_MESSAGE) },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 3
+                )
+
+                // Only in DND mode toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Only during DND/Meeting")
+                        Text(
+                            text = "Reply only when Do Not Disturb is active",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = onlyInDnd,
+                        onCheckedChange = { enabled ->
+                            onlyInDnd = enabled
+                            prefs.edit()
+                                .putBoolean(Constants.PREF_AUTO_REPLY_ONLY_IN_DND, enabled)
+                                .apply()
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
 
 //  PREVIEW
 @Preview(showBackground = true, name = "Task Creation Screen Preview")

@@ -18,6 +18,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.data.toActions
+import com.example.autoflow.integrations.PhoneStateManager
 import com.example.autoflow.model.Action
 import com.example.autoflow.policy.BlockPolicy
 import com.example.autoflow.receiver.AlarmReceiver
@@ -72,6 +73,10 @@ object ActionExecutor {
                 Constants.ACTION_TOGGLE_BLUETOOTH -> {
                     val state = action.value ?: "Toggle"
                     toggleBluetooth(context, state)
+                }
+
+                Constants.ACTION_AUTO_REPLY_SMS -> {
+                    executeAutoReplySms(context, action)
                 }
 
                 else -> {
@@ -453,5 +458,34 @@ object ActionExecutor {
 
             notificationManager.createNotificationChannels(listOf(highChannel, normalChannel, lowChannel))
         }
+    }
+
+
+    // Execute auto-reply SMS action
+    private fun executeAutoReplySms(context: Context, action: Action): Boolean {
+        Log.d(TAG, "📱 Executing AUTO_REPLY_SMS action")
+
+        val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+        val enabled = prefs.getBoolean(Constants.PREF_AUTO_REPLY_ENABLED, false)
+        val message = action.message ?: action.value ?: Constants.DEFAULT_AUTO_REPLY_MESSAGE
+
+        // Update settings
+        prefs.edit()
+            .putBoolean(Constants.PREF_AUTO_REPLY_ENABLED, enabled)
+            .putString(Constants.PREF_AUTO_REPLY_MESSAGE, message)
+            .apply()
+
+        // Start phone state monitoring if enabled
+        if (enabled) {
+            val phoneStateManager = PhoneStateManager.getInstance(context)
+            phoneStateManager.startListening()
+            Log.i(TAG, "✅ Auto-reply SMS monitoring started")
+        } else {
+            val phoneStateManager = PhoneStateManager.getInstance(context)
+            phoneStateManager.stopListening()
+            Log.i(TAG, "⏹️ Auto-reply SMS monitoring stopped")
+        }
+
+        return true
     }
 }
