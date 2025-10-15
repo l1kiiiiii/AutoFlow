@@ -195,20 +195,7 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(80.dp)) // Space for bottom nav
             }
 
-            // Floating Action Button
-            FloatingActionButton(
-                onClick = onNavigateToCreateTask,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 20.dp, bottom = 90.dp),
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Create Flow"
-                )
-            }
+            // removed Floating Action Button
         }
     }
 

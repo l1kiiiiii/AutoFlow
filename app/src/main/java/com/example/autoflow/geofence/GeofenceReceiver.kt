@@ -5,16 +5,24 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.example.autoflow.data.AppDatabase
-import com.example.autoflow.receiver.AlarmReceiver
-import com.example.autoflow.util.Constants
+import com.example.autoflow.data.toTriggers
+import com.example.autoflow.util.ActionExecutor
+import com.example.autoflow.policy.BlockPolicy
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofenceStatusCodes
 import com.google.android.gms.location.GeofencingEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 
+/**
+ * GeofenceReceiver handles location-based workflow triggers.
+ *
+ * Features:
+ * - Execute workflows when entering/exiting geofences
+ * - Auto-unblock apps when leaving a location with entry trigger
+ * - Support for "entry", "exit", and "both" trigger types
+ */
 class GeofenceReceiver : BroadcastReceiver() {
 
     companion object {
@@ -24,83 +32,62 @@ class GeofenceReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         Log.d(TAG, "📍 Geofence event received")
 
+        // Parse geofencing event
         val geofencingEvent = GeofencingEvent.fromIntent(intent)
-
-        if (geofencingEvent == null) {
-            Log.e(TAG, "❌ Geofencing event is null")
+        if (geofencingEvent == null || geofencingEvent.hasError()) {
+            val errorCode = geofencingEvent?.errorCode ?: -1
+            val errorMessage = GeofenceStatusCodes.getStatusCodeString(errorCode)
+            Log.e(TAG, "❌ Geofence error: $errorMessage (code: $errorCode)")
             return
         }
 
-        if (geofencingEvent.hasError()) {
-            val errorMessage = GeofenceStatusCodes.getStatusCodeString(geofencingEvent.errorCode)
-            Log.e(TAG, "❌ Geofence error: $errorMessage (code: ${geofencingEvent.errorCode})")
-            return
-        }
-
-        // Get the transition type
-        val geofenceTransition = geofencingEvent.geofenceTransition
-
-        // Get triggering geofences
-        val triggeringGeofences = geofencingEvent.triggeringGeofences
-
-        if (triggeringGeofences == null || triggeringGeofences.isEmpty()) {
-            Log.e(TAG, "❌ No triggering geofences")
-            return
-        }
-
-        // Handle each geofence
-        when (geofenceTransition) {
-            Geofence.GEOFENCE_TRANSITION_ENTER -> {
-                triggeringGeofences.forEach { geofence ->
-                    Log.d(TAG, "✅ ENTERED geofence: ${geofence.requestId}")
-                    handleGeofenceTransition(context, geofence.requestId, "enter")
-                }
-            }
-
-            Geofence.GEOFENCE_TRANSITION_EXIT -> {
-                triggeringGeofences.forEach { geofence ->
-                    Log.d(TAG, "✅ EXITED geofence: ${geofence.requestId}")
-                    handleGeofenceTransition(context, geofence.requestId, "exit")
-                }
-            }
-
-            Geofence.GEOFENCE_TRANSITION_DWELL -> {
-                triggeringGeofences.forEach { geofence ->
-                    Log.d(TAG, "✅ DWELLING in geofence: ${geofence.requestId}")
-                    // Optionally handle dwell as enter
-                    // handleGeofenceTransition(context, geofence.requestId, "dwell")
-                }
-            }
-
+        // Determine transition type (enter/exit)
+        val transitionType = when (geofencingEvent.geofenceTransition) {
+            Geofence.GEOFENCE_TRANSITION_ENTER -> "enter"
+            Geofence.GEOFENCE_TRANSITION_EXIT -> "exit"
             else -> {
-                Log.w(TAG, "⚠️ Unknown geofence transition: $geofenceTransition")
+                Log.w(TAG, "⚠️ Unhandled geofence transition: ${geofencingEvent.geofenceTransition}")
+                return
+            }
+        }
+
+        Log.d(TAG, "🚪 Geofence transition: $transitionType")
+
+        // Keep receiver alive for async processing
+        val pendingResult = goAsync()
+
+        // Process each triggering geofence
+        geofencingEvent.triggeringGeofences?.forEach { geofence ->
+            val workflowId = geofence.requestId.substringAfter("workflow_").toLongOrNull()
+
+            if (workflowId != null && workflowId != 0L) {
+                Log.d(TAG, "✅ Processing workflow ID: $workflowId")
+                handleGeofenceTransition(context, workflowId, transitionType, pendingResult)
+            } else {
+                Log.e(TAG, "❌ Invalid geofence request ID: ${geofence.requestId}")
             }
         }
     }
 
     /**
-     * Handle geofence transition by executing workflow action
+     * Handles geofence transition for a specific workflow.
+     *
+     * @param context Application context
+     * @param workflowId The workflow to process
+     * @param transitionType "enter" or "exit"
+     * @param pendingResult PendingResult to finish when done
      */
     private fun handleGeofenceTransition(
         context: Context,
-        geofenceId: String,
-        transitionType: String
+        workflowId: Long,
+        transitionType: String,
+        pendingResult: PendingResult
     ) {
-        // Extract workflow ID from geofence request ID
-        val workflowId = geofenceId.substringAfter("workflow_").toLongOrNull()
-
-        if (workflowId == null) {
-            Log.e(TAG, "❌ Invalid geofence ID format: $geofenceId")
-            return
-        }
-
-        Log.d(TAG, "🎯 Processing workflow ID: $workflowId (transition: $transitionType)")
-
-        // Query database asynchronously
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val database = AppDatabase.getDatabase(context)
-                val workflow = database.workflowDao().getByIdSync(workflowId)
+                // Fetch workflow from database
+                val dao = AppDatabase.getDatabase(context).workflowDao()
+                val workflow = dao.getByIdSync(workflowId)
 
                 if (workflow == null) {
                     Log.e(TAG, "❌ Workflow $workflowId not found in database")
@@ -112,90 +99,52 @@ class GeofenceReceiver : BroadcastReceiver() {
                     return@launch
                 }
 
-                // Parse trigger details - structure is {"type":"LOCATION","value":"{...}"}
-                val triggerDetails = workflow.triggerDetails
-                if (triggerDetails.isEmpty()) {
-                    Log.e(TAG, "❌ No trigger details found")
+                // Extract location trigger from workflow
+                val locationTrigger = workflow.toTriggers()
+                    .filterIsInstance<com.example.autoflow.model.Trigger.LocationTrigger>()
+                    .firstOrNull()
+
+                if (locationTrigger == null) {
+                    Log.e(TAG, "❌ No location trigger found for workflow $workflowId")
                     return@launch
                 }
 
-                val triggerJson = JSONObject(triggerDetails)
-                val triggerType = triggerJson.optString("type", "")
-
-                // The actual trigger data is nested in the "value" field as a JSON string
-                val triggerValueString = triggerJson.optString("value", "{}")
-                val triggerValueJson = JSONObject(triggerValueString)
-
-                // NOW we can access triggerOn from the nested JSON
-                val triggerOn = triggerValueJson.optString("triggerOn", "enter")
-
-                Log.d(TAG, "🔍 Trigger type: $triggerType, triggerOn: $triggerOn")
-
-                // Handle "both", "enter", "exit" options
-                val shouldExecute = when (triggerOn.lowercase()) {
-                    "both" -> true  // Execute on both entry and exit
-                    "enter" -> transitionType == "enter"
+                // Determine if workflow should execute
+                val triggerOn = locationTrigger.triggerOn.lowercase()
+                val shouldExecute = when (triggerOn) {
+                    "both" -> true
+                    "entry", "enter" -> transitionType == "enter"
                     "exit" -> transitionType == "exit"
+                    else -> false
+                }
+
+                Log.d(TAG, "Workflow: ${workflow.workflowName}, Trigger: $triggerOn, Transition: $transitionType")
+
+                when {
+                    // ✅ Execute workflow on matching transition
+                    shouldExecute -> {
+                        val action = if (transitionType == "enter") "ENTERING" else "EXITING"
+                        Log.d(TAG, "✅ $action: ${workflow.workflowName}")
+                        ActionExecutor.executeWorkflow(context, workflow)
+                    }
+
+                    // ✅ Auto-unblock on exit if entry trigger
+                    !shouldExecute && transitionType == "exit" && (triggerOn == "entry" || triggerOn == "enter") -> {
+                        Log.d(TAG, "🔓 AUTO-UNBLOCK on exit: ${workflow.workflowName}")
+                        BlockPolicy.clearBlockedPackages(context)
+                    }
+
+                    // ⏭️ Skip execution
                     else -> {
-                        Log.w(TAG, "⚠️ Unknown triggerOn value: '$triggerOn', defaulting to 'enter'")
-                        transitionType == "enter"
+                        Log.d(TAG, "⏭️ Skipping: workflow expects '$triggerOn' but got '$transitionType'")
                     }
                 }
-
-                if (!shouldExecute) {
-                    Log.d(TAG, "⏭️ Skipping: workflow expects '$triggerOn' but got '$transitionType'")
-                    return@launch
-                }
-
-                Log.d(TAG, "✅ Executing action for workflow: ${workflow.workflowName}")
-
-                // Execute the action through AlarmReceiver
-                val actionIntent = Intent(context, AlarmReceiver::class.java).apply {
-                    putExtra("workflow_id", workflowId)
-
-                    val actionDetails = workflow.actionDetails
-                    if (actionDetails.isNotEmpty()) {
-                        val actionJson = JSONObject(actionDetails)
-                        val actionType = actionJson.optString("type", Constants.ACTION_SEND_NOTIFICATION)
-                        putExtra("action_type", actionType)
-
-                        when (actionType) {
-                            Constants.ACTION_SEND_NOTIFICATION -> {
-                                putExtra(
-                                    "notification_title",
-                                    actionJson.optString("title", "AutoFlow")
-                                )
-                                putExtra(
-                                    "notification_message",
-                                    actionJson.optString("message", "Location trigger activated")
-                                )
-                            }
-
-                            Constants.ACTION_SET_SOUND_MODE -> {
-                                putExtra("sound_mode", actionJson.optString("value", "Silent"))
-                            }
-
-                            Constants.ACTION_TOGGLE_WIFI -> {
-                                val wifiState = actionJson.optString("value", "OFF")
-                                    .contains("ON", ignoreCase = true)
-                                putExtra("wifi_state", wifiState.toString())
-                            }
-
-                            Constants.ACTION_TOGGLE_BLUETOOTH -> {
-                                val btState = actionJson.optString("value", "OFF")
-                                    .contains("ON", ignoreCase = true)
-                                putExtra("bluetooth_state", btState.toString())
-                            }
-                        }
-                    }
-                }
-
-                // Send broadcast to AlarmReceiver
-                context.sendBroadcast(actionIntent)
-                Log.d(TAG, "📤 Action broadcast sent for workflow $workflowId")
 
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Error handling geofence transition: ${e.message}", e)
+                Log.e(TAG, "❌ Error handling geofence for workflow $workflowId", e)
+            } finally {
+                // Always finish the pending result
+                pendingResult.finish()
             }
         }
     }

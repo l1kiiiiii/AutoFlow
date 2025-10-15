@@ -4,10 +4,49 @@ import com.example.autoflow.util.Constants
 import org.json.JSONObject
 import java.util.regex.Pattern
 
+ class WiFiTrigger {
+        @JvmField
+        var ssid: String? = null
+
+        @JvmField
+        var bssid: String? = null
+
+        @JvmField
+        var triggerOn: String? = "connect" // "connect" or "disconnect"
+
+        constructor()
+
+        constructor(ssid: String?, triggerOn: String?) {
+            this.ssid = ssid
+            this.triggerOn = triggerOn
+        }
+    }
+
+    class BluetoothTrigger {
+        @JvmField
+        var macAddress: String? = null
+
+        @JvmField
+        var deviceName: String? = null
+
+        @JvmField
+        var triggerOn: String? = "connect" // "connect" or "disconnect"
+
+        constructor()
+
+        constructor(macAddress: String?, deviceName: String?, triggerOn: String?) {
+            this.macAddress = macAddress
+            this.deviceName = deviceName
+            this.triggerOn = triggerOn
+        }
+    }
+
 /**
  * Sealed class representing different types of workflow triggers
  */
 sealed class Trigger(val type: String, val value: String) {
+
+
 
     /**
      * Location-based trigger

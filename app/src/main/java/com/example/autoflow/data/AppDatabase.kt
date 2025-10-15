@@ -4,16 +4,27 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
+import com.example.autoflow.model.SavedBluetoothDevice
+import com.example.autoflow.model.SavedLocation
+import com.example.autoflow.model.SavedWiFiNetwork
 
 @Database(
-    entities = [WorkflowEntity::class],
-    version = 3,  // ✅ Increment version
+    entities = [
+        WorkflowEntity::class,
+        PredefinedModeEntity::class,
+        SavedLocation::class,
+        SavedWiFiNetwork::class,
+        SavedBluetoothDevice::class
+    ],
+    version = 6, // Increment version
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun workflowDao(): WorkflowDao
+    abstract fun predefinedModeDao(): PredefinedModeDao
+    abstract fun savedLocationDao(): SavedLocationDao
+    abstract fun savedWiFiNetworkDao(): SavedWiFiNetworkDao
+    abstract fun savedBluetoothDeviceDao(): SavedBluetoothDeviceDao
 
     companion object {
         @Volatile
@@ -26,36 +37,11 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "autoflow_database"
                 )
-                    .addMigrations(MIGRATION_2_3)  // ✅ Add migration
+                    .fallbackToDestructiveMigration()
                     .build()
-
                 INSTANCE = instance
                 instance
             }
         }
-
-        //  Migration from version 2 to 3
-        private val MIGRATION_2_3 = object : Migration(2, 3) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                // Add new trigger_logic column with default "AND"
-                database.execSQL(
-                    "ALTER TABLE workflows ADD COLUMN trigger_logic TEXT NOT NULL DEFAULT 'AND'"
-                )
-
-                // Convert existing single triggers/actions to arrays
-                // This wraps existing JSON objects in array brackets
-                database.execSQL("""
-                    UPDATE workflows 
-                    SET trigger_details = '[' || trigger_details || ']',
-                        action_details = '[' || action_details || ']'
-                    WHERE trigger_details NOT LIKE '[%'
-                """)
-            }
-        }
-
-        fun destroyInstance() {
-            INSTANCE = null
-        }
     }
 }
-

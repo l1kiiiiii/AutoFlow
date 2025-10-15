@@ -2,7 +2,6 @@ package com.example.autoflow.worker
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.NotificationManager
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
@@ -10,22 +9,19 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import androidx.annotation.RequiresPermission
-import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.autoflow.data.AppDatabase
-import com.example.autoflow.data.toAction
+import com.example.autoflow.data.toActions  // ✅ FIXED: Import toActions
 import com.example.autoflow.util.ActionExecutor
 import com.example.autoflow.util.Constants
 import com.example.autoflow.util.PermissionUtils
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
 /**
  * BLE Trigger Worker - Scans for Bluetooth devices
- * Uses CoroutineWorker for proper async handling
+ * ✅ UPDATED: Uses toActions() instead of toAction()
  */
 class BLETriggerWorker(
     context: Context,
@@ -85,8 +81,8 @@ class BLETriggerWorker(
         }
 
         if (deviceFound) {
-            Log.d(TAG, "✅ Target device found, executing action")
-            return executeAction(workflowId)
+            Log.d(TAG, "✅ Target device found, executing actions")
+            return executeActions(workflowId)
         }
 
         Log.d(TAG, "⚠️ Device not found")
@@ -98,7 +94,6 @@ class BLETriggerWorker(
         bleScanner: android.bluetooth.le.BluetoothLeScanner,
         targetAddress: String
     ): Boolean = suspendCancellableCoroutine { continuation ->
-
         var isResumed = false
 
         val callback = object : ScanCallback() {
@@ -153,7 +148,8 @@ class BLETriggerWorker(
         }
     }
 
-    private suspend fun executeAction(workflowId: Long): Result {
+    // ✅ FIXED: Execute ALL actions from workflow
+    private suspend fun executeActions(workflowId: Long): Result {
         return try {
             val database = AppDatabase.getDatabase(applicationContext)
             val workflow = database.workflowDao().getByIdSync(workflowId)
@@ -168,22 +164,29 @@ class BLETriggerWorker(
                 return Result.success()
             }
 
-            val action = workflow.toAction()
-            if (action == null) {
-                Log.e(TAG, "❌ No valid action")
+            // ✅ FIXED: Get ALL actions as a list
+            val actions = workflow.toActions()
+            if (actions.isEmpty()) {
+                Log.e(TAG, "❌ No valid actions")
                 return Result.failure()
             }
 
-            val success = ActionExecutor.executeAction(applicationContext, action)
-            if (success) {
-                Log.d(TAG, "✅ Action executed")
+            // Execute all actions
+            var allSuccessful = true
+            actions.forEach { action ->
+                val success = ActionExecutor.executeAction(applicationContext, action)
+                if (!success) allSuccessful = false
+            }
+
+            if (allSuccessful) {
+                Log.d(TAG, "✅ All actions executed successfully")
                 Result.success()
             } else {
-                Log.e(TAG, "❌ Action execution failed")
+                Log.e(TAG, "⚠️ Some actions failed")
                 Result.retry()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error executing action", e)
+            Log.e(TAG, "❌ Error executing actions", e)
             Result.retry()
         }
     }

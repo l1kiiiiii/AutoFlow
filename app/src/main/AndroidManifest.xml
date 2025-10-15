@@ -30,6 +30,7 @@
     <!-- = ALARMS & BOOT = -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <!-- = AUDIO CONTROL = -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
@@ -110,6 +111,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".receiver.ModeDeactivateReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".dpc.MyDeviceAdminReceiver"
             android:enabled="true"
             android:exported="true"
@@ -121,6 +126,29 @@
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
             </intent-filter>
         </receiver>
+
+        <!-- WiFi Trigger Receiver -->
+        <receiver
+            android:name=".receiver.WiFiReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.net.wifi.STATE_CHANGE" />
+            </intent-filter>
+        </receiver>
+        <!-- Bluetooth Trigger Receiver -->
+        <receiver
+            android:name=".receiver.BluetoothReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+                <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".receiver.EmergencyUnblockReceiver"
+            android:exported="false" />
+
 
         <!--  SERVICES  -->
         <service

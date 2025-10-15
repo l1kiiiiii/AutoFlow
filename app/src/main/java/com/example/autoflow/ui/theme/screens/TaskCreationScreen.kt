@@ -137,9 +137,25 @@ import com.example.autoflow.data.toTriggers
 import com.example.autoflow.ui.components.AppSelectorComposable
 import android.content.Intent
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Surface
 import com.example.autoflow.ui.components.getAppNameFromPackage
+import com.example.autoflow.viewmodel.LocationViewModel
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import com.example.autoflow.model.SavedBluetoothDevice
+import com.example.autoflow.model.SavedLocation
+import com.example.autoflow.model.SavedWiFiNetwork
+import com.example.autoflow.viewmodel.WiFiViewModel
+import com.example.autoflow.viewmodel.BluetoothViewModel
+import android.widget.Toast
+import android.net.wifi.WifiManager
 
 /**
  * Production-ready Task Creation Screen with comprehensive error handling
@@ -181,14 +197,8 @@ fun TaskCreationScreen(
     var radiusValue: Float by remember { mutableFloatStateOf(100f) }
     var triggerOnOption: String by remember { mutableStateOf("Entry") }
 
-    var wifiTriggerExpanded: Boolean by remember { mutableStateOf(false) }
-    var wifiState: String by remember { mutableStateOf("On") }
-
     var timeTriggerExpanded: Boolean by remember { mutableStateOf(false) }
     var timeValue: String by remember { mutableStateOf("") }
-
-    var bluetoothDeviceTriggerExpanded: Boolean by remember { mutableStateOf(false) }
-    var bluetoothDeviceAddress: String by remember { mutableStateOf("") }
 
     //   Action states with explicit types
     var sendNotificationActionExpanded: Boolean by remember { mutableStateOf(false) }
@@ -218,6 +228,21 @@ fun TaskCreationScreen(
     //  UnBlock Apps Action states with explicit types
     var unblockAppsActionExpanded: Boolean by remember { mutableStateOf(false) }
 
+    var wifiTriggerExpanded by remember { mutableStateOf(false) }
+    var wifiState by remember { mutableStateOf("On") }
+
+    var selectedWifiNetwork by remember { mutableStateOf<SavedWiFiNetwork?>(null) }
+    var wifiSsid by remember { mutableStateOf("") }
+    var wifiTriggerType by remember { mutableStateOf("connect") }
+
+    var bluetoothDeviceTriggerExpanded by remember { mutableStateOf(false) }
+    var bluetoothDeviceAddress by remember { mutableStateOf("") }
+
+
+    var selectedBluetoothDevice by remember { mutableStateOf<SavedBluetoothDevice?>(null) }
+    var bluetoothMacAddress by remember { mutableStateOf("") }
+    var bluetoothDeviceName by remember { mutableStateOf("") }
+    var bluetoothTriggerType by remember { mutableStateOf("connect") }
 
     // Pre-populate fields if editing
     LaunchedEffect(existingWorkflow) {
@@ -328,7 +353,22 @@ fun TaskCreationScreen(
                 bluetoothDeviceTriggerExpanded = bluetoothDeviceTriggerExpanded,
                 onBluetoothExpandedChange = { bluetoothDeviceTriggerExpanded = it },
                 bluetoothDeviceAddress = bluetoothDeviceAddress,
-                onBluetoothAddressChange = { bluetoothDeviceAddress = it }
+                onBluetoothAddressChange = { bluetoothDeviceAddress = it },
+                selectedWifiNetwork = selectedWifiNetwork,
+                wifiSsid = wifiSsid,
+                onWifiSsidChange = { wifiSsid = it },
+                onWifiNetworkSelected = { selectedWifiNetwork = it },
+                wifiTriggerType = wifiTriggerType,
+                onWifiTriggerTypeChange = { wifiTriggerType = it },
+                selectedBluetoothDevice = selectedBluetoothDevice,
+                bluetoothMacAddress = bluetoothMacAddress,
+                bluetoothDeviceName = bluetoothDeviceName,
+                onBluetoothDeviceNameChange = { bluetoothDeviceName = it },
+                onBluetoothMacAddressChange = { bluetoothMacAddress = it },
+                onBluetoothDeviceSelected = { selectedBluetoothDevice = it },
+                bluetoothTriggerType = bluetoothTriggerType,
+                onBluetoothTriggerTypeChange = { bluetoothTriggerType = it },
+                context = context
             )
 
             // Actions Card
@@ -478,8 +518,31 @@ private fun TriggersCard(
     bluetoothDeviceTriggerExpanded: Boolean,
     onBluetoothExpandedChange: (Boolean) -> Unit,
     bluetoothDeviceAddress: String,
-    onBluetoothAddressChange: (String) -> Unit
+    onBluetoothAddressChange: (String) -> Unit,
+    selectedWifiNetwork: SavedWiFiNetwork?,
+    wifiSsid: String,
+    onWifiSsidChange: (String) -> Unit,
+    onWifiNetworkSelected: (SavedWiFiNetwork) -> Unit,
+    wifiTriggerType: String,
+    onWifiTriggerTypeChange: (String) -> Unit,
+    selectedBluetoothDevice: SavedBluetoothDevice?,
+    bluetoothMacAddress: String,
+    bluetoothDeviceName: String,
+    onBluetoothDeviceNameChange: (String) -> Unit,
+    onBluetoothMacAddressChange: (String) -> Unit,
+    onBluetoothDeviceSelected: (SavedBluetoothDevice) -> Unit,
+    bluetoothTriggerType: String,
+    onBluetoothTriggerTypeChange: (String) -> Unit,
+    context: Context
 ) {
+    // Find this section in TaskCreationScreen (around line 500-600)
+    val availableTriggers = listOf(
+        "Time" to Icons.Default.Schedule,
+        "Location" to Icons.Default.LocationOn,
+        "WiFi" to Icons.Default.Wifi,           // ✅ ADD THIS
+        "Bluetooth" to Icons.Default.Bluetooth  // ✅ ADD THIS
+    )
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -530,8 +593,13 @@ private fun TriggersCard(
                 onExpandedChange = onWifiExpandedChange
             ) {
                 WiFiTriggerContent(
-                    wifiState = wifiState,
-                    onWifiStateChange = onWifiStateChange
+                    selectedWifiNetwork = selectedWifiNetwork,
+                    wifiSsid = wifiSsid,
+                    onWifiSsidChange = onWifiSsidChange,
+                    onWifiNetworkSelected = onWifiNetworkSelected,
+                    triggerType = wifiTriggerType,
+                    onTriggerTypeChange = onWifiTriggerTypeChange,
+                    context = context
                 )
             }
 
@@ -543,8 +611,15 @@ private fun TriggersCard(
                 onExpandedChange = onBluetoothExpandedChange
             ) {
                 BluetoothTriggerContent(
-                    bluetoothDeviceAddress = bluetoothDeviceAddress,
-                    onBluetoothAddressChange = onBluetoothAddressChange
+                    selectedDevice = selectedBluetoothDevice,
+                    deviceName = bluetoothDeviceName,
+                    macAddress = bluetoothMacAddress,
+                    onDeviceNameChange = onBluetoothDeviceNameChange,
+                    onMacAddressChange = onBluetoothMacAddressChange,
+                    onDeviceSelected = onBluetoothDeviceSelected,
+                    triggerType = bluetoothTriggerType,
+                    onTriggerTypeChange = onBluetoothTriggerTypeChange,
+                    context = context
                 )
             }
         }
@@ -1338,6 +1413,7 @@ private fun ExpandableActionSection(
 
 // Add to your LocationTriggerContent composable
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LocationTriggerContent(
     locationName: String,
@@ -1866,6 +1942,169 @@ private fun LocationTriggerContent(
                 }
             }
         }
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // SAVE LOCATION SECTION
+        // Add this RIGHT BEFORE the "Get Current Location" button in LocationTriggerContent
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+// ✅ PICK FROM SAVED LOCATIONS BUTTON
+        val locationViewModel: LocationViewModel = viewModel()
+        val savedLocations by locationViewModel.allLocations.observeAsState(emptyList())
+        var showLocationDropdown by remember { mutableStateOf(false) }
+        var selectedSavedLocation by remember { mutableStateOf<SavedLocation?>(null) }
+
+// Location Name with Dropdown
+        ExposedDropdownMenuBox(
+            expanded = showLocationDropdown,
+            onExpandedChange = { showLocationDropdown = it }
+        ) {
+            OutlinedTextField(
+                value = locationName,
+                onValueChange = { newValue ->
+                    onLocationNameChange(newValue)
+                    selectedSavedLocation = null // Clear selection when manually typing
+                },
+                label = { Text("Location Name") },
+                placeholder = { Text("Select saved or enter new") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(),
+                trailingIcon = {
+                    Row {
+                        if (savedLocations.isNotEmpty()) {
+                            IconButton(onClick = { showLocationDropdown = !showLocationDropdown }) {
+                                Icon(
+                                    if (showLocationDropdown) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                    contentDescription = "Select saved location"
+                                )
+                            }
+                        }
+                    }
+                },
+                leadingIcon = {
+                    Icon(
+                        if (selectedSavedLocation != null) Icons.Default.Star else Icons.Default.Place,
+                        contentDescription = null,
+                        tint = if (selectedSavedLocation != null)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = if (selectedSavedLocation != null)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.outline
+                )
+            )
+
+            // Dropdown Menu with Saved Locations
+            ExposedDropdownMenu(
+                expanded = showLocationDropdown,
+                onDismissRequest = { showLocationDropdown = false }
+            ) {
+                if (savedLocations.isEmpty()) {
+                    // No saved locations message
+                    DropdownMenuItem(
+                        text = {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    Icons.Default.LocationOn,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    "No saved locations",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        onClick = { /* Do nothing */ }
+                    )
+                } else {
+                    // List all saved locations
+                    savedLocations.forEach { location ->
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        if (location.isFavorite) Icons.Filled.Star else Icons.Default.LocationOn,
+                                        contentDescription = null,
+                                        tint = if (location.isFavorite)
+                                            MaterialTheme.colorScheme.primary
+                                        else
+                                            MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            location.name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            "${
+                                                String.format(
+                                                    "%.4f",
+                                                    location.latitude
+                                                )
+                                            }, ${String.format("%.4f", location.longitude)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            },
+                            onClick = {
+                                // Auto-fill all fields when location is selected
+                                selectedSavedLocation = location
+                                onLocationNameChange(location.name)
+
+                                // ✅ FIX: Ensure proper coordinate format with consistent decimal places
+                                val formattedCoords = "${location.latitude},${location.longitude}"
+                                onLocationDetailsChange(formattedCoords)
+
+                                // ✅ FIX: Make sure to update radius value from saved location
+                                onRadiusChange(location.radius.toFloat())
+
+                                showLocationDropdown = false
+
+                                // Show success feedback
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "✓ Loaded: ${location.name}",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            },
+                            leadingIcon = {
+                                if (selectedSavedLocation?.id == location.id) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
     }
 }
 
@@ -2035,55 +2274,52 @@ private fun TimeTriggerContent(
 
         // Show scheduled time
         if (selectedDate != null && selectedTime != null) {
-            val dateTime = LocalDateTime.of(selectedDate, selectedTime)
+            // ✅ Create local variable to avoid smart cast issue
+            val timeValue = selectedTime  // This makes a copy
+            val dateValue = selectedDate
 
-            // ADD THESE DEBUG LOGS
-            Log.d("TimeTriggerContent", "========== TIME DEBUG ==========")
-            Log.d("TimeTriggerContent", "Current System Time: ${LocalDateTime.now()}")
-            Log.d("TimeTriggerContent", "Selected Date: $selectedDate")
-            Log.d("TimeTriggerContent", "Selected Time: $selectedTime")
-            Log.d("TimeTriggerContent", "Combined DateTime: $dateTime")
-            Log.d("TimeTriggerContent", "System TimeZone: ${java.time.ZoneId.systemDefault()}")
+            if (timeValue != null && dateValue != null) {
+                val dateTime = LocalDateTime.of(dateValue, timeValue)
 
-            val timestamp = dateTime
-                .atZone(java.time.ZoneId.systemDefault())
-                .toEpochSecond()
+                // DEBUG LOGS
+                Log.d("TimeTriggerContent", "Selected Date: $dateValue")
+                Log.d("TimeTriggerContent", "Selected Time: $timeValue")
+                Log.d("TimeTriggerContent", "Combined DateTime: $dateTime")
 
-            //  ADD THIS TOO
-            Log.d("TimeTriggerContent", "Expected (now): ${LocalDateTime.now().atZone(java.time.ZoneId.systemDefault()).toEpochSecond()}")
-            Log.d("TimeTriggerContent", "Calculated timestamp: $timestamp")
-            Log.d("TimeTriggerContent", "Difference (seconds): ${timestamp - LocalDateTime.now().atZone(java.time.ZoneId.systemDefault()).toEpochSecond()}")
+                // ✅ FIXED: Format as HH:mm (e.g., "22:11")
+                val formattedTime = String.format("%02d:%02d", timeValue.hour, timeValue.minute)
+                onTimeValueChange(formattedTime)
 
-            // Save the timestamp
-            onTimeValueChange(timestamp.toString())
+                Log.d("TimeTriggerContent", "✅ Formatted time: $formattedTime")
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        "Scheduled for:",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
                     )
-                    Text(
-                        // ✅ Display in user's preferred format
-                        if (is24HourFormat) {
-                            dateTime.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
-                        } else {
-                            dateTime.format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, yyyy h:mm a"))
-                        },
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        "Format: ${if (is24HourFormat) "24-hour" else "12-hour"}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "Scheduled for",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            // Display in user's preferred format
+                            if (is24HourFormat) {
+                                dateTime.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+                            } else {
+                                dateTime.format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, yyyy h:mm a"))
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            "Format: ${if (is24HourFormat) "24-hour" else "12-hour"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
@@ -2149,202 +2385,285 @@ private fun TimeTriggerContent(
 
 
 @Composable
-private fun WiFiTriggerContent(
-    wifiState: String,
-    onWifiStateChange: (String) -> Unit
+fun WiFiTriggerContent(
+    selectedWifiNetwork: SavedWiFiNetwork?,
+    wifiSsid: String,
+    onWifiSsidChange: (String) -> Unit,
+    onWifiNetworkSelected: (SavedWiFiNetwork) -> Unit,
+    triggerType: String,
+    onTriggerTypeChange: (String) -> Unit,
+    context: Context
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Target State:", style = MaterialTheme.typography.labelLarge)
-        Row(
-            modifier = Modifier.fillMaxWidth().selectableGroup(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            listOf("On", "Off").forEach { state ->
+    val wifiViewModel: WiFiViewModel = viewModel()
+    val savedNetworks by wifiViewModel.allNetworks.observeAsState(emptyList())
+    var showNetworkPicker by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "📶 WiFi Network Trigger",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // WiFi Network Selection
+            OutlinedTextField(
+                value = wifiSsid,
+                onValueChange = onWifiSsidChange,
+                label = { Text("WiFi Network (SSID)") },
+                placeholder = { Text("Enter WiFi name") },
+                modifier = Modifier.fillMaxWidth(),
+                leadingIcon = {
+                    Icon(Icons.Default.Wifi, contentDescription = null)
+                },
+                trailingIcon = {
+                    IconButton(onClick = { showNetworkPicker = true }) {
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Pick saved")
+                    }
+                }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Trigger Type Selection
+            Text("Trigger When:", style = MaterialTheme.typography.labelMedium)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 FilterChip(
-                    selected = wifiState == state,
-                    onClick = { onWifiStateChange(state) },
-                    label = { Text(state) }
+                    selected = triggerType == "connect",
+                    onClick = { onTriggerTypeChange("connect") },
+                    label = { Text("Connected") },
+                    leadingIcon = if (triggerType == "connect") {
+                        { Icon(Icons.Default.Check, null, modifier = Modifier.size(18.dp)) }
+                    } else null,
+                    modifier = Modifier.weight(1f)
+                )
+
+                FilterChip(
+                    selected = triggerType == "disconnect",
+                    onClick = { onTriggerTypeChange("disconnect") },
+                    label = { Text("Disconnected") },
+                    leadingIcon = if (triggerType == "disconnect") {
+                        { Icon(Icons.Default.Check, null, modifier = Modifier.size(18.dp)) }
+                    } else null,
+                    modifier = Modifier.weight(1f)
                 )
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Get Current WiFi Button
+            Button(
+                onClick = {
+                    val wifiManager = context.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+                    val wifiInfo = wifiManager?.connectionInfo
+                    if (wifiInfo != null) {
+                        onWifiSsidChange(wifiInfo.ssid.removeSurrounding("\""))
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.MyLocation, null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Use Current WiFi")
+            }
         }
+    }
+
+    // WiFi Network Picker Dialog
+    if (showNetworkPicker) {
+        AlertDialog(
+            onDismissRequest = { showNetworkPicker = false },
+            title = { Text("Select WiFi Network") },
+            text = {
+                LazyColumn {
+                    items(savedNetworks.size) { index ->
+                        val network = savedNetworks[index]
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clickable {
+                                    onWifiNetworkSelected(network)
+                                    onWifiSsidChange(network.ssid)
+                                    showNetworkPicker = false
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Wifi, null)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(network.displayName)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showNetworkPicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
+// ✅ BLUETOOTH TRIGGER CONTENT
 @Composable
-private fun BluetoothTriggerContent(
-    bluetoothDeviceAddress: String,
-    onBluetoothAddressChange: (String) -> Unit
+fun BluetoothTriggerContent(
+    selectedDevice: SavedBluetoothDevice?,
+    deviceName: String,
+    macAddress: String,
+    onDeviceNameChange: (String) -> Unit,
+    onMacAddressChange: (String) -> Unit,
+    onDeviceSelected: (SavedBluetoothDevice) -> Unit,
+    triggerType: String,
+    onTriggerTypeChange: (String) -> Unit,
+    context: Context
 ) {
-    val context = LocalContext.current
+    val bluetoothViewModel: BluetoothViewModel = viewModel()
+    val savedDevices by bluetoothViewModel.allDevices.observeAsState(emptyList())
     var showDevicePicker by remember { mutableStateOf(false) }
-    var pairedDevices by remember { mutableStateOf<List<BluetoothDeviceInfo>>(emptyList()) }
-    var showPermissionRationale by remember { mutableStateOf(false) }
 
-    // ✅ Permission launcher for Bluetooth Connect (Android 12+)
-    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            try {
-                pairedDevices = getPairedBluetoothDevices(context)
-                showDevicePicker = true
-            } catch (e: Exception) {
-                Log.e("Bluetooth", "Error fetching devices", e)
-            }
-        } else {
-            showPermissionRationale = true
-        }
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Select device button
-        OutlinedButton(
-            onClick = {
-                // Check if permission is needed (Android 12+)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val hasPermission = ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.BLUETOOTH_CONNECT
-                    ) == PackageManager.PERMISSION_GRANTED
-
-                    if (hasPermission) {
-                        try {
-                            pairedDevices = getPairedBluetoothDevices(context)
-                            showDevicePicker = true
-                        } catch (e: Exception) {
-                            Log.e("Bluetooth", "Error fetching devices", e)
-                        }
-                    } else {
-                        // Request permission
-                        bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
-                    }
-                } else {
-                    // Android 11 and below - no BLUETOOTH_CONNECT needed
-                    try {
-                        pairedDevices = getPairedBluetoothDevices(context)
-                        showDevicePicker = true
-                    } catch (e: Exception) {
-                        Log.e("Bluetooth", "Error fetching devices", e)
-                    }
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Default.Bluetooth, null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Select Paired Device")
-        }
-
-        // Manual address input
-        OutlinedTextField(
-            value = bluetoothDeviceAddress,
-            onValueChange = onBluetoothAddressChange,
-            label = { Text("Device MAC Address") },
-            placeholder = { Text("XX:XX:XX:XX:XX:XX") },
-            modifier = Modifier.fillMaxWidth()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
         )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "📲 Bluetooth Device Trigger",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
 
-        // Show selected device
-        if (bluetoothDeviceAddress.isNotBlank()) {
-            Card(
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Device Name
+            OutlinedTextField(
+                value = deviceName,
+                onValueChange = onDeviceNameChange,
+                label = { Text("Device Name") },
+                placeholder = { Text("e.g., Car Bluetooth") },
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Column {
-                        Text(
-                            "Device Selected",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            bluetoothDeviceAddress,
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                leadingIcon = {
+                    Icon(Icons.Default.Bluetooth, contentDescription = null)
+                }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // MAC Address
+            OutlinedTextField(
+                value = macAddress,
+                onValueChange = onMacAddressChange,
+                label = { Text("MAC Address") },
+                placeholder = { Text("AA:BB:CC:DD:EE:FF") },
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    IconButton(onClick = { showDevicePicker = true }) {
+                        Icon(Icons.Default.ArrowDropDown, "Pick saved device")
                     }
                 }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Trigger Type
+            Text("Trigger When:", style = MaterialTheme.typography.labelMedium)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = triggerType == "connect",
+                    onClick = { onTriggerTypeChange("connect") },
+                    label = { Text("Connected") },
+                    modifier = Modifier.weight(1f)
+                )
+
+                FilterChip(
+                    selected = triggerType == "disconnect",
+                    onClick = { onTriggerTypeChange("disconnect") },
+                    label = { Text("Disconnected") },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Scan for Devices Button
+            Button(
+                onClick = {
+                    // Scan for Bluetooth devices
+                    Toast.makeText(context, "Scanning for Bluetooth devices...", Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Search, null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Scan Nearby Devices")
             }
         }
     }
 
-    // Device picker dialog
+    // Device Picker Dialog
     if (showDevicePicker) {
         AlertDialog(
             onDismissRequest = { showDevicePicker = false },
-            confirmButton = {
-                TextButton(onClick = { showDevicePicker = false }) {
-                    Text("Cancel")
-                }
-            },
-            title = { Text("Paired Bluetooth Devices") },
+            title = { Text("Select Bluetooth Device") },
             text = {
-                if (pairedDevices.isEmpty()) {
-                    Text("No paired devices found")
-                } else {
-                    LazyColumn {
-                        items(pairedDevices) { device ->
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                                    .clickable {
-                                        onBluetoothAddressChange(device.address)
-                                        showDevicePicker = false
-                                    }
+                LazyColumn {
+                    items(savedDevices.size) { index ->
+                        val device = savedDevices[index]
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clickable {
+                                    onDeviceSelected(device)
+                                    onDeviceNameChange(device.deviceName)
+                                    onMacAddressChange(device.macAddress)
+                                    showDevicePicker = false
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Text(device.name, fontWeight = FontWeight.Bold)
-                                    Text(
-                                        device.address,
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
+                                Icon(Icons.Default.Bluetooth, null)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(device.displayName, fontWeight = FontWeight.Bold)
+                                    Text(device.macAddress, style = MaterialTheme.typography.bodySmall)
                                 }
                             }
                         }
                     }
                 }
-            }
-        )
-    }
-
-    // Permission rationale dialog
-    if (showPermissionRationale) {
-        AlertDialog(
-            onDismissRequest = { showPermissionRationale = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showPermissionRationale = false
-                        bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
-                    }
-                ) {
-                    Text("Grant Permission")
-                }
             },
-            dismissButton = {
-                TextButton(onClick = { showPermissionRationale = false }) {
+            confirmButton = {
+                TextButton(onClick = { showDevicePicker = false }) {
                     Text("Cancel")
                 }
-            },
-            title = { Text("Bluetooth Permission Required") },
-            text = {
-                Text("AutoFlow needs Bluetooth permission to scan for paired devices. This allows you to select a device as a trigger.")
             }
         )
     }
 }
-
 
 //  ACTION CONTENT COMPONENTS 
 
@@ -2539,7 +2858,8 @@ private suspend fun handleSaveTask(
         val hasLocationTrigger = locationTriggerExpanded && locationDetailsInput.isNotBlank()
         val hasWifiTrigger = wifiTriggerExpanded
         val hasTimeTrigger = timeTriggerExpanded && timeValue.isNotBlank()
-        val hasBluetoothTrigger = bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank()
+        val hasBluetoothTrigger =
+            bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank()
         Log.d("TaskCreation", "=== TRIGGER CHECK ===")
         Log.d("TaskCreation", "Location: $hasLocationTrigger")
         Log.d("TaskCreation", "WiFi: $hasWifiTrigger")
@@ -2566,7 +2886,12 @@ private suspend fun handleSaveTask(
         }
         if (hasBluetoothTrigger) {
             Log.d("TaskCreation", "→ Adding BLUETOOTH trigger: $bluetoothDeviceAddress")
-            triggers.add(Trigger.BluetoothTrigger(deviceAddress = bluetoothDeviceAddress, deviceName = null))
+            triggers.add(
+                Trigger.BluetoothTrigger(
+                    deviceAddress = bluetoothDeviceAddress,
+                    deviceName = null
+                )
+            )
         }
         if (hasLocationTrigger) {
             Log.d("TaskCreation", "→ Adding LOCATION trigger")
@@ -2626,7 +2951,14 @@ private suspend fun handleSaveTask(
 
         if (hasNotificationAction) {
             Log.d("TaskCreation", "→ Adding NOTIFICATION action")
-            actions.add(Action(Constants.ACTION_SEND_NOTIFICATION, notificationTitle, notificationMessage, notificationPriority))
+            actions.add(
+                Action(
+                    Constants.ACTION_SEND_NOTIFICATION,
+                    notificationTitle,
+                    notificationMessage,
+                    notificationPriority
+                )
+            )
         }
         if (hasToggleAction) {
             Log.d("TaskCreation", "→ Adding TOGGLE action: $toggleSetting")
@@ -2639,7 +2971,9 @@ private suspend fun handleSaveTask(
         }
         if (hasSoundModeAction) {
             Log.d("TaskCreation", "→ Adding SOUND MODE action: $soundMode")
-            actions.add(Action(Constants.ACTION_SET_SOUND_MODE, null, null, null).apply { value = soundMode })
+            actions.add(Action(Constants.ACTION_SET_SOUND_MODE, null, null, null).apply {
+                value = soundMode
+            })
         }
         //  Block Apps Action
         if (blockAppsActionExpanded && selectedAppsToBlock.isNotEmpty()) {
@@ -2658,7 +2992,9 @@ private suspend fun handleSaveTask(
         }
         if (hasScriptAction) {
             Log.d("TaskCreation", "→ Adding SCRIPT action")
-            actions.add(Action(Constants.ACTION_RUN_SCRIPT, null, null, null).apply { value = scriptText })
+            actions.add(Action(Constants.ACTION_RUN_SCRIPT, null, null, null).apply {
+                value = scriptText
+            })
         }
         Log.d("TaskCreation", "✅ Total actions created: ${actions.size}")
 
@@ -2681,45 +3017,27 @@ private suspend fun handleSaveTask(
         }
 
         // 9. SCHEDULE ALARMS FOR TIME TRIGGERS
-        triggers.filterIsInstance<Trigger.TimeTrigger>().forEach { timeTrigger ->
-            try {
-                val triggerMillis = (timeTrigger.time.toLongOrNull() ?: 0L) * 1000L
-                if (triggerMillis > System.currentTimeMillis()) {
-                    actions.forEach { action ->
-                        when (action.type) {
-                            Constants.ACTION_SEND_NOTIFICATION -> AlarmScheduler.scheduleNotification(
-                                context, workflowId ?: 0L, triggerMillis,
-                                action.title ?: "AutoFlow", action.message ?: "Triggered"
-                            )
-                            Constants.ACTION_SET_SOUND_MODE ->
-                                AlarmScheduler.scheduleSoundMode(context, workflowId ?: 0L, triggerMillis, action.value ?: "Silent")
-                            Constants.ACTION_TOGGLE_WIFI -> AlarmScheduler.scheduleWiFiToggle(context, workflowId ?: 0L, triggerMillis, action.value == "WIFI_ON")
-                            Constants.ACTION_TOGGLE_BLUETOOTH -> AlarmScheduler.scheduleBluetoothToggle(context, workflowId ?: 0L, triggerMillis, action.value == "BLUETOOTH_ON")
-                            Constants.ACTION_RUN_SCRIPT -> AlarmScheduler.scheduleScript(context, workflowId ?: 0L, triggerMillis, action.value ?: "")
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e("TaskCreation", "❌ Alarm scheduling failed", e)
-            }
-        }
-
+        Log.d("TaskCreation", "✅ Workflow saved. Triggers will be automatically registered.")
         // 10. ADD GEOFENCES FOR LOCATION TRIGGERS
-        triggers.filterIsInstance<Trigger.LocationTrigger>().forEach { locationTrigger ->
-            try {
-                GeofenceManager.addGeofence(
-                    context,
-                    workflowId ?: 0L,
-                    locationTrigger.latitude,
-                    locationTrigger.longitude,
-                    locationTrigger.radius.toFloat(),
-                    locationTrigger.triggerOnEntry,
-                    locationTrigger.triggerOnExit
-                )
-            } catch (e: Exception) {
-                Log.e("TaskCreation", "❌ Geofence setup failed", e)
+        if (workflowId == null || workflowId <= 0L) {
+            Log.w("TaskCreation", "Skipping geofence registration: invalid workflowId=$workflowId")
+        } else{
+            triggers.filterIsInstance<Trigger.LocationTrigger>().forEach { locationTrigger ->
+                try {
+                    GeofenceManager.addGeofence(
+                        context,
+                        workflowId,
+                        locationTrigger.latitude,
+                        locationTrigger.longitude,
+                        locationTrigger.radius.toFloat(),
+                        locationTrigger.triggerOnEntry,
+                        locationTrigger.triggerOnExit
+                    )
+                } catch (e: Exception) {
+                    Log.e("TaskCreation", "❌ Geofence setup failed", e)
+                }
             }
-        }
+    }
         onSuccess()
     } catch (e: NumberFormatException) {
         Log.e("TaskCreation", "❌ Number format error", e)

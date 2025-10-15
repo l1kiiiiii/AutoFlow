@@ -22,6 +22,7 @@ data class LocationState(
     val hasPermission: Boolean = false
 )
 
+
 @Composable
 fun rememberLocationState(): LocationState {
     var locationState by remember { mutableStateOf(LocationState()) }

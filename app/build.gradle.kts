@@ -64,7 +64,12 @@
         implementation(libs.androidx.room.common.jvm)
         implementation(libs.androidx.room.runtime)
         implementation(libs.androidx.compose.ui.text)
-        annotationProcessor(libs.androidx.room.compiler) // Using libs.androidx.room.compiler
+        implementation(libs.androidx.compose.ui.test)
+
+        // Room - Fixed annotation processor
+        implementation(libs.androidx.room.runtime)
+        implementation(libs.androidx.room.ktx)
+        kapt(libs.androidx.room.compiler)  // ✅ Using kapt correctly
 
         implementation(libs.androidx.work.runtime)
         implementation(libs.androidx.lifecycle.viewmodel)
@@ -72,10 +77,12 @@
 
         implementation(libs.google.play.services.location)
 
+
         testImplementation(libs.junit)
         testImplementation(libs.mockito.core)
 
-        androidTestImplementation(libs.androidx.test.runner)
+
+        androidTestImplementation(libs.androidx.junit)
         androidTestImplementation(libs.androidx.test.espresso.core)
         androidTestImplementation(platform(libs.androidx.compose.bom))
         androidTestImplementation(libs.androidx.compose.ui.test.junit4)
@@ -107,8 +114,5 @@
         implementation(libs.maps.compose.utils)
         implementation(libs.maps.compose.widgets)
 
-        implementation(libs.androidx.room.runtime)
-        implementation(libs.androidx.room.ktx)
-        kapt(libs.androidx.room.compiler)
-
+        implementation(libs.androidx.work.runtime.ktx)
     }

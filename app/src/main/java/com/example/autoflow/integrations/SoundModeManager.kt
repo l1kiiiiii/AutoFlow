@@ -18,8 +18,69 @@ class SoundModeManager(context: Context) {
     companion object {
         private const val TAG = "SoundModeManager"
     }
+    /**
+     * ✅ Check if app has DND permission
+     */
+    fun hasDndPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            notificationManager?.isNotificationPolicyAccessGranted ?: false // Safe call
+        } else {
+            true // Pre-Marshmallow doesn't need permission
+        }
+    }
 
-    //  PUBLIC METHODS 
+    /**
+     * ✅ Request DND permission
+     */
+    fun requestDndPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to open DND settings", e)
+            }
+        }
+    }
+
+    /**
+     * ✅ Set ringer mode with permission check
+     */
+    fun setRingerMode(mode: String): Boolean {
+        // Check if audioManager is available
+        if (audioManager == null) {
+            Log.e(TAG, "❌ AudioManager is null")
+            return false
+        }
+
+        // Check permission first
+        if (!hasDndPermission()) {
+            Log.w(TAG, "⚠️ Do Not Disturb permission not granted")
+            return false
+        }
+
+        return try {
+            val ringerMode = when (mode.uppercase()) {
+                "SILENT" -> AudioManager.RINGER_MODE_SILENT
+                "VIBRATE" -> AudioManager.RINGER_MODE_VIBRATE
+                "NORMAL" -> AudioManager.RINGER_MODE_NORMAL
+                "DND" -> AudioManager.RINGER_MODE_SILENT
+                else -> AudioManager.RINGER_MODE_NORMAL
+            }
+
+            audioManager.ringerMode = ringerMode
+            Log.d(TAG, "✅ Set ringer mode to: $mode")
+            true
+        } catch (e: SecurityException) {
+            Log.e(TAG, "❌ SecurityException: Missing DND permission", e)
+            false
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to set ringer mode", e)
+            false
+        }
+    }
+    //  PUBLIC METHODS
 
     fun setSoundMode(mode: String): Boolean {
         Log.d(TAG, "Setting sound mode to: $mode")
@@ -50,12 +111,10 @@ class SoundModeManager(context: Context) {
     }
 
     fun getCurrentMode(): String {
-        if (audioManager == null) return "Unknown"
-
-        return when (audioManager.ringerMode) {
-            AudioManager.RINGER_MODE_NORMAL -> "Normal"
+        return when (audioManager?.ringerMode) { //  Safe call
             AudioManager.RINGER_MODE_SILENT -> "Silent"
             AudioManager.RINGER_MODE_VIBRATE -> "Vibrate"
+            AudioManager.RINGER_MODE_NORMAL -> "Normal"
             else -> "Unknown"
         }
     }
@@ -89,7 +148,7 @@ class SoundModeManager(context: Context) {
         Log.d(TAG, "Cleanup called")
     }
 
-    //  PRIVATE HELPER METHODS 
+    //  PRIVATE HELPER METHODS
 
     private fun setNormalMode(): Boolean {
         audioManager!!.ringerMode = AudioManager.RINGER_MODE_NORMAL

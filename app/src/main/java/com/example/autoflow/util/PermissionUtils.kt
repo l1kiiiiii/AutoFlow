@@ -15,10 +15,7 @@ import androidx.core.content.ContextCompat
 object PermissionUtils {
 
     private const val TAG = "PermissionUtils"
-
-
-    //  PERMISSION REQUEST CODES 
-
+    //  PERMISSION REQUEST CODES
     const val REQUEST_LOCATION_PERMISSION = 1001
     const val REQUEST_BLUETOOTH_PERMISSION = 1002
     const val REQUEST_NOTIFICATION_PERMISSION = 1003
@@ -56,7 +53,22 @@ object PermissionUtils {
                 Manifest.permission.ACCESS_BACKGROUND_LOCATION
             ) == PackageManager.PERMISSION_GRANTED
         } else {
-            true // Not needed on older versions
+            true // Not required below Android 10
+        }
+    }
+
+    fun getLocationPermissionsForGeofencing(): Array<String> {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            )
+        } else {
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
         }
     }
 
