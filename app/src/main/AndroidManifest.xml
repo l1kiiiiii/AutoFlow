@@ -3,6 +3,11 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.autoflow">
 
+    <!-- = APP USAGE & MONITORING = -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+
+
     <!-- = LOCATION = -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -93,6 +98,8 @@
             android:exported="false"
             android:launchMode="singleTop"
             android:theme="@style/Theme.AutoFlow" />
+
+
 
         <!--  RECEIVERS  -->
         <receiver

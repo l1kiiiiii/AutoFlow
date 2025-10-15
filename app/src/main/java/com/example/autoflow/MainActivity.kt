@@ -23,6 +23,7 @@ import com.example.autoflow.ui.theme.screens.Dashboard
 import com.example.autoflow.util.NotificationHelper
 import com.example.autoflow.util.AlarmScheduler
 import com.example.autoflow.viewmodel.WorkflowViewModel
+import android.app.AppOpsManager
 
 class MainActivity : ComponentActivity() {
 
@@ -98,5 +99,21 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+    }
+    // Add this function to check if permission is granted
+    fun hasUsageStatsPermission(context: Context): Boolean {
+        val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+        val mode = appOps.checkOpNoThrow(
+            AppOpsManager.OPSTR_GET_USAGE_STATS,
+            android.os.Process.myUid(),
+            context.packageName
+        )
+        return mode == AppOpsManager.MODE_ALLOWED
+    }
+
+    // Request permission
+    fun requestUsageStatsPermission(context: Context) {
+        val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+        context.startActivity(intent)
     }
 }
