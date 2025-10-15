@@ -465,26 +465,20 @@ object ActionExecutor {
     private fun executeAutoReplySms(context: Context, action: Action): Boolean {
         Log.d(TAG, "📱 Executing AUTO_REPLY_SMS action")
 
-        val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
-        val enabled = prefs.getBoolean(Constants.PREF_AUTO_REPLY_ENABLED, false)
-        val message = action.message ?: action.value ?: Constants.DEFAULT_AUTO_REPLY_MESSAGE
+        val enabled = action.value?.toBoolean() ?: true
+        val message = action.message ?: Constants.DEFAULT_AUTO_REPLY_MESSAGE
 
-        // Update settings
+        // Save auto-reply settings to SharedPreferences
+        val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
         prefs.edit()
             .putBoolean(Constants.PREF_AUTO_REPLY_ENABLED, enabled)
             .putString(Constants.PREF_AUTO_REPLY_MESSAGE, message)
+            .putBoolean(Constants.PREF_AUTO_REPLY_ONLY_IN_DND, true)
             .apply()
 
-        // Start phone state monitoring if enabled
-        if (enabled) {
-            val phoneStateManager = PhoneStateManager.getInstance(context)
-            phoneStateManager.startListening()
-            Log.i(TAG, "✅ Auto-reply SMS monitoring started")
-        } else {
-            val phoneStateManager = PhoneStateManager.getInstance(context)
-            phoneStateManager.stopListening()
-            Log.i(TAG, "⏹️ Auto-reply SMS monitoring stopped")
-        }
+        Log.i(TAG, "✅ Auto-reply SMS ${if (enabled) "enabled" else "disabled"}")
+        Log.i(TAG, "   Message: \"$message\"")
+        Log.i(TAG, "   Only in DND: true")
 
         return true
     }
