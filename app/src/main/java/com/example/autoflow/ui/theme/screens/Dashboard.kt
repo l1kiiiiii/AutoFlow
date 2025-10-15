@@ -42,7 +42,10 @@ import com.example.autoflow.util.PredefinedModes
 import com.example.autoflow.viewmodel.WorkflowViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import android.R as AndroidR
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.autoflow.util.InAppNotificationManager
+import com.example.autoflow.ui.theme.components.NotificationPanel
+
 
 /**
  * Enhanced Dashboard with smooth navigation and success feedback
@@ -107,23 +110,94 @@ fun Dashboard(modifier: Modifier = Modifier) {
                     titleContentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 actions = {
+                    // ✅ Meeting Mode Control
+                    val context = LocalContext.current
+                    val notificationManager = remember { InAppNotificationManager.getInstance(context) }
+                    val meetingModeActive by notificationManager.meetingModeActive.collectAsStateWithLifecycle()
+                    val unreadCount by notificationManager.unreadCount.collectAsStateWithLifecycle()
+
+                    // ✅ MEETING MODE TOGGLE BUTTON
                     IconButton(
                         onClick = {
                             scope.launch {
-                                snackbarHostState.showSnackbar(
-                                    message = "No new notifications",
-                                    duration = SnackbarDuration.Short
-                                )
+                                if (meetingModeActive) {
+                                    // Deactivate meeting mode
+                                    val success = notificationManager.deactivateMeetingMode()
+                                    if (success) {
+                                        snackbarHostState.showSnackbar(
+                                            message = "🔔 Meeting Mode Deactivated",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    } else {
+                                        snackbarHostState.showSnackbar(
+                                            message = "Failed to deactivate meeting mode",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    }
+                                } else {
+                                    // Activate meeting mode manually
+                                    val soundModeManager = SoundModeManager(context)
+                                    val success = soundModeManager.setSoundMode("DND")
+
+                                    if (success) {
+                                        notificationManager.setMeetingMode(true, "Manual Meeting Mode")
+                                        snackbarHostState.showSnackbar(
+                                            message = "🔇 Meeting Mode Activated",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    } else {
+                                        snackbarHostState.showSnackbar(
+                                            message = "Failed to activate meeting mode",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    ) {
+                        // ✅ Dynamic icon based on meeting mode status
+                        Icon(
+                            imageVector = if (meetingModeActive) {
+                                Icons.Default.DoNotDisturbOn  // Active meeting mode
+                            } else {
+                                Icons.Default.DoNotDisturb    // Inactive meeting mode
+                            },
+                            contentDescription = if (meetingModeActive) {
+                                "Deactivate Meeting Mode"
+                            } else {
+                                "Activate Meeting Mode"
+                            },
+                            tint = if (meetingModeActive) {
+                                MaterialTheme.colorScheme.error  // Red when active
+                            } else {
+                                MaterialTheme.colorScheme.onSurface  // Normal when inactive
+                            }
+                        )
+                    }
+
+                    // ✅ NOTIFICATION BELL (existing functionality)
+                    IconButton(
+                        onClick = {
+                            if (unreadCount > 0) {
+                                // Navigate to full notification screen when notifications exist
+                                navController.navigate("notifications")
+                            } else {
+                                // Show snackbar when no notifications
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        message = "No new notifications",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                }
                             }
                         }
                     ) {
                         BadgedBox(
                             badge = {
-                                val notificationCount = 0
-                                if (notificationCount > 0) {
+                                if (unreadCount > 0) {
                                     Badge {
                                         Text(
-                                            text = if (notificationCount > 9) "9+" else notificationCount.toString()
+                                            text = if (unreadCount > 9) "9+" else unreadCount.toString()
                                         )
                                     }
                                 }
@@ -439,6 +513,10 @@ fun Dashboard(modifier: Modifier = Modifier) {
                     }
                 )
             }
+            composable("notifications") {
+                NotificationScreen(navController = navController)
+            }
+
 
             // Settings screen
             composable("settings") {

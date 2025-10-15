@@ -93,6 +93,9 @@ class AutoReplyManager private constructor(private val context: Context) {
             return
         }
 
+        // Get notification manager for tracking
+        val notificationManager = InAppNotificationManager.getInstance(context)
+
         try {
             val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
             val message = prefs.getString(
@@ -108,16 +111,22 @@ class AutoReplyManager private constructor(private val context: Context) {
 
             Log.i(TAG, "✅ Auto-reply SMS sent to: $phoneNumber")
 
-            // Show notification that auto-reply was sent
+            // ✅ ADD: Track SMS success in bell notifications
+            notificationManager.addSmsReply(phoneNumber, message, true)
+
+            // Show standard notification that auto-reply was sent
             showAutoReplySentNotification(phoneNumber, message)
 
         } catch (e: SecurityException) {
             Log.e(TAG, "❌ SMS permission denied", e)
+            // ✅ ADD: Track SMS failure in bell notifications
+            notificationManager.addSmsReply(phoneNumber, "Permission denied", false)
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to send auto-reply SMS", e)
+            // ✅ ADD: Track SMS failure in bell notifications
+            notificationManager.addSmsReply(phoneNumber, "Send failed", false)
         }
     }
-
     // Replace the existing isMeetingModeActive() method in AutoReplyManager.kt
     private suspend fun isMeetingModeActive(): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -281,6 +290,8 @@ class AutoReplyManager private constructor(private val context: Context) {
     }
 
     private suspend fun sendUniversalAutoReply() {
+        val notificationManager = InAppNotificationManager.getInstance(context)
+
         try {
             val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
             val message = prefs.getString(
@@ -291,7 +302,7 @@ class AutoReplyManager private constructor(private val context: Context) {
             Log.i(TAG, "📱 Attempting to send auto-reply SMS...")
             Log.i(TAG, "   💬 Message: \"$message\"")
 
-            // ✅ NEW: Try to get the caller's number from recent call logs
+            // ✅ Try to get the caller's number from recent call logs
             val callerNumber = getLastIncomingCallNumber()
 
             if (!callerNumber.isNullOrBlank()) {
@@ -305,6 +316,9 @@ class AutoReplyManager private constructor(private val context: Context) {
 
                         Log.i(TAG, "✅ SMS AUTO-REPLY SENT to: $callerNumber")
 
+                        // ✅ ADD: Track SMS success in bell notifications
+                        notificationManager.addSmsReply(callerNumber, message, true)
+
                         // Show notification to YOU that SMS was sent
                         showSmsSuccessNotification(callerNumber, message)
 
@@ -313,14 +327,20 @@ class AutoReplyManager private constructor(private val context: Context) {
 
                     } catch (e: Exception) {
                         Log.e(TAG, "❌ Failed to send SMS", e)
+                        // ✅ ADD: Track SMS failure in bell notifications
+                        notificationManager.addSmsReply(callerNumber, "Send failed", false)
                         showSmsFailureNotification(message)
                     }
                 } else {
                     Log.e(TAG, "❌ SMS permission not granted")
+                    // ✅ ADD: Track SMS failure in bell notifications
+                    notificationManager.addSmsReply(callerNumber, "Permission denied", false)
                     showSmsPermissionNotification()
                 }
             } else {
                 Log.w(TAG, "⚠️ Could not determine caller number - showing notification only")
+                // ✅ ADD: Track that call was received but no SMS possible
+                notificationManager.addSmsReply("Unknown caller", "No number available", false)
                 showUniversalCallNotification(message)
             }
 

@@ -96,20 +96,47 @@ object ActionExecutor {
     fun executeWorkflow(context: Context, workflow: WorkflowEntity): Boolean {
         Log.d(TAG, "Executing workflow: ${workflow.workflowName}")
 
+        // Get notification manager for tracking
+        val notificationManager = InAppNotificationManager.getInstance(context)
+
         val actions = workflow.toActions()
         if (actions.isEmpty()) {
             Log.w(TAG, "No actions to execute")
+            notificationManager.addTaskExecution(workflow.workflowName, 0, false)
             return false
         }
 
         var successCount = 0
+        var totalActions = actions.size
+
+        // Execute each action
         actions.forEach { action ->
             if (executeAction(context, action)) {
                 successCount++
             }
         }
 
-        Log.d(TAG, "Executed $successCount/${actions.size} actions successfully")
+        Log.d(TAG, "Executed $successCount/$totalActions actions successfully")
+
+        // Add task execution notification to bell icon
+        notificationManager.addTaskExecution(
+            workflowName = workflow.workflowName,
+            actionsCount = successCount,
+            success = successCount == totalActions
+        )
+
+        // Check if this is a meeting mode workflow and activate meeting mode in notifications
+        val isMeetingModeWorkflow = workflow.actionDetails.contains("DND") ||
+                workflow.actionDetails.contains("SET_SOUND_MODE") ||
+                workflow.actionDetails.contains("Silent") ||
+                workflow.workflowName.contains("meeting", ignoreCase = true) ||
+                workflow.workflowName.contains("mode", ignoreCase = true)
+
+        if (isMeetingModeWorkflow && successCount > 0) {
+            notificationManager.setMeetingMode(true, workflow.workflowName)
+            Log.d(TAG, "🔇 Meeting mode activated in notifications")
+        }
+
         return successCount > 0
     }
 
