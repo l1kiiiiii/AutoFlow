@@ -157,6 +157,13 @@ import com.example.autoflow.viewmodel.BluetoothViewModel
 import android.widget.Toast
 import android.net.wifi.WifiManager
 import androidx.compose.material3.Switch
+import androidx.compose.material.icons.filled.*
+import androidx.compose.foundation.background
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.foundation.layout.PaddingValues
+
+
+
 
 /**
  * Production-ready Task Creation Screen with comprehensive error handling
@@ -3375,6 +3382,201 @@ fun AutoReplySettingsCard(
                                 .putBoolean(Constants.PREF_AUTO_REPLY_ONLY_IN_DND, enabled)
                                 .apply()
                         }
+                    )
+                }
+            }
+        }
+    }
+}
+@Composable
+fun LocationTriggerSection(
+    isLocationEnabled: Boolean,
+    selectedLocation: String,
+    onLocationToggle: (Boolean) -> Unit,
+    onLocationSelected: (String) -> Unit
+) {
+    // Simple hardcoded locations (no database, no ViewModels)
+    val commonLocations = listOf("Home", "Office", "School", "Gym", "Mall", "Hospital")
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isLocationEnabled)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            else
+                MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            // Header with toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = null,
+                        tint = if (isLocationEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Location Trigger",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                Switch(
+                    checked = isLocationEnabled,
+                    onCheckedChange = onLocationToggle
+                )
+            }
+
+            if (isLocationEnabled) {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Simple text input
+                OutlinedTextField(
+                    value = selectedLocation,
+                    onValueChange = onLocationSelected,
+                    label = { Text("Location Name") },
+                    placeholder = { Text("Enter location (e.g., Home, Office)") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = null
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Common locations section
+                Text(
+                    text = "📍 Quick Select",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Quick select chips
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
+                ) {
+                    items(commonLocations.size) { index ->
+                        val location = commonLocations[index]
+                        FilterChip(
+                            onClick = { onLocationSelected(location) },
+                            label = { Text(location) },
+                            selected = selectedLocation == location,
+                            leadingIcon = if (selectedLocation == location) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            } else null
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Help text
+                Text(
+                    text = "💡 Enter any location name. Your workflow will activate when you arrive at this location.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            RoundedCornerShape(8.dp)
+                        )
+                        .padding(12.dp)
+                )
+            }
+        }
+    }
+}
+
+
+
+/**
+ * ✅ Individual saved location item
+ */
+@Composable
+private fun LocationItem(
+    location: SavedLocation,
+    isSelected: Boolean,
+    onSelected: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSelected() },
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected)
+                MaterialTheme.colorScheme.primaryContainer
+            else
+                MaterialTheme.colorScheme.surface
+        ),
+        border = if (isSelected)
+            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        else null
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = location.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                )
+                Text(
+                    text = "${String.format("%.4f", location.latitude)}, ${String.format("%.4f", location.longitude)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+
+            Row {
+                if (isSelected) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Selected",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.error
                     )
                 }
             }

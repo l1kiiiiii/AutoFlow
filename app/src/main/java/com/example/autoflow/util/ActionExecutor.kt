@@ -140,6 +140,59 @@ object ActionExecutor {
 
         return successCount > 0
     }
+    /**
+     * ✅ SMART: Determine if this is an ACTUAL meeting workflow
+     */
+    private fun isActualMeetingWorkflow(workflow: WorkflowEntity): Boolean {
+        val workflowName = workflow.workflowName.lowercase()
+
+        // ✅ ONLY activate meeting mode for workflows with these keywords
+        val meetingKeywords = listOf(
+            "meeting",
+            "conference",
+            "call",
+            "presentation",
+            "interview",
+            "work meeting",
+            "business"
+        )
+
+        // ✅ EXCLUDE common non-meeting workflows
+        val excludeKeywords = listOf(
+            "sleep",
+            "class",
+            "home",
+            "study",
+            "night",
+            "bedtime",
+            "morning",
+            "work mode",  // General work, not meeting
+            "focus"       // Focus time, not meeting
+        )
+
+        // Check if workflow should be excluded
+        val shouldExclude = excludeKeywords.any { keyword ->
+            workflowName.contains(keyword)
+        }
+
+        if (shouldExclude) {
+            Log.d(TAG, "🚫 Excluding '${workflow.workflowName}' from meeting mode (excluded keyword)")
+            return false
+        }
+
+        // Check if workflow contains meeting-related keywords
+        val isMeeting = meetingKeywords.any { keyword ->
+            workflowName.contains(keyword)
+        }
+
+        if (isMeeting) {
+            Log.d(TAG, "✅ '${workflow.workflowName}' identified as meeting workflow")
+            return true
+        }
+
+        Log.d(TAG, "📋 '${workflow.workflowName}' is regular task (not meeting)")
+        return false
+    }
 
     /**
      * ✅ SMART: Determine if this is an ACTUAL meeting workflow
