@@ -93,6 +93,9 @@ object ActionExecutor {
     /**
      * ✅ Execute multiple actions from a workflow
      */
+    /**
+     * ✅ Execute workflow with SELECTIVE meeting mode activation
+     */
     fun executeWorkflow(context: Context, workflow: WorkflowEntity): Boolean {
         Log.d(TAG, "Executing workflow: ${workflow.workflowName}")
 
@@ -118,27 +121,80 @@ object ActionExecutor {
 
         Log.d(TAG, "Executed $successCount/$totalActions actions successfully")
 
-        // Add task execution notification to bell icon
+        // ✅ ALWAYS add task execution notification
         notificationManager.addTaskExecution(
             workflowName = workflow.workflowName,
             actionsCount = successCount,
             success = successCount == totalActions
         )
 
-        // Check if this is a meeting mode workflow and activate meeting mode in notifications
-        val isMeetingModeWorkflow = workflow.actionDetails.contains("DND") ||
-                workflow.actionDetails.contains("SET_SOUND_MODE") ||
-                workflow.actionDetails.contains("Silent") ||
-                workflow.workflowName.contains("meeting", ignoreCase = true) ||
-                workflow.workflowName.contains("mode", ignoreCase = true)
+        // ✅ SELECTIVE: Only activate meeting mode for ACTUAL meeting workflows
+        val isMeetingWorkflow = isActualMeetingWorkflow(workflow)
 
-        if (isMeetingModeWorkflow && successCount > 0) {
+        if (isMeetingWorkflow && successCount > 0) {
             notificationManager.setMeetingMode(true, workflow.workflowName)
-            Log.d(TAG, "🔇 Meeting mode activated in notifications")
+            Log.d(TAG, "🔇 Meeting mode activated for: ${workflow.workflowName}")
+        } else {
+            Log.d(TAG, "📋 Task executed without meeting mode: ${workflow.workflowName}")
         }
 
         return successCount > 0
     }
+
+    /**
+     * ✅ SMART: Determine if this is an ACTUAL meeting workflow
+     */
+    private fun isActualMeetingWorkflow(workflow: WorkflowEntity): Boolean {
+        val workflowName = workflow.workflowName.lowercase()
+
+        // ✅ ONLY activate meeting mode for workflows with these keywords
+        val meetingKeywords = listOf(
+            "meeting",
+            "conference",
+            "call",
+            "presentation",
+            "interview",
+            "work meeting",
+            "business"
+        )
+
+        // ✅ EXCLUDE common non-meeting workflows
+        val excludeKeywords = listOf(
+            "sleep",
+            "class",
+            "home",
+            "study",
+            "night",
+            "bedtime",
+            "morning",
+            "work mode",  // General work, not meeting
+            "focus"       // Focus time, not meeting
+        )
+
+        // Check if workflow should be excluded
+        val shouldExclude = excludeKeywords.any { keyword ->
+            workflowName.contains(keyword)
+        }
+
+        if (shouldExclude) {
+            Log.d(TAG, "🚫 Excluding '${workflow.workflowName}' from meeting mode (excluded keyword)")
+            return false
+        }
+
+        // Check if workflow contains meeting-related keywords
+        val isMeeting = meetingKeywords.any { keyword ->
+            workflowName.contains(keyword)
+        }
+
+        if (isMeeting) {
+            Log.d(TAG, "✅ '${workflow.workflowName}' identified as meeting workflow")
+            return true
+        }
+
+        Log.d(TAG, "📋 '${workflow.workflowName}' is regular task (not meeting)")
+        return false
+    }
+
 
     // ==================== ACTION IMPLEMENTATIONS ====================
 
