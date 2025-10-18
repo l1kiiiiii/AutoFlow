@@ -10,6 +10,7 @@ class AppBlockAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "AppBlockService"
+        private const val THROTTLE_INTERVAL_MS = 1000L
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
