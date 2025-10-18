@@ -28,9 +28,16 @@ class LocationViewModel(application: Application) : AndroidViewModel(application
     private val locationDao: SavedLocationDao = database.savedLocationDao()
     private val locationManager = LocationManager(application)
 
-    // LiveData for saved locations
+    companion object {
+        private const val TAG = "LocationViewModel"
+    }
+
+    // ✅ LiveData for saved locations - BOTH properties for compatibility
     private val _savedLocations = MutableLiveData<List<SavedLocation>>()
     val savedLocations: LiveData<List<SavedLocation>> = _savedLocations
+
+    // ✅ Add allLocations property that UI expects
+    val allLocations: LiveData<List<SavedLocation>> = locationDao.getAllLocations()
 
     // Current location
     private val _currentLocation = MutableLiveData<Location?>()
@@ -43,10 +50,6 @@ class LocationViewModel(application: Application) : AndroidViewModel(application
     // Loading state
     private val _isLoading = MutableLiveData<Boolean>()
     val isLoading: LiveData<Boolean> = _isLoading
-
-    companion object {
-        private const val TAG = "LocationViewModel"
-    }
 
     init {
         loadSavedLocations()
@@ -62,8 +65,10 @@ class LocationViewModel(application: Application) : AndroidViewModel(application
                 val locations = withContext(Dispatchers.IO) {
                     locationDao.getAllLocationsSync() // ✅ Use sync version
                 }
+
                 _savedLocations.value = locations
                 Log.d(TAG, "✅ Loaded ${locations.size} saved locations")
+
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error loading locations", e)
                 _statusMessage.value = "Failed to load locations: ${e.message}"
@@ -170,17 +175,40 @@ class LocationViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * ✅ Delete saved location
+     * ✅ Delete saved location - Accept SavedLocation object
      */
-    fun deleteLocation(locationId: Long) {
+    fun deleteLocation(location: SavedLocation) {
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    locationDao.deleteLocationById(locationId) // ✅ Use deleteById method
+                    locationDao.deleteLocation(location)
                 }
+
+                _statusMessage.value = "✅ Location '${location.name}' deleted"
+                loadSavedLocations()
+                Log.d(TAG, "✅ Location deleted: ${location.name}")
+
+            } catch (e: Exception) {
+                _statusMessage.value = "❌ Failed to delete location: ${e.message}"
+                Log.e(TAG, "❌ Error deleting location", e)
+            }
+        }
+    }
+
+    /**
+     * ✅ Delete by ID
+     */
+    fun deleteLocationById(locationId: Long) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    locationDao.deleteLocationById(locationId)
+                }
+
                 _statusMessage.value = "✅ Location deleted"
                 loadSavedLocations()
                 Log.d(TAG, "✅ Location deleted: ID $locationId")
+
             } catch (e: Exception) {
                 _statusMessage.value = "❌ Failed to delete location: ${e.message}"
                 Log.e(TAG, "❌ Error deleting location", e)
@@ -197,11 +225,34 @@ class LocationViewModel(application: Application) : AndroidViewModel(application
                 withContext(Dispatchers.IO) {
                     locationDao.updateFavorite(locationId, isFavorite)
                 }
+
                 loadSavedLocations()
                 Log.d(TAG, "✅ Location favorite toggled: ID $locationId, favorite: $isFavorite")
+
             } catch (e: Exception) {
                 _statusMessage.value = "❌ Failed to update favorite: ${e.message}"
                 Log.e(TAG, "❌ Error updating favorite", e)
+            }
+        }
+    }
+
+    /**
+     * ✅ Update location
+     */
+    fun updateLocation(location: SavedLocation) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    locationDao.updateLocation(location)
+                }
+
+                _statusMessage.value = "✅ Location '${location.name}' updated"
+                loadSavedLocations()
+                Log.d(TAG, "✅ Location updated: ${location.name}")
+
+            } catch (e: Exception) {
+                _statusMessage.value = "❌ Failed to update location: ${e.message}"
+                Log.e(TAG, "❌ Error updating location", e)
             }
         }
     }

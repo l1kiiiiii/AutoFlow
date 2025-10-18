@@ -1,20 +1,16 @@
 package com.example.autoflow.receiver
 
-import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import android.util.Log
-import androidx.core.content.ContextCompat
 import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.toTriggers
 import com.example.autoflow.util.ActionExecutor
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
+import org.json.JSONObject
 
 class BluetoothReceiver : BroadcastReceiver() {
 
@@ -22,62 +18,108 @@ class BluetoothReceiver : BroadcastReceiver() {
         private const val TAG = "BluetoothReceiver"
     }
 
-    @SuppressLint("MissingPermission")
     override fun onReceive(context: Context, intent: Intent) {
-        // Check Bluetooth permission for Android 12+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.BLUETOOTH_CONNECT)
-                != PackageManager.PERMISSION_GRANTED) {
-                Log.e(TAG, "Bluetooth permission not granted")
-                return
-            }
-        }
+        Log.d(TAG, "📱 Bluetooth event: ${intent.action}")
 
         when (intent.action) {
+            BluetoothAdapter.ACTION_STATE_CHANGED -> {
+                val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                handleBluetoothStateChange(context, state)
+            }
             BluetoothDevice.ACTION_ACL_CONNECTED -> {
-                val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                device?.let {
-                    val macAddress = it.address
-                    val deviceName = it.name ?: "Unknown"
+                val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                device?.let { handleDeviceConnected(context, it) }
+            }
+            BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                device?.let { handleDeviceDisconnected(context, it) }
+            }
+        }
+    }
 
-                    Log.d(TAG, "📲 Bluetooth connected: $deviceName ($macAddress)")
+    private fun handleBluetoothStateChange(context: Context, state: Int) {
+        val stateString = when (state) {
+            BluetoothAdapter.STATE_ON -> "ON"
+            BluetoothAdapter.STATE_OFF -> "OFF"
+            BluetoothAdapter.STATE_TURNING_ON -> "TURNING_ON"
+            BluetoothAdapter.STATE_TURNING_OFF -> "TURNING_OFF"
+            else -> return
+        }
 
-                    val pendingResult = goAsync()
+        Log.d(TAG, "📱 Bluetooth state: $stateString")
+        checkBluetoothTriggers(context, stateString, null, null)
+    }
 
-                    CoroutineScope(Dispatchers.IO).launch {
-                        try {
-                            val db = AppDatabase.getDatabase(context)
-                            val workflows = db.workflowDao().getAllWorkflowsSync()
+    private fun handleDeviceConnected(context: Context, device: BluetoothDevice) {
+        Log.d(TAG, "📱 Device connected: ${device.name} (${device.address})")
+        checkBluetoothTriggers(context, "CONNECTED", device.address, device.name)
+    }
 
-                            workflows.filter { it.isEnabled }.forEach { workflow ->
-                                val triggers = workflow.toTriggers()
+    private fun handleDeviceDisconnected(context: Context, device: BluetoothDevice) {
+        Log.d(TAG, "📱 Device disconnected: ${device.name} (${device.address})")
+        checkBluetoothTriggers(context, "DISCONNECTED", device.address, device.name)
+    }
 
-                                triggers.forEach { trigger ->
-                                    if (trigger is com.example.autoflow.model.Trigger.BluetoothTrigger) {
-                                        if (trigger.deviceAddress == macAddress) {
-                                            Log.d(TAG, "✅ Bluetooth trigger matched for workflow: ${workflow.workflowName}")
-                                            // ✅ FIXED: Use executeWorkflow instead of executeActions
-                                            ActionExecutor.executeWorkflow(context, workflow)
-                                        }
-                                    }
-                                }
+    private fun checkBluetoothTriggers(context: Context, state: String, deviceAddress: String?, deviceName: String?) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val database = AppDatabase.getDatabase(context)
+                val workflows = database.workflowDao().getActiveWorkflows()
+
+                workflows.forEach { workflow ->
+                    val triggers = workflow.toTriggers()
+
+                    triggers.forEach { trigger ->
+                        if (trigger.type == "BLUETOOTH" && matchesBluetoothTrigger(trigger.value, state, deviceAddress, deviceName)) {
+                            Log.d(TAG, "✅ Bluetooth trigger matched for workflow: ${workflow.workflowName}")
+
+                            withContext(Dispatchers.Main) {
+                                ActionExecutor.executeWorkflow(context, workflow)
                             }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error executing Bluetooth trigger", e)
-                        } finally {
-                            pendingResult.finish()
                         }
                     }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error checking Bluetooth triggers", e)
+            }
+        }
+    }
+
+    /**
+     * ✅ Check if trigger value matches current Bluetooth state/device
+     */
+    private fun matchesBluetoothTrigger(
+        triggerValue: String,
+        currentState: String,
+        currentDeviceAddress: String?,
+        currentDeviceName: String?
+    ): Boolean {
+        return try {
+            val json = JSONObject(triggerValue)
+            val targetState = json.optString("state", "")
+            val targetDeviceAddress = json.optString("deviceAddress", null)
+            val targetDeviceName = json.optString("deviceName", null)
+
+            // Check state match (if specified)
+            if (targetState.isNotEmpty() && targetState != currentState) {
+                return false
             }
 
-            BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
-                val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                device?.let {
-                    Log.d(TAG, "📴 Bluetooth disconnected: ${it.name} (${it.address})")
-                    // Handle disconnect triggers if needed
-                }
+            // Check device address match (if specified)
+            if (targetDeviceAddress != null && targetDeviceAddress != currentDeviceAddress) {
+                return false
             }
+
+            // Check device name match (if specified)
+            if (targetDeviceName != null && targetDeviceName != currentDeviceName) {
+                return false
+            }
+
+            true
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error parsing Bluetooth trigger value: $triggerValue", e)
+            false
         }
     }
 }

@@ -54,4 +54,7 @@ interface WorkflowDao {
 
     @Query("SELECT * FROM workflows WHERE is_enabled = 1")
     suspend fun getAllEnabledSync(): List<WorkflowEntity>
+
+    @Query("SELECT * FROM workflows WHERE is_enabled = 1")
+    suspend fun getActiveWorkflows(): List<WorkflowEntity>
 }

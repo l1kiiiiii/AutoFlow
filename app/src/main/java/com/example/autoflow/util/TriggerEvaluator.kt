@@ -7,7 +7,7 @@ import com.example.autoflow.data.toTriggers
 import com.example.autoflow.model.Trigger
 
 /**
- * TriggerEvaluator - Evaluates multiple triggers with AND/OR logic
+ * ✅ TriggerEvaluator - Evaluates multiple triggers with AND/OR logic
  * Used to determine if a workflow should execute based on trigger states
  */
 object TriggerEvaluator {
@@ -19,7 +19,7 @@ object TriggerEvaluator {
     const val LOGIC_OR = "OR"
 
     /**
-     * Evaluate multiple triggers based on logic operator
+     * ✅ Evaluate multiple triggers based on logic operator
      * @param triggers List of triggers to evaluate
      * @param logic Logic operator ("AND" or "OR")
      * @param currentStates Map of trigger type to current state (true = triggered)
@@ -35,21 +35,37 @@ object TriggerEvaluator {
             return false
         }
 
-        Log.d(TAG, "🔍 Evaluating ${triggers.size} triggers with logic: $logic")
-        Log.d(TAG, "Current states: $currentStates")
+        Log.d(TAG, "🔍 Evaluating ${triggers.size} triggers with $logic logic")
 
         return when (logic.uppercase()) {
             LOGIC_AND -> evaluateAND(triggers, currentStates)
             LOGIC_OR -> evaluateOR(triggers, currentStates)
             else -> {
-                Log.e(TAG, "❌ Unknown logic operator: $logic")
+                Log.w(TAG, "⚠️ Unknown logic operator: $logic, defaulting to AND")
+                evaluateAND(triggers, currentStates)
+            }
+        }
+    }
+
+    /**
+     * ✅ Evaluate single trigger
+     */
+    fun evaluateTrigger(trigger: Trigger, context: Context): Boolean {
+        return when (trigger.type) {
+            "TIME" -> evaluateTimeTrigger(trigger)
+            "LOCATION" -> evaluateLocationTrigger(trigger, context)
+            "WIFI" -> evaluateWifiTrigger(trigger, context)
+            "BLUETOOTH" -> evaluateBluetoothTrigger(trigger, context)
+            "BATTERY" -> evaluateBatteryTrigger(trigger, context)
+            else -> {
+                Log.w(TAG, "Unknown trigger type: ${trigger.type}")
                 false
             }
         }
     }
 
     /**
-     * Evaluate with AND logic - ALL triggers must be true
+     * ✅ Evaluate with AND logic - ALL triggers must be true
      */
     private fun evaluateAND(
         triggers: List<Trigger>,
@@ -66,7 +82,7 @@ object TriggerEvaluator {
     }
 
     /**
-     * Evaluate with OR logic - ANY trigger can be true
+     * ✅ Evaluate with OR logic - ANY trigger can be true
      */
     private fun evaluateOR(
         triggers: List<Trigger>,
@@ -83,7 +99,7 @@ object TriggerEvaluator {
     }
 
     /**
-     * Evaluate a workflow entity with its stored triggers and logic
+     * ✅ Evaluate a workflow entity with its stored triggers and logic
      * @param workflow The workflow entity containing triggers
      * @param currentStates Map of current trigger states
      * @return true if workflow should execute
@@ -108,18 +124,18 @@ object TriggerEvaluator {
     }
 
     /**
-     * Get trigger state for a specific trigger type
+     * ✅ Get trigger state for a specific trigger
      * @param context Application context
      * @param trigger The trigger to check
      * @return true if trigger condition is met
      */
     fun checkTriggerState(context: Context, trigger: Trigger): Boolean {
-        return when (trigger) {
-            is Trigger.TimeTrigger -> checkTimeTrigger(trigger)
-            is Trigger.LocationTrigger -> checkLocationTrigger(context, trigger)
-            is Trigger.WiFiTrigger -> checkWiFiTrigger(context, trigger)
-            is Trigger.BluetoothTrigger -> checkBluetoothTrigger(context, trigger)
-            is Trigger.BatteryTrigger -> checkBatteryTrigger(context, trigger)
+        return when (trigger.type) {
+            "TIME" -> checkTimeTrigger(trigger)
+            "LOCATION" -> checkLocationTrigger(context, trigger)
+            "WIFI" -> checkWiFiTrigger(context, trigger)
+            "BLUETOOTH" -> checkBluetoothTrigger(context, trigger)
+            "BATTERY" -> checkBatteryTrigger(context, trigger)
             else -> {
                 Log.w(TAG, "⚠️ Unknown trigger type: ${trigger.type}")
                 false
@@ -128,7 +144,7 @@ object TriggerEvaluator {
     }
 
     /**
-     * Build current states map for all triggers in a workflow
+     * ✅ Build current states map for all triggers in a workflow
      * @param context Application context
      * @param triggers List of triggers to check
      * @return Map of trigger type to current state
@@ -148,74 +164,117 @@ object TriggerEvaluator {
         return states
     }
 
-    // Helper methods for checking individual trigger types
+    // ✅ PRIVATE HELPER METHODS FOR CHECKING INDIVIDUAL TRIGGER TYPES
 
-    private fun checkTimeTrigger(trigger: Trigger.TimeTrigger): Boolean {
-        // Time trigger logic - check if current time matches
-        val currentTime = System.currentTimeMillis()
-        val targetTime = trigger.time.toLongOrNull() ?: return false
+    private fun evaluateTimeTrigger(trigger: Trigger): Boolean {
+        val timeData = TriggerParser.parseTimeData(trigger) ?: return false
+        val (targetTime, days) = timeData
 
-        // Check if within time window (e.g., 1 minute)
-        val diff = Math.abs(currentTime - targetTime)
-        return diff <= Constants.TIME_WINDOW_MS
+        val currentTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+        val currentDay = java.text.SimpleDateFormat("EEEE", java.util.Locale.getDefault()).format(java.util.Date()).uppercase()
+
+        return currentTime == targetTime && (days.isEmpty() || days.contains(currentDay))
     }
 
-    private fun checkLocationTrigger(
-        context: Context,
-        trigger: Trigger.LocationTrigger
-    ): Boolean {
+    private fun checkTimeTrigger(trigger: Trigger): Boolean {
+        val timeData = TriggerParser.parseTimeData(trigger) ?: return false
+        val (targetTime, days) = timeData
+
+        val currentTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+        val currentDay = java.text.SimpleDateFormat("EEEE", java.util.Locale.getDefault()).format(java.util.Date()).uppercase()
+
+        val timeMatches = currentTime == targetTime
+        val dayMatches = days.isEmpty() || days.contains(currentDay)
+
+        return timeMatches && dayMatches
+    }
+
+    private fun evaluateLocationTrigger(trigger: Trigger, context: Context): Boolean {
+        // Location evaluation would require location services
+        // For now, return false - implement with actual location checking
+        val locationData = TriggerParser.parseLocationData(trigger) ?: return false
+        Log.d(TAG, "Location trigger: ${locationData.locationName} - not implemented yet")
+        return false
+    }
+
+    private fun checkLocationTrigger(context: Context, trigger: Trigger): Boolean {
         // Location trigger logic - check if in geofence
         // This would typically be handled by GeofenceManager
         // Return false here as geofences trigger via broadcast receiver
+        val locationData = TriggerParser.parseLocationData(trigger) ?: return false
+        Log.d(TAG, "Location check: ${locationData.locationName} - handled by GeofenceReceiver")
         return false
     }
 
-    private fun checkWiFiTrigger(
-        context: Context,
-        trigger: Trigger.WiFiTrigger
-    ): Boolean {
-        // WiFi trigger logic - check WiFi state
+    private fun evaluateWifiTrigger(trigger: Trigger, context: Context): Boolean {
+        val wifiData = TriggerParser.parseWifiData(trigger) ?: return false
+
         val wifiManager = context.applicationContext
             .getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
 
-        return when (trigger.value.uppercase()) {
-            Constants.WIFI_STATE_ON -> wifiManager?.isWifiEnabled == true
-            Constants.WIFI_STATE_OFF -> wifiManager?.isWifiEnabled == false
+        return when (wifiData.state.uppercase()) {
+            "ON" -> wifiManager?.isWifiEnabled == true
+            "OFF" -> wifiManager?.isWifiEnabled == false
+            "CONNECTED" -> {
+                if (wifiManager?.isWifiEnabled == true) {
+                    val connectionInfo = wifiManager.connectionInfo
+                    if (wifiData.ssid != null) {
+                        // Check specific SSID
+                        val currentSsid = connectionInfo?.ssid?.replace("\"", "") ?: ""
+                        currentSsid == wifiData.ssid
+                    } else {
+                        // Just check if connected to any WiFi
+                        connectionInfo != null && connectionInfo.networkId != -1
+                    }
+                } else false
+            }
+            "DISCONNECTED" -> {
+                if (wifiManager?.isWifiEnabled == true) {
+                    val connectionInfo = wifiManager.connectionInfo
+                    connectionInfo?.networkId == -1
+                } else true
+            }
             else -> false
         }
     }
 
-    private fun checkBluetoothTrigger(
-        context: Context,
-        trigger: Trigger.BluetoothTrigger
-    ): Boolean {
-        // Bluetooth trigger logic - check if device is in range
-        // This would typically be handled by BLEManager
+    private fun checkWiFiTrigger(context: Context, trigger: Trigger): Boolean {
+        return evaluateWifiTrigger(trigger, context)
+    }
+
+    private fun evaluateBluetoothTrigger(trigger: Trigger, context: Context): Boolean {
+        val bluetoothData = TriggerParser.parseBluetoothData(trigger) ?: return false
+
+        // Bluetooth trigger logic - check if device is connected/available
+        // This would typically be handled by BluetoothManager
+        Log.d(TAG, "Bluetooth trigger: ${bluetoothData.deviceAddress} - not fully implemented yet")
         return false
     }
 
-    private fun checkBatteryTrigger(
-        context: Context,
-        trigger: Trigger.BatteryTrigger
-    ): Boolean {
-        // Battery trigger logic - check battery level
-        val batteryManager = context.getSystemService(Context.BATTERY_SERVICE)
-                as? android.os.BatteryManager
+    private fun checkBluetoothTrigger(context: Context, trigger: Trigger): Boolean {
+        return evaluateBluetoothTrigger(trigger, context)
+    }
 
-        val currentLevel = batteryManager?.getIntProperty(
-            android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY
-        ) ?: return false
+    private fun evaluateBatteryTrigger(trigger: Trigger, context: Context): Boolean {
+        val batteryData = TriggerParser.parseBatteryData(trigger) ?: return false
 
-        return when (trigger.condition) {
-            "below" -> currentLevel < trigger.level
-            "above" -> currentLevel > trigger.level
-            "equals" -> currentLevel == trigger.level
+        val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as? android.os.BatteryManager
+        val batteryLevel = batteryManager?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: return false
+
+        return when (batteryData.condition.lowercase()) {
+            "below", "<" -> batteryLevel < batteryData.level
+            "above", ">" -> batteryLevel > batteryData.level
+            "equals", "=" -> batteryLevel == batteryData.level
             else -> false
         }
     }
 
+    private fun checkBatteryTrigger(context: Context, trigger: Trigger): Boolean {
+        return evaluateBatteryTrigger(trigger, context)
+    }
+
     /**
-     * Get a human-readable description of trigger evaluation
+     * ✅ Get a human-readable description of trigger evaluation
      */
     fun getEvaluationDescription(
         triggers: List<Trigger>,
@@ -230,5 +289,14 @@ object TriggerEvaluator {
 
         val operator = if (logic == LOGIC_AND) "AND" else "OR"
         return triggerDescriptions.joinToString(" $operator ")
+    }
+
+    /**
+     * ✅ Check if workflow triggers are currently satisfied
+     */
+    fun isWorkflowTriggered(context: Context, workflow: WorkflowEntity): Boolean {
+        val triggers = workflow.toTriggers()
+        val currentStates = buildCurrentStates(context, triggers)
+        return evaluateWorkflow(workflow, currentStates)
     }
 }

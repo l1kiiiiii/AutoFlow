@@ -161,6 +161,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.foundation.layout.PaddingValues
+import com.example.autoflow.model.TriggerHelpers
+import com.example.autoflow.util.TriggerParser
 
 
 
@@ -253,38 +255,58 @@ fun TaskCreationScreen(
     var bluetoothTriggerType by remember { mutableStateOf("connect") }
 
     // Pre-populate fields if editing
+    // ✅ FIXED: Pre-populate fields if editing
     LaunchedEffect(existingWorkflow) {
         existingWorkflow?.let { workflow ->
             try {
                 taskName = workflow.workflowName
 
-                workflow.toTriggers().firstOrNull()?.let { trigger ->
-                    when (trigger) {
-                        is Trigger.TimeTrigger -> {
+                // ✅ FIXED: Use explicit type for forEach
+                val triggersList: List<Trigger> = workflow.toTriggers()
+                triggersList.forEach { trigger: Trigger ->
+                    when (trigger.type) {
+                        "TIME" -> {
                             timeTriggerExpanded = true
-                            timeValue = trigger.time
+                            val timeData = TriggerParser.parseTimeData(trigger)
+                            timeData?.let { (time, _) ->
+                                timeValue = time
+                            }
                         }
-                        is Trigger.WiFiTrigger -> {
+                        "WIFI" -> {
                             wifiTriggerExpanded = true
-                            wifiState = trigger.state
+                            val wifiData = TriggerParser.parseWifiData(trigger)
+                            wifiData?.let { data ->
+                                wifiState = data.state
+                            }
                         }
-                        is Trigger.BluetoothTrigger -> {
+                        "BLUETOOTH" -> {
                             bluetoothDeviceTriggerExpanded = true
-                            bluetoothDeviceAddress = trigger.deviceAddress
+                            val bluetoothData = TriggerParser.parseBluetoothData(trigger)
+                            bluetoothData?.let { data ->
+                                bluetoothDeviceAddress = data.deviceAddress
+                            }
                         }
-                        is Trigger.LocationTrigger -> {
+                        "LOCATION" -> {
                             locationTriggerExpanded = true
-                            locationName = trigger.locationName
-                            locationDetailsInput = "${trigger.latitude},${trigger.longitude}"
-                            radiusValue = trigger.radius.toFloat()
+                            val locationData = TriggerParser.parseLocationData(trigger)
+                            locationData?.let { data ->
+                                locationName = data.locationName
+                                locationDetailsInput = "${data.latitude},${data.longitude}"
+                                radiusValue = data.radius.toFloat()
+                                triggerOnOption = when {
+                                    data.triggerOnEntry && data.triggerOnExit -> "Both"
+                                    data.triggerOnEntry -> "Entry"
+                                    data.triggerOnExit -> "Exit"
+                                    else -> "Entry"
+                                }
+                            }
                         }
-                        is Trigger.BatteryTrigger -> {
-                        Log.d("TaskCreation", "Battery trigger found but not supported in UI")
-                    }
                     }
                 }
 
-                workflow.toActions().firstOrNull()?.let { action ->
+                // ✅ FIXED: Handle actions similarly
+                val actionsList: List<Action> = workflow.toActions()
+                actionsList.firstOrNull()?.let { action: Action ->
                     when (action.type) {
                         Constants.ACTION_SEND_NOTIFICATION -> {
                             sendNotificationActionExpanded = true
@@ -474,7 +496,7 @@ fun TaskCreationScreen(
         }
     }
 }
-//  COMPOSABLE COMPONENTS 
+//  COMPOSABLE COMPONENTS
 
 @Composable
 private fun TaskNameCard(
@@ -634,7 +656,7 @@ private fun TriggersCard(
     }
 }
 
-//  UPDATED ACTIONS CARD 
+//  UPDATED ACTIONS CARD
 
 @Composable
 private fun ActionsCard(
@@ -740,7 +762,7 @@ private fun ActionsCard(
         }
     }
 }
-//  NEW ACTION CONTENT COMPONENTS 
+//  NEW ACTION CONTENT COMPONENTS
 
 @Composable
 private fun SetSoundModeContent(
@@ -1248,7 +1270,7 @@ private fun AppPickerDialog(
         }
     )
 }
-//  UTILITY FUNCTIONS 
+//  UTILITY FUNCTIONS
 
 private fun getInstalledApps(context: Context): List<AppInfo> {
     return try {
@@ -1280,7 +1302,7 @@ private fun getInstalledApps(context: Context): List<AppInfo> {
         packageName
     }
 }
-//  SUPPORTING COMPONENTS AND DATA CLASSES 
+//  SUPPORTING COMPONENTS AND DATA CLASSES
 
 data class SoundModeOption(
     val name: String,
@@ -1328,7 +1350,7 @@ private fun SaveButtonsCard(
     }
 }
 
-//  EXPANDABLE SECTIONS 
+//  EXPANDABLE SECTIONS
 
 @Composable
 private fun ExpandableTriggerSection(
@@ -1620,7 +1642,7 @@ private fun LocationTriggerContent(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        //  UPDATED: Radius Input with Indoor Presets 
+        //  UPDATED: Radius Input with Indoor Presets
 
         Text(
             "Trigger Radius",
@@ -2142,7 +2164,7 @@ private fun getRadiusUseCase(radius: Int): String {
 }
 
 // Permission Dialog (same as before)...
-//  LOCATION FETCHING FUNCTION 
+//  LOCATION FETCHING FUNCTION
 
 @SuppressLint("MissingPermission")
 private fun fetchCurrentLocation(
@@ -2197,7 +2219,7 @@ private fun fetchCurrentLocation(
     }
 }
 
-//  REVERSE GEOCODING 
+//  REVERSE GEOCODING
 
 private fun getAddressFromCoordinates(
     context: Context,
@@ -2673,7 +2695,7 @@ fun BluetoothTriggerContent(
     }
 }
 
-//  ACTION CONTENT COMPONENTS 
+//  ACTION CONTENT COMPONENTS
 
 @Composable
 private fun NotificationActionContent(
@@ -2799,7 +2821,7 @@ private fun RunScriptContent(
     }
 }
 
-//  ERROR DIALOG 
+//  ERROR DIALOG
 
 @Composable
 private fun ErrorDialog(
@@ -2819,6 +2841,9 @@ private fun ErrorDialog(
     )
 }
 //  SAVE HANDLER
+/**
+ * ✅ FIXED: Complete handleSaveTask function with proper variable scoping
+ */
 private suspend fun handleSaveTask(
     context: Context,
     viewModel: WorkflowViewModel,
@@ -2856,7 +2881,7 @@ private suspend fun handleSaveTask(
 
         // 1. VALIDATE TASK NAME
         if (taskName.isBlank()) {
-            Log.e("TaskCreation", "❌ Task name is blank")
+            Log.e("TaskCreation", "Task name is blank")
             onError("Task name cannot be empty")
             return
         }
@@ -2866,43 +2891,42 @@ private suspend fun handleSaveTask(
         val hasLocationTrigger = locationTriggerExpanded && locationDetailsInput.isNotBlank()
         val hasWifiTrigger = wifiTriggerExpanded
         val hasTimeTrigger = timeTriggerExpanded && timeValue.isNotBlank()
-        val hasBluetoothTrigger =
-            bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank()
-        Log.d("TaskCreation", "=== TRIGGER CHECK ===")
-        Log.d("TaskCreation", "Location: $hasLocationTrigger")
-        Log.d("TaskCreation", "WiFi: $hasWifiTrigger")
-        Log.d("TaskCreation", "Time: $hasTimeTrigger")
-        Log.d("TaskCreation", "Bluetooth: $hasBluetoothTrigger")
+        val hasBluetoothTrigger = bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank()
+
+        Log.d("TaskCreation", "🔍 TRIGGER CHECK:")
+        Log.d("TaskCreation", "  Location: $hasLocationTrigger")
+        Log.d("TaskCreation", "  WiFi: $hasWifiTrigger")
+        Log.d("TaskCreation", "  Time: $hasTimeTrigger")
+        Log.d("TaskCreation", "  Bluetooth: $hasBluetoothTrigger")
 
         // 3. VALIDATE AT LEAST ONE TRIGGER
         if (!hasLocationTrigger && !hasWifiTrigger && !hasTimeTrigger && !hasBluetoothTrigger) {
-            Log.e("TaskCreation", "❌ No trigger configured")
+            Log.e("TaskCreation", "No trigger configured")
             onError("Please configure at least ONE trigger")
             return
         }
         Log.d("TaskCreation", "✅ At least one trigger is configured")
 
-        // 4. CREATE LIST OF ALL CONFIGURED TRIGGERS
+        // 4. ✅ CREATE LIST OF ALL CONFIGURED TRIGGERS (DECLARE triggers HERE)
         val triggers = mutableListOf<Trigger>()
+
         if (hasTimeTrigger) {
-            Log.d("TaskCreation", "→ Adding TIME trigger: $timeValue")
-            triggers.add(Trigger.TimeTrigger(time = timeValue, days = listOf()))
+            Log.d("TaskCreation", "Adding TIME trigger: $timeValue")
+            triggers.add(TriggerHelpers.createTimeTrigger(timeValue, listOf()))
         }
+
         if (hasWifiTrigger) {
-            Log.d("TaskCreation", "→ Adding WIFI trigger: $wifiState")
-            triggers.add(Trigger.WiFiTrigger(ssid = null, state = wifiState))
+            Log.d("TaskCreation", "Adding WIFI trigger: $wifiState")
+            triggers.add(TriggerHelpers.createWifiTrigger(null, wifiState))
         }
+
         if (hasBluetoothTrigger) {
-            Log.d("TaskCreation", "→ Adding BLUETOOTH trigger: $bluetoothDeviceAddress")
-            triggers.add(
-                Trigger.BluetoothTrigger(
-                    deviceAddress = bluetoothDeviceAddress,
-                    deviceName = null
-                )
-            )
+            Log.d("TaskCreation", "Adding BLUETOOTH trigger: $bluetoothDeviceAddress")
+            triggers.add(TriggerHelpers.createBluetoothTrigger(bluetoothDeviceAddress, null))
         }
+
         if (hasLocationTrigger) {
-            Log.d("TaskCreation", "→ Adding LOCATION trigger")
+            Log.d("TaskCreation", "Adding LOCATION trigger")
             val parts = locationDetailsInput.split(",").map { it.trim() }
             if (parts.size != 2) {
                 onError("Invalid coordinates. Use format: latitude,longitude")
@@ -2914,23 +2938,17 @@ private suspend fun handleSaveTask(
                 onError("Invalid coordinate values")
                 return
             }
-            triggers.add(
-                Trigger.LocationTrigger(
-                    locationName = locationName.ifEmpty { "Unnamed Location" },
-                    latitude = lat,
-                    longitude = lng,
-                    radius = radiusValue.toDouble(),
-                    triggerOnEntry = triggerOnOption == "Entry" || triggerOnOption == "Both",
-                    triggerOnExit = triggerOnOption == "Exit" || triggerOnOption == "Both",
-                    triggerOn = when (triggerOnOption) {
-                        "Entry" -> "enter"
-                        "Exit" -> "exit"
-                        "Both" -> "both"
-                        else -> "enter"
-                    }
-                )
-            )
+
+            triggers.add(TriggerHelpers.createLocationTrigger(
+                locationName = locationName.ifEmpty { "Unnamed Location" },
+                latitude = lat,
+                longitude = lng,
+                radius = radiusValue.toDouble(),
+                triggerOnEntry = triggerOnOption == "Entry" || triggerOnOption == "Both",
+                triggerOnExit = triggerOnOption == "Exit" || triggerOnOption == "Both"
+            ))
         }
+
         Log.d("TaskCreation", "✅ Total triggers created: ${triggers.size}")
 
         // 5. CHECK WHICH ACTIONS ARE CONFIGURED
@@ -2939,74 +2957,82 @@ private suspend fun handleSaveTask(
         val hasScriptAction = runScriptActionExpanded && scriptText.isNotBlank()
         val hasSoundModeAction = setSoundModeActionExpanded
         val hasBlockAppAction = blockAppsActionExpanded && selectedAppsToBlock.isNotEmpty()
-        Log.d("TaskCreation", "=== ACTION CHECK ===")
-        Log.d("TaskCreation", "Notification: $hasNotificationAction")
-        Log.d("TaskCreation", "Toggle: $hasToggleAction")
-        Log.d("TaskCreation", "Script: $hasScriptAction")
-        Log.d("TaskCreation", "Sound Mode: $hasSoundModeAction")
-        Log.d("TaskCreation", "Block Apps: $hasBlockAppAction")
+        val hasUnblockAppAction = unblockAppsActionExpanded
+
+        Log.d("TaskCreation", "🔍 ACTION CHECK:")
+        Log.d("TaskCreation", "  Notification: $hasNotificationAction")
+        Log.d("TaskCreation", "  Toggle: $hasToggleAction")
+        Log.d("TaskCreation", "  Script: $hasScriptAction")
+        Log.d("TaskCreation", "  Sound Mode: $hasSoundModeAction")
+        Log.d("TaskCreation", "  Block Apps: $hasBlockAppAction")
+        Log.d("TaskCreation", "  Unblock Apps: $hasUnblockAppAction")
 
         // 6. VALIDATE AT LEAST ONE ACTION
-        if (!hasNotificationAction && !hasToggleAction && !hasScriptAction && !hasSoundModeAction && !hasBlockAppAction) {
-            Log.e("TaskCreation", "❌ No action configured")
+        if (!hasNotificationAction && !hasToggleAction && !hasScriptAction &&
+            !hasSoundModeAction && !hasBlockAppAction && !hasUnblockAppAction) {
+            Log.e("TaskCreation", "No action configured")
             onError("Please configure at least ONE action")
             return
         }
         Log.d("TaskCreation", "✅ At least one action is configured")
 
-        // 7. CREATE LIST OF ALL CONFIGURED ACTIONS
+        // 7. ✅ CREATE LIST OF ALL CONFIGURED ACTIONS (DECLARE actions HERE)
         val actions = mutableListOf<Action>()
 
         if (hasNotificationAction) {
-            Log.d("TaskCreation", "→ Adding NOTIFICATION action")
-            actions.add(
-                Action(
-                    Constants.ACTION_SEND_NOTIFICATION,
-                    notificationTitle,
-                    notificationMessage,
-                    notificationPriority
-                )
-            )
+            Log.d("TaskCreation", "Adding NOTIFICATION action")
+            actions.add(Action(
+                type = Constants.ACTION_SEND_NOTIFICATION,
+                title = notificationTitle,
+                message = notificationMessage,
+                priority = notificationPriority
+            ))
         }
+
         if (hasToggleAction) {
-            Log.d("TaskCreation", "→ Adding TOGGLE action: $toggleSetting")
+            Log.d("TaskCreation", "Adding TOGGLE action: $toggleSetting")
             val actionType = when {
                 toggleSetting.startsWith("WIFI") -> Constants.ACTION_TOGGLE_WIFI
                 toggleSetting.startsWith("BLUETOOTH") -> Constants.ACTION_TOGGLE_BLUETOOTH
                 else -> Constants.ACTION_TOGGLE_WIFI
             }
-            actions.add(Action(actionType, null, null, null).apply { value = toggleSetting })
+            actions.add(Action(type = actionType).apply {
+                value = toggleSetting
+            })
         }
+
         if (hasSoundModeAction) {
-            Log.d("TaskCreation", "→ Adding SOUND MODE action: $soundMode")
-            actions.add(Action(Constants.ACTION_SET_SOUND_MODE, null, null, null).apply {
+            Log.d("TaskCreation", "Adding SOUND MODE action: $soundMode")
+            actions.add(Action(type = Constants.ACTION_SET_SOUND_MODE).apply {
                 value = soundMode
             })
         }
-        //  Block Apps Action
-        if (blockAppsActionExpanded && selectedAppsToBlock.isNotEmpty()) {
-            Log.d("TaskCreation", "→ Adding BLOCK APPS action: ${selectedAppsToBlock.size} apps")
-            Log.d("TaskCreation", "→ Apps: ${selectedAppsToBlock.joinToString()}")
-            // Store as comma-separated package names
+
+        if (hasBlockAppAction) {
+            Log.d("TaskCreation", "Adding BLOCK APPS action: ${selectedAppsToBlock.size} apps")
+            Log.d("TaskCreation", "Apps: ${selectedAppsToBlock.joinToString()}")
             val appsToBlock = selectedAppsToBlock.joinToString(",")
-            actions.add(Action(Constants.ACTION_BLOCK_APPS, null, null, null).apply {
+            actions.add(Action(type = Constants.ACTION_BLOCK_APPS).apply {
                 value = appsToBlock
             })
         }
-        //  ADD UNBLOCK APPS ACTION
-        if (unblockAppsActionExpanded) {
-            Log.d("TaskCreation", "→ Adding UNBLOCK APPS action")
-            actions.add(Action(Constants.ACTION_UNBLOCK_APPS, null, null, null))
+
+        if (hasUnblockAppAction) {
+            Log.d("TaskCreation", "Adding UNBLOCK APPS action")
+            actions.add(Action(type = Constants.ACTION_UNBLOCK_APPS))
         }
+
         if (hasScriptAction) {
-            Log.d("TaskCreation", "→ Adding SCRIPT action")
-            actions.add(Action(Constants.ACTION_RUN_SCRIPT, null, null, null).apply {
+            Log.d("TaskCreation", "Adding SCRIPT action")
+            actions.add(Action(type = Constants.ACTION_RUN_SCRIPT).apply {
                 value = scriptText
             })
         }
+
         Log.d("TaskCreation", "✅ Total actions created: ${actions.size}")
 
-        // 8. SAVE TO DATABASE (uses first trigger/action for compatibility)
+        // 8. SAVE TO DATABASE
+        Log.d("TaskCreation", "💾 Saving workflow...")
         if (workflowId != null) {
             viewModel.updateWorkflow(
                 workflowId = workflowId,
@@ -3024,42 +3050,51 @@ private suspend fun handleSaveTask(
             )
         }
 
-        // 9. SCHEDULE ALARMS FOR TIME TRIGGERS
         Log.d("TaskCreation", "✅ Workflow saved. Triggers will be automatically registered.")
-        // 10. ADD GEOFENCES FOR LOCATION TRIGGERS
-        if (workflowId == null || workflowId <= 0L) {
-            Log.w("TaskCreation", "Skipping geofence registration: invalid workflowId=$workflowId")
-        } else{
-            triggers.filterIsInstance<Trigger.LocationTrigger>().forEach { locationTrigger ->
+
+        // 9. ADD GEOFENCES FOR LOCATION TRIGGERS
+        if (workflowId == null || workflowId == 0L) {
+            Log.w("TaskCreation", "⚠️ Skipping geofence registration - invalid workflowId: $workflowId")
+        } else {
+            // ✅ FIXED: Explicit type for filter and forEach
+            val locationTriggers: List<Trigger> = triggers.filter { it.type == "LOCATION" }
+            locationTriggers.forEach { trigger: Trigger ->
                 try {
-                    GeofenceManager.addGeofence(
-                        context,
-                        workflowId,
-                        locationTrigger.latitude,
-                        locationTrigger.longitude,
-                        locationTrigger.radius.toFloat(),
-                        locationTrigger.triggerOnEntry,
-                        locationTrigger.triggerOnExit
-                    )
+                    val locationData = TriggerParser.parseLocationData(trigger)
+                    locationData?.let { data ->
+                        GeofenceManager.addGeofence(
+                            context,
+                            workflowId,
+                            data.latitude,
+                            data.longitude,
+                            data.radius.toFloat(),
+                            data.triggerOnEntry,
+                            data.triggerOnExit
+                        )
+                        Log.d("TaskCreation", "✅ Geofence registered for location: ${data.locationName}")
+                    }
                 } catch (e: Exception) {
                     Log.e("TaskCreation", "❌ Geofence setup failed", e)
                 }
             }
-    }
+        }
+
         onSuccess()
+
     } catch (e: NumberFormatException) {
-        Log.e("TaskCreation", "❌ Number format error", e)
+        Log.e("TaskCreation", "Number format error", e)
         onError("Invalid number: ${e.message}")
-    } catch (e: JSONException) {
-        Log.e("TaskCreation", "❌ JSON error", e)
+    } catch (e: org.json.JSONException) {
+        Log.e("TaskCreation", "JSON error", e)
         onError("Location data error: ${e.message}")
     } catch (e: Exception) {
-        Log.e("TaskCreation", "❌ Unexpected error", e)
+        Log.e("TaskCreation", "Unexpected error", e)
         onError("Error: ${e.message}")
     }
 }
 
-//  UTILITY FUNCTIONS 
+
+//  UTILITY FUNCTIONS
 
 data class BluetoothDeviceInfo(val name: String, val address: String)
 

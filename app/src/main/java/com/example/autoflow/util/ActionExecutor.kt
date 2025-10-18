@@ -20,8 +20,13 @@ import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.data.toActions
 import com.example.autoflow.integrations.PhoneStateManager
 import com.example.autoflow.model.Action
+import com.example.autoflow.model.NotificationType
 import com.example.autoflow.policy.BlockPolicy
 import com.example.autoflow.receiver.AlarmReceiver
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 object ActionExecutor {
 
@@ -94,15 +99,14 @@ object ActionExecutor {
      * ✅ Execute multiple actions from a workflow
      */
     /**
-     * ✅ Execute workflow with SELECTIVE meeting mode activation
+     * ✅ Enhanced sleep mode with time constraints and auto-deactivation
      */
     fun executeWorkflow(context: Context, workflow: WorkflowEntity): Boolean {
         Log.d(TAG, "Executing workflow: ${workflow.workflowName}")
 
-        // Get notification manager for tracking
         val notificationManager = InAppNotificationManager.getInstance(context)
-
         val actions = workflow.toActions()
+
         if (actions.isEmpty()) {
             Log.w(TAG, "No actions to execute")
             notificationManager.addTaskExecution(workflow.workflowName, 0, false)
@@ -112,7 +116,12 @@ object ActionExecutor {
         var successCount = 0
         var totalActions = actions.size
 
-        // Execute each action
+        // ✅ ENHANCED: Handle sleep mode workflows with time constraints
+        if (isSleepModeWorkflow(workflow)) {
+            return handleSleepModeWorkflow(context, workflow, notificationManager)
+        }
+
+        // Execute normal workflow
         actions.forEach { action ->
             if (executeAction(context, action)) {
                 successCount++
@@ -121,16 +130,14 @@ object ActionExecutor {
 
         Log.d(TAG, "Executed $successCount/$totalActions actions successfully")
 
-        // ✅ ALWAYS add task execution notification
         notificationManager.addTaskExecution(
             workflowName = workflow.workflowName,
             actionsCount = successCount,
             success = successCount == totalActions
         )
 
-        // ✅ SELECTIVE: Only activate meeting mode for ACTUAL meeting workflows
+        // Smart meeting mode detection
         val isMeetingWorkflow = isActualMeetingWorkflow(workflow)
-
         if (isMeetingWorkflow && successCount > 0) {
             notificationManager.setMeetingMode(true, workflow.workflowName)
             Log.d(TAG, "🔇 Meeting mode activated for: ${workflow.workflowName}")
@@ -140,58 +147,168 @@ object ActionExecutor {
 
         return successCount > 0
     }
+
     /**
-     * ✅ SMART: Determine if this is an ACTUAL meeting workflow
+     * ✅ Handle sleep mode workflows with time-based activation/deactivation
      */
-    private fun isActualMeetingWorkflow(workflow: WorkflowEntity): Boolean {
-        val workflowName = workflow.workflowName.lowercase()
+    private fun handleSleepModeWorkflow(
+        context: Context,
+        workflow: WorkflowEntity,
+        notificationManager: InAppNotificationManager
+    ): Boolean {
+        val currentTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+        val isSleepTime = isCurrentlySleepTime(currentTime)
 
-        // ✅ ONLY activate meeting mode for workflows with these keywords
-        val meetingKeywords = listOf(
-            "meeting",
-            "conference",
-            "call",
-            "presentation",
-            "interview",
-            "work meeting",
-            "business"
+        return if (workflow.workflowName.contains("Start") || isSleepTime) {
+            // Activate sleep mode
+            executeSleepModeStart(context, workflow, notificationManager)
+        } else {
+            // Deactivate sleep mode
+            executeSleepModeEnd(context, workflow, notificationManager)
+        }
+    }
+
+    /**
+     * ✅ Execute sleep mode start actions
+     */
+    private fun executeSleepModeStart(
+        context: Context,
+        workflow: WorkflowEntity,
+        notificationManager: InAppNotificationManager
+    ): Boolean {
+        Log.d(TAG, "🌙 Starting sleep mode")
+
+        var successCount = 0
+
+        // 1. Set DND mode
+        if (executeAction(context, Action.createSoundModeAction("DND"))) {
+            successCount++
+        }
+
+        // 2. Lower brightness
+        if (executeAction(context, Action("SET_BRIGHTNESS", "10"))) {
+            successCount++
+        }
+
+        // 3. Block social apps
+        val socialApps = "com.instagram.android,com.tiktok,com.facebook.katana,com.twitter.android"
+        if (executeAction(context, Action("BLOCK_APPS", socialApps, 32400000L))) { // 9 hours
+            successCount++
+        }
+
+        // 4. Schedule automatic wake up
+        scheduleWakeUpAlarm(context, "07:00")
+        successCount++
+
+        // 5. Add sleep mode notification
+        notificationManager.addNotification(
+            type = NotificationType.INFO,
+            title = "🌙 Sleep Mode Active",
+            message = "Good night! Sleep mode active until 7:00 AM. Sweet dreams! 😴",
+            isClearable = false
         )
 
-        // ✅ EXCLUDE common non-meeting workflows
-        val excludeKeywords = listOf(
-            "sleep",
-            "class",
-            "home",
-            "study",
-            "night",
-            "bedtime",
-            "morning",
-            "work mode",  // General work, not meeting
-            "focus"       // Focus time, not meeting
+        Log.d(TAG, "🌙 Sleep mode started with $successCount actions")
+        return successCount > 0
+    }
+
+    /**
+     * ✅ Execute sleep mode end actions
+     */
+    private fun executeSleepModeEnd(
+        context: Context,
+        workflow: WorkflowEntity,
+        notificationManager: InAppNotificationManager
+    ): Boolean {
+        Log.d(TAG, "☀️ Ending sleep mode")
+
+        var successCount = 0
+
+        // 1. Restore normal sound mode
+        if (executeAction(context, Action.createSoundModeAction("Normal"))) {
+            successCount++
+        }
+
+        // 2. Restore brightness
+        if (executeAction(context, Action("SET_BRIGHTNESS", "80"))) {
+            successCount++
+        }
+
+        // 3. Unblock apps
+        BlockPolicy.clearBlockedPackages(context)
+        successCount++
+
+        // 4. Add wake up notification
+        notificationManager.addNotification(
+            type = NotificationType.SUCCESS,
+            title = "☀️ Good Morning!",
+            message = "Sleep mode ended. Ready to start your day! 🌅",
+            isClearable = true
         )
 
-        // Check if workflow should be excluded
-        val shouldExclude = excludeKeywords.any { keyword ->
-            workflowName.contains(keyword)
+        Log.d(TAG, "☀️ Sleep mode ended with $successCount actions")
+        return successCount > 0
+    }
+
+    /**
+     * ✅ Check if workflow is sleep mode related
+     */
+    private fun isSleepModeWorkflow(workflow: WorkflowEntity): Boolean {
+        val name = workflow.workflowName.lowercase()
+        return name.contains("sleep") && (name.contains("start") || name.contains("end"))
+    }
+
+    /**
+     * ✅ Check if current time is within sleep hours
+     */
+    private fun isCurrentlySleepTime(currentTime: String): Boolean {
+        val sleepStart = "22:00"
+        val sleepEnd = "07:00"
+
+        return if (sleepStart > sleepEnd) {
+            // Overnight period (22:00 to 07:00 next day)
+            currentTime >= sleepStart || currentTime < sleepEnd
+        } else {
+            // Same day period
+            currentTime >= sleepStart && currentTime < sleepEnd
+        }
+    }
+
+    /**
+     * ✅ Schedule automatic wake up alarm
+     */
+    private fun scheduleWakeUpAlarm(context: Context, wakeTime: String) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+        val calendar = Calendar.getInstance().apply {
+            val timeParts = wakeTime.split(":")
+            set(Calendar.HOUR_OF_DAY, timeParts[0].toInt())
+            set(Calendar.MINUTE, timeParts[1].toInt())
+            set(Calendar.SECOND, 0)
+
+            // If time has passed today, schedule for tomorrow
+            if (timeInMillis <= System.currentTimeMillis()) {
+                add(Calendar.DAY_OF_YEAR, 1)
+            }
         }
 
-        if (shouldExclude) {
-            Log.d(TAG, "🚫 Excluding '${workflow.workflowName}' from meeting mode (excluded keyword)")
-            return false
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            putExtra("workflow_name", "Sleep Mode End")
+            putExtra("workflow_id", -999) // Special wake up alarm ID
         }
 
-        // Check if workflow contains meeting-related keywords
-        val isMeeting = meetingKeywords.any { keyword ->
-            workflowName.contains(keyword)
-        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context, -999, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
-        if (isMeeting) {
-            Log.d(TAG, "✅ '${workflow.workflowName}' identified as meeting workflow")
-            return true
-        }
+        alarmManager.setExactAndAllowWhileIdle(
+            AlarmManager.RTC_WAKEUP,
+            calendar.timeInMillis,
+            pendingIntent
+        )
 
-        Log.d(TAG, "📋 '${workflow.workflowName}' is regular task (not meeting)")
-        return false
+        Log.d(TAG, "⏰ Wake up alarm scheduled for $wakeTime")
     }
 
     /**
@@ -247,7 +364,6 @@ object ActionExecutor {
         Log.d(TAG, "📋 '${workflow.workflowName}' is regular task (not meeting)")
         return false
     }
-
 
     // ==================== ACTION IMPLEMENTATIONS ====================
 
