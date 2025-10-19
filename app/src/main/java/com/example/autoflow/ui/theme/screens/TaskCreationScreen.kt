@@ -565,7 +565,6 @@ private fun TriggersCard(
     onBluetoothTriggerTypeChange: (String) -> Unit,
     context: Context
 ) {
-    // Find this section in TaskCreationScreen (around line 500-600)
     val availableTriggers = listOf(
         "Time" to Icons.Default.Schedule,
         "Location" to Icons.Default.LocationOn,

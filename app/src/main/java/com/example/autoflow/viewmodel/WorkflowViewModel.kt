@@ -3,9 +3,12 @@ package com.example.autoflow.viewmodel
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Application
+import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
+import android.media.AudioManager
+import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
@@ -15,6 +18,7 @@ import androidx.lifecycle.MutableLiveData
 import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.data.WorkflowRepository
+import com.example.autoflow.data.toActions
 import com.example.autoflow.geofence.GeofenceManager
 import com.example.autoflow.integrations.BLEManager
 import com.example.autoflow.integrations.LocationManager
@@ -34,6 +38,7 @@ import com.example.autoflow.model.TriggerTemplate
 import com.example.autoflow.util.AutoReplyManager
 import com.example.autoflow.util.TriggerParser
 import com.example.autoflow.model.TriggerHelpers
+import com.example.autoflow.util.ActionExecutor
 
 /**
  * ✅ Fixed WorkflowViewModel using TriggerParser approach
@@ -436,32 +441,130 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
-        // Cancel/schedule alarms based on enabled state
-        if (!enabled) {
+        // ✅ SMART STATE MANAGEMENT FOR MANUAL WORKFLOWS
+        if (enabled) {
+            repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
+                override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
+                    workflow?.let { wf ->
+                        Log.d(TAG, "📋 Checking workflow: ${wf.workflowName}")
+
+                        // Check if this is a manual workflow
+                        val triggers = wf.toTriggers()
+                        val isManualWorkflow = triggers.any { trigger -> trigger.type == "MANUAL" }
+
+                        if (isManualWorkflow) {
+                            Log.d(TAG, "🤝 Manual workflow detected - saving current state first")
+
+                            // ✅ SAVE CURRENT STATE BEFORE ENABLING DND
+                            val context = getApplication<Application>().applicationContext
+                            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+                            // Save current ringer mode
+                            val currentRingerMode = audioManager.ringerMode
+
+                            // Save current DND state
+                            var currentDndState = false
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                currentDndState = notificationManager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
+                            }
+
+                            // Store previous state in SharedPreferences
+                            val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+                            prefs.edit()
+                                .putInt("previous_ringer_mode", currentRingerMode)
+                                .putBoolean("previous_dnd_state", currentDndState)
+                                .putBoolean("manual_meeting_mode", true)
+                                .apply()
+
+                            Log.d(TAG, "💾 Saved previous state: Ringer=$currentRingerMode, DND=$currentDndState")
+
+                            // ✅ EXECUTE ACTIONS IMMEDIATELY
+                            val success = ActionExecutor.executeWorkflow(context, wf)
+                            Log.d(TAG, "📱 Manual workflow actions executed: $success")
+
+                            if (success) {
+                                Log.d(TAG, "✅ Meeting Mode DND enabled successfully")
+                            } else {
+                                Log.e(TAG, "❌ Failed to execute Meeting Mode actions")
+                            }
+                        }
+
+                        // Schedule any time-based triggers
+
+                        AlarmScheduler.scheduleWorkflow(getApplication<Application>().applicationContext, wf)
+
+                    }
+                }
+
+                override fun onWorkflowError(error: String) {
+                    Log.e(TAG, "❌ Error loading workflow: $error")
+                    callback?.onError(error)
+                }
+            })
+        } else {
+            // ✅ SMART RESTORATION WHEN DISABLING
+            repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
+                override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
+                    workflow?.let { wf ->
+                        val triggers = wf.toTriggers()
+                        val isManualWorkflow = triggers.any { trigger -> trigger.type == "MANUAL" }
+
+                        if (isManualWorkflow) {
+                            Log.d(TAG, "🤝 Manual workflow disabled - restoring previous state")
+
+                            val context = getApplication<Application>().applicationContext
+                            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                            val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+
+                            // ✅ RESTORE PREVIOUS RINGER MODE (not just normal)
+                            val previousRingerMode = prefs.getInt("previous_ringer_mode", AudioManager.RINGER_MODE_NORMAL)
+                            audioManager.ringerMode = previousRingerMode
+                            Log.d(TAG, "🔊 Restored previous ringer mode: $previousRingerMode")
+
+                            // ✅ RESTORE PREVIOUS DND STATE
+                            val previousDndState = prefs.getBoolean("previous_dnd_state", false)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                try {
+                                    if (notificationManager.isNotificationPolicyAccessGranted) {
+                                        val targetFilter = if (previousDndState) {
+                                            NotificationManager.INTERRUPTION_FILTER_PRIORITY
+                                        } else {
+                                            NotificationManager.INTERRUPTION_FILTER_ALL
+                                        }
+                                        notificationManager.setInterruptionFilter(targetFilter)
+                                        Log.d(TAG, "🔔 Restored previous DND state: $previousDndState")
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "❌ Error restoring DND state: ${e.message}")
+                                }
+                            }
+
+                            // Clear manual meeting mode flag
+                            prefs.edit()
+                                .putBoolean("manual_meeting_mode", false)
+                                .apply()
+
+                            Log.d(TAG, "✅ Previous state fully restored")
+                        }
+                    }
+                }
+
+                override fun onWorkflowError(error: String) {
+                    Log.e(TAG, "❌ Error loading workflow for cleanup: $error")
+                }
+            })
+
+            // Cancel alarms
             AlarmScheduler.cancelWorkflowAlarms(
                 getApplication<Application>().applicationContext,
                 workflowId
             )
             Log.d(TAG, "⏰ Cancelled alarms for disabled workflow $workflowId")
-        } else {
-            // Re-enable: need to reschedule
-            repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
-                override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
-                    workflow?.let {
-                        AlarmScheduler.scheduleWorkflow(
-                            getApplication<Application>().applicationContext,
-                            it
-                        )
-                        Log.d(TAG, "⏰ Rescheduled alarms for enabled workflow $workflowId")
-                    }
-                }
-
-                override fun onWorkflowError(error: String) {
-                    Log.e(TAG, "Error rescheduling alarms: $error")
-                }
-            })
         }
 
+        // ✅ Update database
         repository.updateWorkflowEnabled(workflowId, enabled, object : WorkflowRepository.UpdateCallback {
             override fun onUpdateComplete(success: Boolean) {
                 if (success) {
@@ -469,19 +572,23 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                     val msg = "Workflow ${if (enabled) "enabled" else "disabled"}"
                     _successMessage.postValue(msg)
                     callback?.onSuccess(msg)
+                    Log.d(TAG, "✅ $msg successfully")
                 } else {
                     val error = "Toggle failed"
                     _errorMessage.postValue(error)
                     callback?.onError(error)
+                    Log.e(TAG, "❌ $error")
                 }
             }
 
             override fun onUpdateError(error: String) {
                 _errorMessage.postValue(error)
                 callback?.onError(error)
+                Log.e(TAG, "❌ Update error: $error")
             }
         })
     }
+
 
     fun getWorkflowById(workflowId: Long, callback: WorkflowByIdCallback) {
         if (workflowId <= 0) {
@@ -775,9 +882,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             "TIME" -> {
                 val time = template.config["time"] as? String ?: "00:00"
                 val daysString = template.config["days"] as? String ?: ""
-                val days = if (daysString.isBlank()) emptyList()
-                else daysString.split(",").map { it.trim() }
-
+                val days = if (daysString.isBlank()) emptyList() else daysString.split(",").map { it.trim() }
                 TriggerHelpers.createTimeTrigger(time, days)
             }
             "LOCATION" -> {
@@ -799,7 +904,6 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                 }
                 val triggerOnEntry = template.config["triggerOnEntry"] as? Boolean ?: true
                 val triggerOnExit = template.config["triggerOnExit"] as? Boolean ?: false
-
                 TriggerHelpers.createLocationTrigger(
                     locationName, latitude, longitude, radius, triggerOnEntry, triggerOnExit
                 )
@@ -807,16 +911,24 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             "WIFI" -> {
                 val ssid = template.config["ssid"] as? String
                 val state = template.config["state"] as? String ?: "connected"
-
                 TriggerHelpers.createWifiTrigger(ssid, state)
             }
             "BLUETOOTH" -> {
                 val deviceAddress = template.config["deviceAddress"] as? String ?: ""
                 val deviceName = template.config["deviceName"] as? String
-
                 TriggerHelpers.createBluetoothTrigger(deviceAddress, deviceName)
             }
-            else -> throw IllegalArgumentException("Unknown trigger type: ${template.type}")
+            "MANUAL" -> {
+                // ✅ FIXED: Added support for MANUAL trigger type
+                // Manual triggers are user-activated - create a simple trigger with MANUAL type
+                Trigger(
+                    type = "MANUAL",
+                    value = template.config["type"] as? String ?: "quick_action"
+                )
+            }
+            else -> {
+                throw IllegalArgumentException("Unknown trigger type: ${template.type}")
+            }
         }
     }
 

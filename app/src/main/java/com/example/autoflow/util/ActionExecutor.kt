@@ -538,32 +538,86 @@ object ActionExecutor {
     private fun setSoundMode(context: Context, mode: String): Boolean {
         return try {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-            // Check Do Not Disturb permission
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                if (!notificationManager.isNotificationPolicyAccessGranted) {
-                    Log.w(TAG, "⚠️ Do Not Disturb permission not granted")
-                    return false
+            when (mode.lowercase()) {
+                "silent" -> {
+                    // ✅ SILENT MODE: Only mute ringer, keep notifications visible
+                    audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
+                    Log.d(TAG, "📴 Silent mode activated - Sound muted, notifications still visible")
+                }
+
+                "dnd" -> {
+                    // ✅ DND MODE: Complete Do Not Disturb with notification blocking
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        if (!notificationManager.isNotificationPolicyAccessGranted) {
+                            Log.w(TAG, "🔕 DND permission not granted, opening settings")
+                            // Open DND permission settings
+                            val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(intent)
+                            return false
+                        }
+
+                        // Set complete DND mode
+                        audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
+
+                        // Block all notifications
+                        val policy = NotificationManager.Policy(
+                            0, // No calls allowed
+                            0, // No messages allowed
+                            NotificationManager.Policy.PRIORITY_CATEGORY_MEDIA // Allow media only
+                        )
+                        notificationManager.setNotificationPolicy(policy)
+
+                        // Enable DND mode
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                            notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
+                        }
+
+                        Log.d(TAG, "🔕 Complete DND mode activated - Sound muted + notifications blocked")
+                    } else {
+                        // Fallback for older Android versions
+                        audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
+                        Log.d(TAG, "🔕 DND mode activated (legacy)")
+                    }
+                }
+
+                "vibrate" -> {
+                    // ✅ VIBRATE MODE: Vibration only
+                    audioManager.ringerMode = AudioManager.RINGER_MODE_VIBRATE
+                    Log.d(TAG, "📳 Vibrate mode activated")
+                }
+
+                "normal" -> {
+                    // ✅ NORMAL MODE: Restore everything
+                    audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
+
+                    // Restore notifications if coming from DND
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        if (notificationManager.isNotificationPolicyAccessGranted) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL)
+                            }
+                            Log.d(TAG, "🔊 Normal mode restored - Sound + notifications enabled")
+                        }
+                    } else {
+                        Log.d(TAG, "🔊 Normal mode restored")
+                    }
+                }
+
+                else -> {
+                    Log.w(TAG, "⚠️ Unknown sound mode: $mode, defaulting to normal")
+                    audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
                 }
             }
 
-            val ringerMode = when (mode.lowercase()) {
-                "silent" -> AudioManager.RINGER_MODE_SILENT
-                "vibrate" -> AudioManager.RINGER_MODE_VIBRATE
-                "normal" -> AudioManager.RINGER_MODE_NORMAL
-                else -> AudioManager.RINGER_MODE_NORMAL
-            }
-
-            audioManager.ringerMode = ringerMode
-            Log.d(TAG, "🔊 Sound mode set to: $mode")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Error setting sound mode", e)
+            Log.e(TAG, "❌ Error setting sound mode", e)
             false
         }
     }
-
     /**
      * ✅ Toggle WiFi (requires CHANGE_WIFI_STATE permission)
      */
