@@ -469,7 +469,7 @@ fun Dashboard(modifier: Modifier = Modifier) {
 
                                 // Permission granted, activate mode
                                 val actionValue = mode.defaultActions.firstOrNull()?.config?.get("value") as? String
-                                val success = soundModeManager.setRingerMode(actionValue ?: "DND")
+                                val success = soundModeManager.setSoundMode(actionValue ?: "DND")
 
                                 if (success) {
                                     snackbarHostState.showSnackbar(

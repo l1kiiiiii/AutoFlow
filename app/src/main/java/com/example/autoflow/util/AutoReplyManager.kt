@@ -3,6 +3,7 @@ package com.example.autoflow.util
 import android.Manifest
 import android.app.NotificationManager
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.telephony.SmsManager
@@ -12,6 +13,10 @@ import androidx.core.app.NotificationCompat
 import com.example.autoflow.data.AppDatabase
 import kotlinx.coroutines.*
 import android.provider.CallLog
+import com.example.autoflow.data.WorkflowEntity
+import com.example.autoflow.data.toActions
+import com.example.autoflow.model.Action
+import java.util.Calendar
 
 
 class AutoReplyManager private constructor(private val context: Context) {
@@ -21,6 +26,12 @@ class AutoReplyManager private constructor(private val context: Context) {
 
     companion object {
         private const val TAG = "AutoReplyManager"
+        private const val PREF_NAME = "autoflow_autoreply"
+        private const val KEY_AUTO_REPLY_ENABLED = "auto_reply_enabled"
+        private const val KEY_AUTO_REPLY_MESSAGE = "auto_reply_message"
+        private const val KEY_MEETING_MODE_ONLY = "meeting_mode_only"
+        private const val KEY_LAST_REPLY_TIME = "last_reply_time"
+        private const val REPLY_COOLDOWN_MS = 300000 // 5 minutes
 
         @Volatile
         private var INSTANCE: AutoReplyManager? = null
@@ -31,7 +42,175 @@ class AutoReplyManager private constructor(private val context: Context) {
             }
         }
     }
+    private val prefs: SharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+    suspend fun shouldAutoReply(): Boolean {
+        try {
+            // 1. Check if auto-reply is enabled
+            if (!isAutoReplyEnabled()) {
+                Log.d(TAG, "❌ Auto-reply is disabled")
+                return false
+            }
 
+            // 2. Check if we're in meeting mode only setting
+            if (isMeetingModeOnly()) {
+                // 3. Check if we're currently in an active meeting mode workflow
+                if (!isCurrentlyInMeetingMode()) {
+                    Log.d(TAG, "❌ Meeting mode only enabled, but not currently in meeting mode")
+                    return false
+                }
+            }
+
+            // 4. Check DND status (additional condition)
+            if (!isDndModeActive() && isMeetingModeOnly()) {
+                Log.d(TAG, "❌ Meeting mode active but DND not enabled")
+                return false
+            }
+
+            Log.d(TAG, "✅ Auto-reply conditions met")
+            return true
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error checking auto-reply conditions", e)
+            return false
+        }
+    }
+    private fun isDndModeActive(): Boolean {
+        return try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                val currentFilter = notificationManager.currentInterruptionFilter
+                currentFilter == NotificationManager.INTERRUPTION_FILTER_NONE ||
+                        currentFilter == NotificationManager.INTERRUPTION_FILTER_PRIORITY
+            } else {
+                // For older versions, assume DND is active if we're in this function
+                true
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error checking DND status", e)
+            false
+        }
+    }
+    private suspend fun isCurrentlyInMeetingMode(): Boolean {
+        return try {
+            val database = AppDatabase.getDatabase(context)
+            val workflows = database.workflowDao().getAllWorkflowsSync()
+
+            // Check if any meeting-related workflow is currently active
+            val activeMeetingWorkflows = workflows.filter { workflow ->
+                workflow.isEnabled && isMeetingModeWorkflow(workflow.workflowName, workflow.toActions())
+            }
+
+            // Additional check: Are we in a location/time that suggests meeting mode?
+            val isInMeetingContext = checkMeetingContext(activeMeetingWorkflows)
+
+            Log.d(TAG, "📅 Meeting mode workflows active: ${activeMeetingWorkflows.size}")
+            Log.d(TAG, "📍 In meeting context: $isInMeetingContext")
+
+            activeMeetingWorkflows.isNotEmpty() && isInMeetingContext
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error checking meeting mode status", e)
+            false
+        }
+    }
+    private fun isMeetingModeWorkflow(workflowName: String, actions: List<Action>): Boolean {
+        val meetingKeywords = listOf("meeting", "conference", "office", "work", "presentation", "call")
+        val nameContainsMeetingKeyword = meetingKeywords.any {
+            workflowName.contains(it, ignoreCase = true)
+        }
+
+        // Check if workflow has DND/Silent actions (common in meeting workflows)
+        val hasSoundModeAction = actions.any { action ->
+            action.type == "SET_SOUND_MODE" &&
+                    (action.value == "DND" || action.value == "Silent")
+        }
+
+        return nameContainsMeetingKeyword || hasSoundModeAction
+    }
+    private fun isInCooldown(phoneNumber: String): Boolean {
+        val lastReplyTime = prefs.getLong("${KEY_LAST_REPLY_TIME}_$phoneNumber", 0)
+        return System.currentTimeMillis() - lastReplyTime < REPLY_COOLDOWN_MS
+    }
+
+    private fun updateLastReplyTime(phoneNumber: String) {
+        prefs.edit().putLong("${KEY_LAST_REPLY_TIME}_$phoneNumber", System.currentTimeMillis()).apply()
+    }
+    private fun sendSms(phoneNumber: String, message: String) {
+        try {
+            val smsManager = SmsManager.getDefault()
+            smsManager.sendTextMessage(phoneNumber, null, message, null, null)
+            Log.d(TAG, "📤 SMS sent to $phoneNumber")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to send SMS to $phoneNumber", e)
+            throw e
+        }
+    }
+    private suspend fun checkMeetingContext(workflows: List<WorkflowEntity>): Boolean {
+        // This would check current location against workflow triggers
+        // and current time against time triggers
+        // For now, simplified version:
+
+        val currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val isBusinessHours = currentHour in 9..17 // 9 AM to 5 PM
+
+        // You can enhance this with actual location checking
+        return isBusinessHours
+    }
+    suspend fun handleMissedCall(phoneNumber: String) {
+        if (!shouldAutoReply()) {
+            Log.d(TAG, "⏭️ Auto-reply conditions not met, skipping")
+            return
+        }
+
+        // Cooldown check
+        if (isInCooldown(phoneNumber)) {
+            Log.d(TAG, "⏱️ Cooldown active for $phoneNumber, skipping")
+            return
+        }
+
+        try {
+            val message = getAutoReplyMessage()
+            sendSms(phoneNumber, message)
+            updateLastReplyTime(phoneNumber)
+
+            // Log for debugging
+            Log.d(TAG, "✅ Auto-reply sent to $phoneNumber: $message")
+
+            // Show notification
+            NotificationHelper.sendNotification(
+                context = context,
+                title = "📱 Auto-Reply Sent",
+                message = "Replied to $phoneNumber with meeting message",
+                priority = androidx.core.app.NotificationCompat.PRIORITY_LOW
+            )
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error sending auto-reply", e)
+        }
+    }fun getAutoReplyMessage(): String {
+        return prefs.getString(KEY_AUTO_REPLY_MESSAGE,
+            "I'm currently in a meeting and cannot take your call. I'll get back to you as soon as possible."
+        ) ?: "I'm currently in a meeting. Will call you back soon."
+    }
+
+    fun setAutoReplyEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_REPLY_ENABLED, enabled).apply()
+        Log.d(TAG, "🔄 Auto-reply enabled: $enabled")
+    }
+
+    fun isAutoReplyEnabled(): Boolean = prefs.getBoolean(KEY_AUTO_REPLY_ENABLED, false)
+
+    fun setMeetingModeOnly(meetingOnly: Boolean) {
+        prefs.edit().putBoolean(KEY_MEETING_MODE_ONLY, meetingOnly).apply()
+        Log.d(TAG, "🏢 Meeting mode only: $meetingOnly")
+    }
+
+    fun isMeetingModeOnly(): Boolean = prefs.getBoolean(KEY_MEETING_MODE_ONLY, true)
+
+    fun setAutoReplyMessage(message: String) {
+        prefs.edit().putString(KEY_AUTO_REPLY_MESSAGE, message).apply()
+        Log.d(TAG, "💬 Auto-reply message updated: $message")
+    }
     fun handleIncomingCall(phoneNumber: String?) {
         if (phoneNumber.isNullOrBlank()) {
             Log.d(TAG, "⚠️ Phone number not available, skipping auto-reply")
@@ -127,7 +306,6 @@ class AutoReplyManager private constructor(private val context: Context) {
             notificationManager.addSmsReply(phoneNumber, "Send failed", false)
         }
     }
-    // Replace the existing isMeetingModeActive() method in AutoReplyManager.kt
     private suspend fun isMeetingModeActive(): Boolean = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "🔍 Checking if meeting mode is active...")
@@ -165,17 +343,40 @@ class AutoReplyManager private constructor(private val context: Context) {
                 val database = AppDatabase.getDatabase(context)
                 val workflows = database.workflowDao().getAllEnabledSync()
 
+                val meetingKeywords = listOf(
+                    "meeting",
+                    "conference",
+                    "call",
+                    "presentation",
+                    "interview",
+                    "work meeting",
+                    "business"
+                )
+                val excludeKeywords = listOf(
+                    "sleep",
+                    "class",
+                    "home",
+                    "study",
+                    "night",
+                    "bedtime",
+                    "driving",
+                    "gym",
+                    "work mode",
+                    "focus"
+                )
+
                 val meetingWorkflows = workflows.filter { workflow ->
-                    val isMeetingWorkflow = workflow.workflowName.contains("meeting", ignoreCase = true) ||
-                            workflow.workflowName.contains("mode", ignoreCase = true) ||
-                            workflow.workflowName.contains("dnd", ignoreCase = true) ||
-                            workflow.workflowName.contains("silent", ignoreCase = true)
+                    val workflowName = workflow.workflowName.lowercase()
 
-                    val hasDndAction = workflow.actionDetails.contains("DND") ||
-                            workflow.actionDetails.contains("Silent") ||
-                            workflow.actionDetails.contains("SET_SOUND_MODE")
+                    val isExcluded = excludeKeywords.any { keyword ->
+                        workflowName.contains(keyword)
+                    }
+                    val isMeeting = meetingKeywords.any { keyword ->
+                        workflowName.contains(keyword)
+                    }
 
-                    isMeetingWorkflow || hasDndAction
+                    // Only count if it's enabled, IS a meeting, and IS NOT excluded
+                    workflow.isEnabled && isMeeting && !isExcluded
                 }
 
                 Log.d(TAG, "📊 Found ${meetingWorkflows.size} potential meeting workflows")
@@ -274,15 +475,13 @@ class AutoReplyManager private constructor(private val context: Context) {
         // Check if we should only reply during DND/meeting mode
         val onlyInDnd = prefs.getBoolean("auto_reply_only_in_dnd", true)
 
-        if (onlyInDnd && !isInDndMode()) {
-            Log.d(TAG, "⚠️ Not in DND mode, skipping auto-reply")
-            return false
-        }
-
-        // Check if any "meeting mode" workflow is currently active
-        if (onlyInDnd && !isMeetingModeActive()) {
-            Log.d(TAG, "⚠️ No meeting mode workflow active")
-            return false
+        if (onlyInDnd) {
+            // Only check if actual meeting mode is active, not DND status
+            if (!isMeetingModeActive()) {
+                Log.d(TAG, "⚠️ Meeting mode is not active, skipping auto-reply")
+                return false
+            }
+            // If we are here, meeting mode is active, so proceed.
         }
 
         Log.d(TAG, "✅ Universal auto-reply conditions met")
@@ -489,15 +688,13 @@ class AutoReplyManager private constructor(private val context: Context) {
         // Check if we should only reply during DND/meeting mode
         val onlyInDnd = prefs.getBoolean(Constants.PREF_AUTO_REPLY_ONLY_IN_DND, true)
 
-        if (onlyInDnd && !isInDndMode()) {
-            Log.d(TAG, "⚠️ Not in DND mode, auto-reply restricted")
-            return false
-        }
-
-        // Check if any "meeting mode" workflow is currently active
-        if (onlyInDnd && !isMeetingModeActive()) {
-            Log.d(TAG, "⚠️ No meeting mode workflow active")
-            return false
+        if (onlyInDnd) {
+            // Only check if actual meeting mode is active, not DND status
+            if (!isMeetingModeActive()) {
+                Log.d(TAG, "⚠️ Meeting mode is not active, skipping auto-reply")
+                return false
+            }
+            // If we are here, meeting mode is active, so proceed.
         }
 
         return true

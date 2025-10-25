@@ -28,6 +28,28 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+//  meeting mode state tracking
+object MeetingModeTracker {
+    private const val PREF_NAME = "meeting_mode_state"
+    private const val KEY_IS_MEETING_ACTIVE = "is_meeting_active"
+    private const val KEY_MEETING_START_TIME = "meeting_start_time"
+
+    fun setMeetingModeActive(context: Context, active: Boolean) {
+        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putBoolean(KEY_IS_MEETING_ACTIVE, active)
+            .putLong(KEY_MEETING_START_TIME, if (active) System.currentTimeMillis() else 0)
+            .apply()
+
+        Log.d("MeetingModeTracker", "🏢 Meeting mode: $active")
+    }
+
+    fun isMeetingModeActive(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_IS_MEETING_ACTIVE, false)
+    }
+}
+
 object ActionExecutor {
 
     private const val TAG = "ActionExecutor"
@@ -548,7 +570,7 @@ object ActionExecutor {
                 }
 
                 "dnd" -> {
-                    // ✅ DND MODE: Complete Do Not Disturb with notification blocking
+                    //  DND MODE: Complete Do Not Disturb with notification blocking
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         if (!notificationManager.isNotificationPolicyAccessGranted) {
                             Log.w(TAG, "🔕 DND permission not granted, opening settings")
@@ -556,7 +578,7 @@ object ActionExecutor {
                             val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
                             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             context.startActivity(intent)
-                            return false
+                            return false // <-- It fails here
                         }
 
                         // Set complete DND mode

@@ -162,6 +162,7 @@ import com.example.autoflow.util.TriggerParser
 import kotlinx.coroutines.Dispatchers
 import androidx.compose.material3.*
 import androidx.compose.ui.text.font.FontFamily
+import com.example.autoflow.util.AutoReplyManager
 import kotlinx.coroutines.withContext
 
 
@@ -3337,109 +3338,174 @@ private fun validateScript(scriptCode: String) {
     }
 }
 
+// ✅ Auto-Reply Settings Card for TaskCreationScreen
 @Composable
 fun AutoReplySettingsCard(
-    workflowViewModel: WorkflowViewModel,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE) }
+    val autoReplyManager = remember { AutoReplyManager.getInstance(context) }
 
-    var autoReplyEnabled by remember {
-        mutableStateOf(prefs.getBoolean(Constants.PREF_AUTO_REPLY_ENABLED, false))
-    }
-    var autoReplyMessage by remember {
-        mutableStateOf(prefs.getString(Constants.PREF_AUTO_REPLY_MESSAGE, Constants.DEFAULT_AUTO_REPLY_MESSAGE) ?: Constants.DEFAULT_AUTO_REPLY_MESSAGE)
-    }
-    var onlyInDnd by remember {
-        mutableStateOf(prefs.getBoolean(Constants.PREF_AUTO_REPLY_ONLY_IN_DND, true))
-    }
+    var autoReplyEnabled by remember { mutableStateOf(autoReplyManager.isAutoReplyEnabled()) }
+    var meetingModeOnly by remember { mutableStateOf(autoReplyManager.isMeetingModeOnly()) }
+    var autoReplyMessage by remember { mutableStateOf(autoReplyManager.getAutoReplyMessage()) }
+    var showMessageEditor by remember { mutableStateOf(false) }
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
+        )
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = "Auto-Reply SMS",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    Icons.Default.PhoneCallback,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    "Auto-Reply SMS",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
 
-            Text(
-                text = "Automatically reply to callers when busy",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            // Enable/Disable toggle
+            // Enable/Disable Toggle
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Enable Auto-Reply")
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Enable Auto-Reply",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        "Automatically reply to missed calls with SMS",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Switch(
                     checked = autoReplyEnabled,
                     onCheckedChange = { enabled ->
                         autoReplyEnabled = enabled
-                        workflowViewModel.toggleAutoReply(enabled, autoReplyMessage)
-
-                        // Save to preferences
-                        prefs.edit()
-                            .putBoolean(Constants.PREF_AUTO_REPLY_ENABLED, enabled)
-                            .apply()
+                        autoReplyManager.setAutoReplyEnabled(enabled)
                     }
                 )
             }
 
             if (autoReplyEnabled) {
-                // Message input
-                OutlinedTextField(
-                    value = autoReplyMessage,
-                    onValueChange = { message ->
-                        autoReplyMessage = message
-                        prefs.edit()
-                            .putString(Constants.PREF_AUTO_REPLY_MESSAGE, message)
-                            .apply()
-                    },
-                    label = { Text("Auto-Reply Message") },
-                    placeholder = { Text(Constants.DEFAULT_AUTO_REPLY_MESSAGE) },
-                    modifier = Modifier.fillMaxWidth(),
-                    maxLines = 3
-                )
+                HorizontalDivider()
 
-                // Only in DND mode toggle
+                // Meeting Mode Only Toggle
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Only during DND/Meeting")
                         Text(
-                            text = "Reply only when Do Not Disturb is active",
+                            "Meeting Mode Only",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            "Only reply during active meeting workflows",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Switch(
-                        checked = onlyInDnd,
-                        onCheckedChange = { enabled ->
-                            onlyInDnd = enabled
-                            prefs.edit()
-                                .putBoolean(Constants.PREF_AUTO_REPLY_ONLY_IN_DND, enabled)
-                                .apply()
+                        checked = meetingModeOnly,
+                        onCheckedChange = { meetingOnly ->
+                            meetingModeOnly = meetingOnly
+                            autoReplyManager.setMeetingModeOnly(meetingOnly)
                         }
                     )
+                }
+
+                // Message Editor
+                OutlinedButton(
+                    onClick = { showMessageEditor = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Edit Auto-Reply Message")
+                }
+
+                // Preview Message
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            "Current Message:",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            autoReplyMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
     }
+
+    // Message Editor Dialog
+    if (showMessageEditor) {
+        var tempMessage by remember { mutableStateOf(autoReplyMessage) }
+
+        AlertDialog(
+            onDismissRequest = { showMessageEditor = false },
+            title = { Text("Edit Auto-Reply Message") },
+            text = {
+                OutlinedTextField(
+                    value = tempMessage,
+                    onValueChange = { tempMessage = it },
+                    label = { Text("Message") },
+                    placeholder = { Text("Enter your auto-reply message...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 4
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        autoReplyMessage = tempMessage
+                        autoReplyManager.setAutoReplyMessage(tempMessage)
+                        showMessageEditor = false
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMessageEditor = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
+
 @Composable
 fun LocationTriggerSection(
     isLocationEnabled: Boolean,

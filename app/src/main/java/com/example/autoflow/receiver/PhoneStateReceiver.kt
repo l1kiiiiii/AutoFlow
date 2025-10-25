@@ -20,40 +20,48 @@ class PhoneStateReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "PhoneStateReceiver"
     }
+    private val coroutineScope = CoroutineScope(Dispatchers.IO)
 
     override fun onReceive(context: Context, intent: Intent) {
-        Log.d(TAG, "🔥 PhoneStateReceiver.onReceive() called")
-        Log.d(TAG, "   Action: ${intent.action}")
+        try {
+            val state = intent.getStringExtra(TelephonyManager.EXTRA_STATE)
+            val phoneNumber = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
 
-        // Only handle phone state changes
-        if (intent.action != TelephonyManager.ACTION_PHONE_STATE_CHANGED) {
-            Log.d(TAG, "⚠️ Not a phone state change, ignoring")
-            return
-        }
+            Log.d(TAG, "📞 Phone state changed: $state, Number: $phoneNumber")
 
-        val state = intent.getStringExtra(TelephonyManager.EXTRA_STATE)
-        val phoneNumber = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
+            when (state) {
+                TelephonyManager.EXTRA_STATE_RINGING -> {
+                    Log.d(TAG, "📱 Incoming call from: $phoneNumber")
+                    // Call is ringing - we can prepare for potential auto-reply
+                }
 
-        Log.d(TAG, "📞 Phone state changed:")
-        Log.d(TAG, "   State: $state")
-        Log.d(TAG, "   Number: ${phoneNumber ?: "Unknown/Private"}")
+                TelephonyManager.EXTRA_STATE_IDLE -> {
+                    // Call ended - check if we need to auto-reply
+                    phoneNumber?.let { number ->
+                        Log.d(TAG, "📵 Call ended, checking auto-reply conditions for: $number")
 
-        when (state) {
-            TelephonyManager.EXTRA_STATE_RINGING -> {
-                Log.d(TAG, "📞 INCOMING CALL DETECTED - Processing for auto-reply")
+                        coroutineScope.launch {
+                            val autoReplyManager = AutoReplyManager.getInstance(context)
 
-                // ✅ UNIVERSAL APPROACH: Handle ALL calls regardless of number availability
-                handleAnyIncomingCall(context, phoneNumber)
+                            // ✅ Only auto-reply if in meeting mode context
+                            if (autoReplyManager.shouldAutoReply()) {
+                                Log.d(TAG, "✅ Meeting mode active, sending auto-reply")
+                                autoReplyManager.handleMissedCall(number)
+                            } else {
+                                Log.d(TAG, "⏭️ Not in meeting mode, skipping auto-reply")
+                            }
+                        }
+                    }
+                }
+
+                TelephonyManager.EXTRA_STATE_OFFHOOK -> {
+                    Log.d(TAG, "📞 Call answered")
+                    // Call was answered - no auto-reply needed
+                }
             }
-            TelephonyManager.EXTRA_STATE_OFFHOOK -> {
-                Log.d(TAG, "📞 Call answered")
-            }
-            TelephonyManager.EXTRA_STATE_IDLE -> {
-                Log.d(TAG, "📞 Call ended/idle")
-            }
-            else -> {
-                Log.d(TAG, "📞 Unknown state: $state")
-            }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error in PhoneStateReceiver", e)
         }
     }
     private fun handleAnyIncomingCall(context: Context, phoneNumber: String?) {
