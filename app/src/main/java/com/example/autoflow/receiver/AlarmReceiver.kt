@@ -92,7 +92,7 @@ class AlarmReceiver : BroadcastReceiver() {
                                 CoroutineScope(Dispatchers.Main).launch {
                                     Toast.makeText(
                                         context,
-                                        "Workflow '${w.workflowName}' executed ($successCount/$${actions.size} actions)",
+                                        "Workflow '${w.workflowName}' executed ($successCount/${actions.size} actions)",
                                         Toast.LENGTH_SHORT
                                     ).show()
                                 }

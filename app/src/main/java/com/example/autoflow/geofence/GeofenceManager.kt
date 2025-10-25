@@ -33,14 +33,16 @@ object GeofenceManager {
         triggerOnEntry: Boolean = true,
         triggerOnExit: Boolean = false
     ): Boolean {
+        // ✅ FIXED: Validate workflow ID FIRST before any other operations
+        if (workflowId <= 0L) {
+            Log.e(TAG, "❌ Invalid workflowId ($workflowId). Aborting geofence registration.")
+            return false
+        }
+
         // Check permissions
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
         ) {
             Log.e(TAG, "❌ Location permission not granted")
-            return false
-        }
-        if (workflowId <= 0L) {
-            Log.e(TAG, "❌ Invalid workflowId ($workflowId). Aborting geofence registration.")
             return false
         }
 
