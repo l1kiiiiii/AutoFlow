@@ -82,8 +82,8 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             override fun onWorkflowsLoaded(workflows: MutableList<WorkflowEntity>) {
                 Log.d(TAG, "✅ Loaded ${workflows.size} workflows from database")
                 workflows.forEach {
-                    Log.d(TAG, "  - ${it.workflowName} (ID: ${it.id})")
-                }
+                    Log.d(TAG, " - ${it.workflowName} (ID: ${it.id})")
+                }  // ← ADD THIS CLOSING BRACE
                 _workflows.postValue(workflows)
             }
 

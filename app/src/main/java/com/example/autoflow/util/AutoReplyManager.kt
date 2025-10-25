@@ -337,6 +337,7 @@ class AutoReplyManager private constructor(private val context: Context) {
             notificationManager.addSmsReply(phoneNumber, "Send failed", false)
         }
     }
+    
     private suspend fun isMeetingModeActive(): Boolean = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "🔍 Checking if meeting mode is active...")

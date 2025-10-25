@@ -5,6 +5,7 @@ import android.content.Intent
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import com.example.autoflow.policy.BlockPolicy
+import com.example.autoflow.blocker.BlockActivity
 
 class AppBlockAccessibilityService : AccessibilityService() {
 
@@ -27,10 +28,9 @@ class AppBlockAccessibilityService : AccessibilityService() {
             packageName == this.packageName) {
             return
         }
-
         Log.d(TAG, "📱 App launched: $packageName")
 
-        // ✅ FIXED: Use getBlockedPackages() and check if blocking is enabled
+        //  Use getBlockedPackages() and check if blocking is enabled
         if (BlockPolicy.isBlockingEnabled(this)) {
             val blockedPackages = BlockPolicy.getBlockedPackages(this)
 

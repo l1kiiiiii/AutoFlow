@@ -55,7 +55,10 @@ data class WorkflowEntity(
             triggerLogic: String = "AND"
         ): WorkflowEntity? {
             return try {
-                Log.d(TAG, "🔨 Creating WorkflowEntity with ${triggers.size} triggers and ${actions.size} actions")
+                Log.d(
+                    TAG,
+                    "🔨 Creating WorkflowEntity with ${triggers.size} triggers and ${actions.size} actions"
+                )
 
                 // Build triggers JSON using base Trigger properties
                 val triggersJson = JSONArray()
@@ -74,7 +77,10 @@ data class WorkflowEntity(
                                     put(key, valueJson.get(key))
                                 }
                             } catch (e: Exception) {
-                                Log.w(TAG, "Could not parse trigger value as JSON: ${trigger.value}")
+                                Log.w(
+                                    TAG,
+                                    "Could not parse trigger value as JSON: ${trigger.value}"
+                                )
                             }
                         }
                     }
@@ -106,13 +112,13 @@ data class WorkflowEntity(
                 )
 
                 Log.d(TAG, "✅ WorkflowEntity created successfully")
-                Log.d(TAG, "   Triggers JSON: ${entity.triggerDetails}")
-                Log.d(TAG, "   Actions JSON: ${entity.actionDetails}")
-                entity
+                Log.d(TAG, " Triggers JSON: ${entity.triggerDetails}")
+                Log.d(TAG, " Actions JSON: ${entity.actionDetails}")
+                entity  // ← ONLY ONE RETURN STATEMENT NEEDED HERE
 
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error creating WorkflowEntity", e)
-                null
+                null  // ← AND ONE IN THE CATCH BLOCK
             }
         }
     }
