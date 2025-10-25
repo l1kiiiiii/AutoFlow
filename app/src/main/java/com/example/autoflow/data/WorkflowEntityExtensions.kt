@@ -38,10 +38,10 @@ fun WorkflowEntity.toActions(): List<Action> {
                     priority = json.optString("priority")
                 )
 
-                // ✅ Set value if it exists
+                //  Set value if it exists
                 json.optString("value").takeIf { it.isNotEmpty() }?.let { action.value = it }
 
-                // ✅ Set duration if it exists
+                //   Set duration if it exists
                 if (json.has("duration")) {
                     action.duration = json.optLong("duration")
                 }
