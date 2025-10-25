@@ -99,7 +99,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -113,7 +112,6 @@ import com.example.autoflow.geofence.GeofenceManager
 import com.example.autoflow.model.Action
 import com.example.autoflow.model.Trigger
 import com.example.autoflow.ui.theme.AutoFlowTheme
-import com.example.autoflow.util.AlarmScheduler
 import com.example.autoflow.util.Constants
 import com.example.autoflow.viewmodel.WorkflowViewModel
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -123,7 +121,6 @@ import com.google.android.gms.tasks.CancellationToken
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.gms.tasks.OnTokenCanceledListener
 import kotlinx.coroutines.launch
-import org.json.JSONException
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -137,7 +134,6 @@ import com.example.autoflow.data.toTriggers
 import com.example.autoflow.ui.components.AppSelectorComposable
 import android.content.Intent
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Surface
@@ -154,8 +150,8 @@ import com.example.autoflow.model.SavedLocation
 import com.example.autoflow.model.SavedWiFiNetwork
 import com.example.autoflow.viewmodel.WiFiViewModel
 import com.example.autoflow.viewmodel.BluetoothViewModel
-import android.widget.Toast
 import android.net.wifi.WifiManager
+import android.widget.Toast
 import androidx.compose.material3.Switch
 import androidx.compose.material.icons.filled.*
 import androidx.compose.foundation.background
@@ -163,8 +159,10 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.foundation.layout.PaddingValues
 import com.example.autoflow.model.TriggerHelpers
 import com.example.autoflow.util.TriggerParser
-
-
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.material3.*
+import androidx.compose.ui.text.font.FontFamily
+import kotlinx.coroutines.withContext
 
 
 /**
@@ -1468,6 +1466,14 @@ private fun LocationTriggerContent(
     var currentAddress by remember { mutableStateOf<String?>(null) }
     var showLocationPermissionDialog by remember { mutableStateOf(false) }
 
+    // ✅ ADD: Location ViewModel and Save states
+    val locationViewModel: LocationViewModel = viewModel()
+    val savedLocations by locationViewModel.allLocations.observeAsState(emptyList())
+    var showSaveLocationDialog by remember { mutableStateOf(false) }
+    var isSavingLocation by remember { mutableStateOf(false) }
+    var showLocationDropdown by remember { mutableStateOf(false) }
+    var selectedSavedLocation by remember { mutableStateOf<SavedLocation?>(null) }
+
     // Radius text field state
     var radiusText by remember { mutableStateOf(radiusValue.roundToInt().toString()) }
     var radiusError by remember { mutableStateOf<String?>(null) }
@@ -1489,12 +1495,17 @@ private fun LocationTriggerContent(
                 context = context,
                 fusedLocationClient = fusedLocationClient,
                 onLocationReceived = { lat, lng, address ->
-                    onLocationDetailsChange("$lat,$lng")
-                    currentAddress = address
-                    if (locationName.isEmpty()) {
-                        onLocationNameChange(address ?: "Current Location")
+                    if (isValidCoordinates(lat, lng)) {
+                        onLocationDetailsChange("$lat,$lng")
+                        currentAddress = address
+                        if (locationName.isEmpty()) {
+                            onLocationNameChange(address ?: "Current Location")
+                        }
+                        isLoadingLocation = false
+                    } else {
+                        locationError = "Invalid location detected: ($lat, $lng). Please try again."
+                        isLoadingLocation = false
                     }
-                    isLoadingLocation = false
                 },
                 onError = { error ->
                     locationError = error
@@ -1509,24 +1520,139 @@ private fun LocationTriggerContent(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Location Name Field
-        OutlinedTextField(
-            value = locationName,
-            onValueChange = onLocationNameChange,
-            label = { Text("Location Name") },
-            placeholder = { Text("Home, Office, etc.") },
-            modifier = Modifier.fillMaxWidth(),
-            leadingIcon = { Icon(Icons.Default.Home, null) },
-            supportingText = {
-                if (currentAddress != null) {
-                    Text(
-                        "Detected: $currentAddress",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
+
+        // ✅ ENHANCED: Location Name Field with Saved Location Dropdown
+        ExposedDropdownMenuBox(
+            expanded = showLocationDropdown,
+            onExpandedChange = { showLocationDropdown = it }
+        ) {
+            OutlinedTextField(
+                value = locationName,
+                onValueChange = { newValue ->
+                    onLocationNameChange(newValue)
+                    selectedSavedLocation = null // Clear selection when manually typing
+                },
+                label = { Text("Location Name") },
+                placeholder = { Text("Select saved or enter new") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(),
+                leadingIcon = {
+                    Icon(
+                        if (selectedSavedLocation != null) Icons.Default.Star else Icons.Default.Home,
+                        null,
+                        tint = if (selectedSavedLocation != null)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                },
+                trailingIcon = {
+                    Row {
+                        if (savedLocations.isNotEmpty()) {
+                            IconButton(onClick = { showLocationDropdown = !showLocationDropdown }) {
+                                Icon(
+                                    if (showLocationDropdown) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                    contentDescription = "Select saved location"
+                                )
+                            }
+                        }
+                    }
+                },
+                supportingText = {
+                    if (currentAddress != null) {
+                        Text(
+                            "Detected: $currentAddress",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            )
+
+            // Dropdown Menu with Saved Locations
+            ExposedDropdownMenu(
+                expanded = showLocationDropdown,
+                onDismissRequest = { showLocationDropdown = false }
+            ) {
+                if (savedLocations.isEmpty()) {
+                    DropdownMenuItem(
+                        text = {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    Icons.Default.LocationOn,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    "No saved locations",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        onClick = { /* Do nothing */ }
+                    )
+                } else {
+                    savedLocations.forEach { location ->
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        if (location.isFavorite) Icons.Filled.Star else Icons.Default.LocationOn,
+                                        contentDescription = null,
+                                        tint = if (location.isFavorite)
+                                            MaterialTheme.colorScheme.primary
+                                        else
+                                            MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            location.name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            "${String.format("%.4f", location.latitude)}, ${String.format("%.4f", location.longitude)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            },
+                            onClick = {
+                                selectedSavedLocation = location
+                                onLocationNameChange(location.name)
+                                onLocationDetailsChange("${location.latitude},${location.longitude}")
+                                onRadiusChange(location.radius.toFloat())
+                                showLocationDropdown = false
+                                Toast.makeText(context, "✓ Loaded: ${location.name}", Toast.LENGTH_SHORT).show()
+                            },
+                            leadingIcon = {
+                                if (selectedSavedLocation?.id == location.id) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        )
+                    }
                 }
             }
-        )
+        }
 
         // Coordinates Field with Auto-Detect Button
         Row(
@@ -1568,12 +1694,17 @@ private fun LocationTriggerContent(
                             context = context,
                             fusedLocationClient = fusedLocationClient,
                             onLocationReceived = { lat, lng, address ->
-                                onLocationDetailsChange("$lat,$lng")
-                                currentAddress = address
-                                if (locationName.isEmpty()) {
-                                    onLocationNameChange(address ?: "Current Location")
+                                if (isValidCoordinates(lat, lng)) {
+                                    onLocationDetailsChange("$lat,$lng")
+                                    currentAddress = address
+                                    if (locationName.isEmpty()) {
+                                        onLocationNameChange(address ?: "Current Location")
+                                    }
+                                    isLoadingLocation = false
+                                } else {
+                                    locationError = "Invalid location detected: ($lat, $lng). Please try again."
+                                    isLoadingLocation = false
                                 }
-                                isLoadingLocation = false
                             },
                             onError = { error ->
                                 locationError = error
@@ -1604,8 +1735,8 @@ private fun LocationTriggerContent(
             }
         }
 
-        // Location Preview Card
-        if (locationDetailsInput.isNotBlank()) {
+        // ✅ SAVE LOCATION SECTION - appears when location is ready
+        if (locationName.isNotBlank() && locationDetailsInput.isNotBlank() && isValidCoordinates(locationDetailsInput)) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -1613,27 +1744,64 @@ private fun LocationTriggerContent(
                 )
             ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Column {
-                        Text(
-                            "Location Set",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
                         )
-                        Text(
-                            locationDetailsInput,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Column {
+                            Text(
+                                locationName,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                locationDetailsInput,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "Radius: ${radiusValue.roundToInt()}m",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // ✅ SAVE LOCATION BUTTON
+                    OutlinedButton(
+                        onClick = {
+                            showSaveLocationDialog = true
+                        },
+                        enabled = !isSavingLocation,
+                        modifier = Modifier.height(48.dp)
+                    ) {
+                        if (isSavingLocation) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.Save,
+                                "Save Location",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Save")
                     }
                 }
             }
@@ -1641,8 +1809,7 @@ private fun LocationTriggerContent(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        //  UPDATED: Radius Input with Indoor Presets
-
+        // Radius Input Section
         Text(
             "Trigger Radius",
             style = MaterialTheme.typography.titleMedium,
@@ -1659,7 +1826,6 @@ private fun LocationTriggerContent(
                 value = radiusText,
                 onValueChange = { newValue ->
                     radiusText = newValue
-                    // Validate and update radius
                     val parsedValue = newValue.toIntOrNull()
                     when {
                         newValue.isEmpty() -> {
@@ -1689,7 +1855,6 @@ private fun LocationTriggerContent(
                 ),
                 keyboardActions = KeyboardActions(
                     onDone = {
-                        // Validate on done
                         val parsedValue = radiusText.toIntOrNull()
                         if (parsedValue != null && parsedValue in 10..5000) {
                             onRadiusChange(parsedValue.toFloat())
@@ -1710,7 +1875,7 @@ private fun LocationTriggerContent(
                 singleLine = true
             )
 
-            // ✅ UPDATED: Quick preset buttons with indoor options
+            // Quick preset buttons
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -1721,7 +1886,7 @@ private fun LocationTriggerContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                // ✅ NEW: Indoor/Small Space Presets Row
+                // Indoor/Small Space Presets
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -1752,9 +1917,7 @@ private fun LocationTriggerContent(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(2.dp))
-
-                // Standard Presets Row
+                // Standard Presets
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -1778,9 +1941,7 @@ private fun LocationTriggerContent(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(2.dp))
-
-                // Large Area Presets Row
+                // Large Area Presets
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -1809,7 +1970,7 @@ private fun LocationTriggerContent(
             }
         }
 
-        // Fine-tuned Slider for visual adjustment
+        // Fine-tuned Slider
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -1828,7 +1989,7 @@ private fun LocationTriggerContent(
                     radiusError = null
                 },
                 valueRange = 10f..5000f,
-                steps = 498, // More granular steps (10m increments)
+                steps = 498,
                 modifier = Modifier.fillMaxWidth(),
                 colors = SliderDefaults.colors(
                     thumbColor = MaterialTheme.colorScheme.primary,
@@ -1842,26 +2003,13 @@ private fun LocationTriggerContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    "10m",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "1km",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "2.5km",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "5km",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                listOf("10m", "1km", "2.5km", "5km").forEach { label ->
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
 
@@ -1971,171 +2119,41 @@ private fun LocationTriggerContent(
                 }
             }
         }
-        Spacer(modifier = Modifier.height(16.dp))
+    }
 
-        // SAVE LOCATION SECTION
-        // Add this RIGHT BEFORE the "Get Current Location" button in LocationTriggerContent
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-// ✅ PICK FROM SAVED LOCATIONS BUTTON
-        val locationViewModel: LocationViewModel = viewModel()
-        val savedLocations by locationViewModel.allLocations.observeAsState(emptyList())
-        var showLocationDropdown by remember { mutableStateOf(false) }
-        var selectedSavedLocation by remember { mutableStateOf<SavedLocation?>(null) }
-
-// Location Name with Dropdown
-        ExposedDropdownMenuBox(
-            expanded = showLocationDropdown,
-            onExpandedChange = { showLocationDropdown = it }
-        ) {
-            OutlinedTextField(
-                value = locationName,
-                onValueChange = { newValue ->
-                    onLocationNameChange(newValue)
-                    selectedSavedLocation = null // Clear selection when manually typing
-                },
-                label = { Text("Location Name") },
-                placeholder = { Text("Select saved or enter new") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .menuAnchor(),
-                trailingIcon = {
-                    Row {
-                        if (savedLocations.isNotEmpty()) {
-                            IconButton(onClick = { showLocationDropdown = !showLocationDropdown }) {
-                                Icon(
-                                    if (showLocationDropdown) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
-                                    contentDescription = "Select saved location"
-                                )
-                            }
-                        }
-                    }
-                },
-                leadingIcon = {
-                    Icon(
-                        if (selectedSavedLocation != null) Icons.Default.Star else Icons.Default.Place,
-                        contentDescription = null,
-                        tint = if (selectedSavedLocation != null)
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = if (selectedSavedLocation != null)
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.outline
-                )
-            )
-
-            // Dropdown Menu with Saved Locations
-            ExposedDropdownMenu(
-                expanded = showLocationDropdown,
-                onDismissRequest = { showLocationDropdown = false }
-            ) {
-                if (savedLocations.isEmpty()) {
-                    // No saved locations message
-                    DropdownMenuItem(
-                        text = {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(8.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Icon(
-                                    Icons.Default.LocationOn,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    "No saved locations",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        },
-                        onClick = { /* Do nothing */ }
-                    )
-                } else {
-                    // List all saved locations
-                    savedLocations.forEach { location ->
-                        DropdownMenuItem(
-                            text = {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        if (location.isFavorite) Icons.Filled.Star else Icons.Default.LocationOn,
-                                        contentDescription = null,
-                                        tint = if (location.isFavorite)
-                                            MaterialTheme.colorScheme.primary
-                                        else
-                                            MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            location.name,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            "${
-                                                String.format(
-                                                    "%.4f",
-                                                    location.latitude
-                                                )
-                                            }, ${String.format("%.4f", location.longitude)}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            },
-                            onClick = {
-                                // Auto-fill all fields when location is selected
-                                selectedSavedLocation = location
-                                onLocationNameChange(location.name)
-
-                                // ✅ FIX: Ensure proper coordinate format with consistent decimal places
-                                val formattedCoords = "${location.latitude},${location.longitude}"
-                                onLocationDetailsChange(formattedCoords)
-
-                                // ✅ FIX: Make sure to update radius value from saved location
-                                onRadiusChange(location.radius.toFloat())
-
-                                showLocationDropdown = false
-
-                                // Show success feedback
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "✓ Loaded: ${location.name}",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
-                            },
-                            leadingIcon = {
-                                if (selectedSavedLocation?.id == location.id) {
-                                    Icon(
-                                        Icons.Default.Check,
-                                        contentDescription = "Selected",
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
+    // ✅ SAVE LOCATION DIALOG
+    if (showSaveLocationDialog) {
+        SaveLocationToRoomDialog(
+            initialName = locationName,
+            coordinates = locationDetailsInput,
+            radius = radiusValue,
+            onSave = { name, address, isFavorite ->
+                scope.launch {
+                    try {
+                        isSavingLocation = true
+                        saveLocationToRoom(
+                            locationViewModel = locationViewModel,
+                            name = name,
+                            address = address,
+                            coordinates = locationDetailsInput,
+                            radius = radiusValue,
+                            isFavorite = isFavorite
                         )
+                        showSaveLocationDialog = false
+                        Toast.makeText(context, "✅ Location '$name' saved!", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "❌ Failed to save: ${e.message}", Toast.LENGTH_LONG).show()
+                    } finally {
+                        isSavingLocation = false
                     }
                 }
-            }
-        }
-
+            },
+            onDismiss = { showSaveLocationDialog = false },
+            isLoading = isSavingLocation
+        )
     }
 }
+
 
 //: Helper functions with indoor support
 private fun getRadiusDescription(radius: Int): String {
@@ -3543,8 +3561,224 @@ fun LocationTriggerSection(
         }
     }
 }
+private fun isValidCoordinates(latitude: Double, longitude: Double): Boolean {
+    return !(latitude == 0.0 && longitude == 0.0) &&
+            latitude >= -90.0 && latitude <= 90.0 &&
+            longitude >= -180.0 && longitude <= 180.0 &&
+            !latitude.isNaN() && !longitude.isNaN()
+}
 
+private fun isValidCoordinates(coordinates: String): Boolean {
+    return try {
+        val parts = coordinates.split(",").map { it.trim() }
+        if (parts.size != 2) return false
 
+        val lat = parts[0].toDoubleOrNull() ?: return false
+        val lng = parts[1].toDoubleOrNull() ?: return false
+
+        isValidCoordinates(lat, lng)
+    } catch (e: Exception) {
+        false
+    }
+}
+@Composable
+private fun SaveLocationToRoomDialog(
+    initialName: String,
+    coordinates: String,
+    radius: Float,
+    onSave: (name: String, address: String, isFavorite: Boolean) -> Unit,
+    onDismiss: () -> Unit,
+    isLoading: Boolean = false
+) {
+    var locationName by remember { mutableStateOf(initialName) }
+    var locationAddress by remember { mutableStateOf("") }
+    var isFavorite by remember { mutableStateOf(false) }
+    var nameError by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = { if (!isLoading) onDismiss() },
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Default.Save, contentDescription = null)
+                Text("Save Location to Database")
+            }
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = locationName,
+                    onValueChange = {
+                        locationName = it
+                        nameError = null
+                    },
+                    label = { Text("Location Name") },
+                    placeholder = { Text("e.g., Home, Office, Gym") },
+                    modifier = Modifier.fillMaxWidth(),
+                    isError = nameError != null,
+                    supportingText = nameError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                    leadingIcon = { Icon(Icons.Default.LocationOn, null) }
+                )
+
+                OutlinedTextField(
+                    value = locationAddress,
+                    onValueChange = { locationAddress = it },
+                    label = { Text("Address (Optional)") },
+                    placeholder = { Text("Street address or description") },
+                    modifier = Modifier.fillMaxWidth(),
+                    leadingIcon = { Icon(Icons.Default.Home, null) },
+                    maxLines = 2
+                )
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            "Location Details",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Coordinates:", style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                coordinates,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Radius:", style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                "${radius.roundToInt()}m",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            if (isFavorite) Icons.Filled.Star else Icons.Default.StarBorder,
+                            contentDescription = null,
+                            tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            "Mark as Favorite",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Switch(
+                        checked = isFavorite,
+                        onCheckedChange = { isFavorite = it }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    when {
+                        locationName.isBlank() -> {
+                            nameError = "Location name is required"
+                        }
+                        coordinates.isBlank() -> {
+                            nameError = "Coordinates are required"
+                        }
+                        else -> {
+                            onSave(locationName.trim(), locationAddress.trim(), isFavorite)
+                        }
+                    }
+                },
+                enabled = !isLoading
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text("Save Location")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isLoading
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+// Save location to Room database
+private suspend fun saveLocationToRoom(
+    locationViewModel: LocationViewModel,
+    name: String,
+    address: String,
+    coordinates: String,
+    radius: Float,
+    isFavorite: Boolean
+) = withContext(Dispatchers.IO) {
+    try {
+        val parts = coordinates.split(",").map { it.trim() }
+        if (parts.size != 2) {
+            throw IllegalArgumentException("Invalid coordinate format")
+        }
+
+        val latitude = parts[0].toDoubleOrNull()
+            ?: throw IllegalArgumentException("Invalid latitude: ${parts[0]}")
+        val longitude = parts[1].toDoubleOrNull()
+            ?: throw IllegalArgumentException("Invalid longitude: ${parts[1]}")
+
+        if (!isValidCoordinates(latitude, longitude)) {
+            throw IllegalArgumentException("Coordinates are out of valid range")
+        }
+
+        // ✅ FIX: Pass radius as Double (will be converted to Int in LocationViewModel)
+        locationViewModel.saveLocation(
+            name = name,
+            latitude = latitude,
+            longitude = longitude,
+            radius = radius.toDouble(), // ✅ Convert Float to Double
+            address = address
+        )
+
+        Log.d("TaskCreation", "✅ Saved location to Room DB: $name at ($latitude, $longitude)")
+
+    } catch (e: Exception) {
+        Log.e("TaskCreation", "❌ Failed to save location to Room DB", e)
+        throw e
+    }
+}
 
 /**
  * ✅ Individual saved location item

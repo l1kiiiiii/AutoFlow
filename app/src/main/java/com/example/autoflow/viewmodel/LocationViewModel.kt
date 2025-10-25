@@ -114,7 +114,7 @@ class LocationViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * ✅ Save location with name
+     * ✅ FIXED: Save location with name - Convert Double to Int for radius
      */
     fun saveLocation(
         name: String,
@@ -160,6 +160,7 @@ class LocationViewModel(application: Application) : AndroidViewModel(application
             }
         }
     }
+
 
     /**
      * ✅ Save current location with name
