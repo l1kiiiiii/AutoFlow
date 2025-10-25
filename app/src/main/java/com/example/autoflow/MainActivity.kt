@@ -30,6 +30,10 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
+        // ✅ ADD: Multiple permission request codes
+        private const val PERMISSION_REQUEST_CODE_BASIC = 1001
+        private const val PERMISSION_REQUEST_CODE_LOCATION = 1002
+        private const val PERMISSION_REQUEST_CODE_BACKGROUND_LOCATION = 1003
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,8 +49,8 @@ class MainActivity : ComponentActivity() {
                 showError("Failed to initialize notifications: ${e.message}")
             }
 
-            // ✅ Check and request SMS/Phone permissions FIRST
-            checkAndRequestPermissions()
+            // ✅ ENHANCED: Request ALL permissions in proper sequence
+            checkAndRequestAllPermissions()
 
             // ✅ Request exact alarm permission for Android 12+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -70,6 +74,172 @@ class MainActivity : ComponentActivity() {
             Log.e(TAG, "❌ Critical error in onCreate", e)
             showError("App initialization failed: ${e.message}")
         }
+    }
+
+    // ✅ ENHANCED: Comprehensive permission checking and requesting
+    private fun checkAndRequestAllPermissions() {
+        val basicPermissions = mutableListOf<String>()
+
+        // SMS and Phone permissions (your existing permissions)
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS)
+            != PackageManager.PERMISSION_GRANTED) {
+            basicPermissions.add(Manifest.permission.SEND_SMS)
+        }
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
+            != PackageManager.PERMISSION_GRANTED) {
+            basicPermissions.add(Manifest.permission.READ_PHONE_STATE)
+        }
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG)
+            != PackageManager.PERMISSION_GRANTED) {
+            basicPermissions.add(Manifest.permission.READ_CALL_LOG)
+        }
+
+        // Request basic permissions first
+        if (basicPermissions.isNotEmpty()) {
+            Log.d(TAG, "🔍 Requesting basic permissions: ${basicPermissions.joinToString(", ")}")
+            ActivityCompat.requestPermissions(this, basicPermissions.toTypedArray(), PERMISSION_REQUEST_CODE_BASIC)
+        } else {
+            // Basic permissions granted, check location permissions
+            checkLocationPermissions()
+        }
+    }
+
+    // ✅ NEW: Check and request location permissions
+    private fun checkLocationPermissions() {
+        val locationPermissions = mutableListOf<String>()
+
+        // Fine and Coarse location permissions
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED) {
+            locationPermissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED) {
+            locationPermissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+
+        if (locationPermissions.isNotEmpty()) {
+            Log.d(TAG, "🌍 Requesting location permissions: ${locationPermissions.joinToString(", ")}")
+
+            // Show explanation to user
+            Toast.makeText(
+                this,
+                "📍 Location permissions needed for location-based workflows",
+                Toast.LENGTH_LONG
+            ).show()
+
+            ActivityCompat.requestPermissions(this, locationPermissions.toTypedArray(), PERMISSION_REQUEST_CODE_LOCATION)
+        } else {
+            // Location permissions granted, check background location
+            checkBackgroundLocationPermission()
+        }
+    }
+
+    // ✅ NEW: Check and request background location permission (Android 10+)
+    private fun checkBackgroundLocationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+
+                Log.d(TAG, "🌍📱 Requesting background location permission")
+
+                // Show detailed explanation for background location
+                Toast.makeText(
+                    this,
+                    "📍 Background location needed for geofences when app is closed",
+                    Toast.LENGTH_LONG
+                ).show()
+
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION),
+                    PERMISSION_REQUEST_CODE_BACKGROUND_LOCATION
+                )
+            } else {
+                Log.d(TAG, "✅ Background location permission already granted")
+                enableAutoReplyForTesting()
+            }
+        } else {
+            Log.d(TAG, "✅ Background location not needed on Android < 10")
+            enableAutoReplyForTesting()
+        }
+    }
+
+    // ✅ ENHANCED: Handle all permission results
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+
+        when (requestCode) {
+            PERMISSION_REQUEST_CODE_BASIC -> {
+                handleBasicPermissionResults(permissions, grantResults)
+            }
+            PERMISSION_REQUEST_CODE_LOCATION -> {
+                handleLocationPermissionResults(permissions, grantResults)
+            }
+            PERMISSION_REQUEST_CODE_BACKGROUND_LOCATION -> {
+                handleBackgroundLocationPermissionResult(permissions, grantResults)
+            }
+        }
+    }
+
+    private fun handleBasicPermissionResults(permissions: Array<String>, grantResults: IntArray) {
+        var allGranted = true
+        permissions.forEachIndexed { index, permission ->
+            val granted = grantResults.getOrNull(index) == PackageManager.PERMISSION_GRANTED
+            Log.d(TAG, "📋 Basic Permission $permission: ${if (granted) "✅ GRANTED" else "❌ DENIED"}")
+            if (!granted) allGranted = false
+        }
+
+        if (allGranted) {
+            Log.d(TAG, "✅ All basic permissions granted")
+            checkLocationPermissions()
+        } else {
+            Log.w(TAG, "⚠️ Some basic permissions denied")
+            Toast.makeText(this, "⚠️ Some permissions denied - features may not work", Toast.LENGTH_LONG).show()
+            checkLocationPermissions() // Continue with location permissions anyway
+        }
+    }
+
+    private fun handleLocationPermissionResults(permissions: Array<String>, grantResults: IntArray) {
+        var locationGranted = false
+        permissions.forEachIndexed { index, permission ->
+            val granted = grantResults.getOrNull(index) == PackageManager.PERMISSION_GRANTED
+            Log.d(TAG, "🌍 Location Permission $permission: ${if (granted) "✅ GRANTED" else "❌ DENIED"}")
+            if (granted && (permission == Manifest.permission.ACCESS_FINE_LOCATION ||
+                        permission == Manifest.permission.ACCESS_COARSE_LOCATION)) {
+                locationGranted = true
+            }
+        }
+
+        if (locationGranted) {
+            Log.d(TAG, "✅ Location permissions granted")
+            checkBackgroundLocationPermission()
+        } else {
+            Log.w(TAG, "⚠️ Location permissions denied - geofencing won't work")
+            Toast.makeText(this, "⚠️ Location denied - location-based workflows disabled", Toast.LENGTH_LONG).show()
+            enableAutoReplyForTesting()
+        }
+    }
+
+    private fun handleBackgroundLocationPermissionResult(permissions: Array<String>, grantResults: IntArray) {
+        val backgroundGranted = grantResults.getOrNull(0) == PackageManager.PERMISSION_GRANTED
+
+        if (backgroundGranted) {
+            Log.d(TAG, "✅ Background location permission granted")
+            Toast.makeText(this, "✅ All permissions granted - full functionality enabled", Toast.LENGTH_LONG).show()
+        } else {
+            Log.w(TAG, "⚠️ Background location permission denied")
+            Toast.makeText(this, "⚠️ Background location denied - geofences won't work when app is closed", Toast.LENGTH_LONG).show()
+        }
+
+        enableAutoReplyForTesting()
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -202,67 +372,6 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error requesting usage stats permission", e)
             showError("Failed to open usage stats settings")
-        }
-    }
-
-    // ✅ FIXED: SMS and Phone permission checking
-    private fun checkAndRequestPermissions() {
-        val permissions = mutableListOf<String>()
-
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS)
-            != PackageManager.PERMISSION_GRANTED) {
-            permissions.add(Manifest.permission.SEND_SMS)
-        }
-
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
-            != PackageManager.PERMISSION_GRANTED) {
-            permissions.add(Manifest.permission.READ_PHONE_STATE)
-        }
-
-        // ✅ ADD: Request call log permission for getting caller numbers
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG)
-            != PackageManager.PERMISSION_GRANTED) {
-            permissions.add(Manifest.permission.READ_CALL_LOG)
-        }
-
-        if (permissions.isNotEmpty()) {
-            Log.d(TAG, "🔍 Requesting permissions: ${permissions.joinToString(", ")}")
-            ActivityCompat.requestPermissions(this, permissions.toTypedArray(), 1001)
-        } else {
-            Log.d(TAG, "✅ All permissions already granted")
-            enableAutoReplyForTesting()
-        }
-    }
-
-
-    // ✅ FIXED: Correct method signature with override
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<String>, // ✅ FIXED: Changed from Array<out String> to Array<String>
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-
-        if (requestCode == 1001) {
-            var allGranted = true
-
-            permissions.forEachIndexed { index, permission ->
-                val granted = grantResults.getOrNull(index) == PackageManager.PERMISSION_GRANTED
-                Log.d(TAG, "📋 Permission $permission: ${if (granted) "✅ GRANTED" else "❌ DENIED"}")
-                if (!granted) allGranted = false
-            }
-
-            if (allGranted) {
-                Log.d(TAG, "✅ All auto-reply permissions granted")
-                enableAutoReplyForTesting()
-            } else {
-                Log.w(TAG, "⚠️ Some permissions denied - auto-reply may not work")
-                Toast.makeText(
-                    this,
-                    "SMS permissions needed for auto-reply feature",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
         }
     }
 

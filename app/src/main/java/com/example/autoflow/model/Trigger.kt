@@ -328,7 +328,7 @@ data class LocationTrigger(
 )
 
 /**
- * ✅ WiFi-based trigger
+ * WiFi-based trigger
  */
 data class WiFiTrigger(
     val ssid: String? = null,
@@ -336,7 +336,7 @@ data class WiFiTrigger(
 ) : Trigger("WIFI", buildWiFiJson(ssid, state))
 
 /**
- * ✅ Bluetooth-based trigger
+ *  Bluetooth-based trigger
  */
 data class BluetoothTrigger(
     val deviceAddress: String,
@@ -344,7 +344,7 @@ data class BluetoothTrigger(
 ) : Trigger("BLUETOOTH", buildBluetoothJson(deviceAddress, deviceName))
 
 /**
- * ✅ Time-based trigger
+ * Time-based trigger
  */
 data class TimeTrigger(
     val time: String,
@@ -352,7 +352,7 @@ data class TimeTrigger(
 ) : Trigger("TIME", buildTimeJson(time, days))
 
 /**
- * ✅ Battery level trigger
+ *  Battery level trigger
  */
 data class BatteryTrigger(
     val level: Int,
