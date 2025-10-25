@@ -5,16 +5,21 @@ import com.example.autoflow.model.Action
 import com.example.autoflow.model.Trigger
 import org.json.JSONArray
 import org.json.JSONObject
+import com.example.autoflow.model.LocationTrigger
+import com.example.autoflow.model.TimeTrigger
+import com.example.autoflow.model.WiFiTrigger
+import com.example.autoflow.model.BluetoothTrigger
+import com.example.autoflow.model.BatteryTrigger
 
 private const val TAG = "WorkflowEntityExt"
 
 /**
- * ✅ Convert WorkflowEntity to list of Actions
+ * Convert WorkflowEntity to list of Actions
  */
 fun WorkflowEntity.toActions(): List<Action> {
     return try {
         if (actionDetails.isBlank()) {
-            Log.e(TAG, "❌ Empty action details")
+            Log.e(TAG, "Empty action details")
             return emptyList()
         }
 
@@ -33,12 +38,10 @@ fun WorkflowEntity.toActions(): List<Action> {
                     priority = json.optString("priority")
                 )
 
-                // Set value if it exists
-                json.optString("value").takeIf { it.isNotEmpty() }?.let {
-                    action.value = it
-                }
+                // ✅ Set value if it exists
+                json.optString("value").takeIf { it.isNotEmpty() }?.let { action.value = it }
 
-                // Set duration if it exists
+                // ✅ Set duration if it exists
                 if (json.has("duration")) {
                     action.duration = json.optLong("duration")
                 }
@@ -47,25 +50,22 @@ fun WorkflowEntity.toActions(): List<Action> {
             }
         }
 
-        Log.d(TAG, "✅ Parsed ${actions.size} actions")
+        Log.d(TAG, "Parsed ${actions.size} actions")
         actions
-
     } catch (e: Exception) {
-        Log.e(TAG, "❌ Error parsing actions: ${e.message}", e)
+        Log.e(TAG, "Error parsing actions: ${e.message}", e)
         emptyList()
     }
 }
 
 /**
- * ✅ Convert WorkflowEntity to list of basic Triggers
+ * Convert WorkflowEntity to list of Triggers
  */
-/**
- * ✅ Convert WorkflowEntity to list of basic Triggers
- */
+
 fun WorkflowEntity.toTriggers(): List<Trigger> {
     return try {
         if (triggerDetails.isBlank()) {
-            Log.e(TAG, "❌ Empty trigger details")
+            Log.e(TAG, "Empty trigger details")
             return emptyList()
         }
 
@@ -75,27 +75,62 @@ fun WorkflowEntity.toTriggers(): List<Trigger> {
         for (i in 0 until triggersArray.length()) {
             val json = triggersArray.getJSONObject(i)
             val type = json.optString("type", "")
-            val value = json.optString("value", "")
 
-            if (type.isNotBlank()) {
-                // Create basic Trigger with type and value
-                val trigger = Trigger(type = type, value = value)
-                triggers.add(trigger)
+            val trigger = when (type) {
+                "LOCATION" -> LocationTrigger(
+                    locationName = json.optString("locationName", "Unknown"),
+                    latitude = json.optDouble("latitude", 0.0),
+                    longitude = json.optDouble("longitude", 0.0),
+                    radius = json.optDouble("radius", 100.0),
+                    triggerOnEntry = json.optBoolean("triggerOnEntry", true),
+                    triggerOnExit = json.optBoolean("triggerOnExit", false),
+                    triggerOn = json.optString("triggerOn", "both")
+                )
+                "TIME" -> {
+                    val daysArray = json.optJSONArray("days")
+                    val days = mutableListOf<String>()
+                    if (daysArray != null) {
+                        for (j in 0 until daysArray.length()) {
+                            days.add(daysArray.getString(j))
+                        }
+                    }
+                    TimeTrigger(
+                        time = json.optString("time", ""),
+                        days = days
+                    )
+                }
+                "WIFI" -> WiFiTrigger(
+                    ssid = json.optString("ssid", ""),
+                    state = json.optString("state", "CONNECTED")
+                )
+                "BLUETOOTH" -> BluetoothTrigger(
+                    deviceAddress = json.optString("deviceAddress", ""),
+                    deviceName = json.optString("deviceName")
+                )
+                "BATTERY" -> BatteryTrigger(
+                    level = json.optInt("level", 20),
+                    condition = json.optString("condition", "below")
+                )
+                else -> {
+                    Log.w(TAG, "Unknown trigger type: $type")
+                    null
+                }
             }
+
+            trigger?.let { triggers.add(it) }
         }
 
-        Log.d(TAG, "✅ Parsed ${triggers.size} triggers")
+        Log.d(TAG, "Parsed ${triggers.size} triggers")
         triggers
-
     } catch (e: Exception) {
-        Log.e(TAG, "❌ Error parsing triggers: ${e.message}", e)
+        Log.e(TAG, "Error parsing triggers: ${e.message}", e)
         emptyList()
     }
 }
 
 
 /**
- * ✅ Get specific trigger data for TIME triggers
+ * Get specific trigger data for TIME triggers
  */
 fun WorkflowEntity.getTimeTriggerData(): List<Pair<String, List<String>>> {
     return try {
@@ -120,16 +155,15 @@ fun WorkflowEntity.getTimeTriggerData(): List<Pair<String, List<String>>> {
                 }
             }
         }
-
         timeData
     } catch (e: Exception) {
-        Log.e(TAG, "❌ Error parsing time trigger data: ${e.message}", e)
+        Log.e(TAG, "Error parsing time trigger data: ${e.message}", e)
         emptyList()
     }
 }
 
 /**
- * ✅ Check if workflow has time-based triggers
+ * Check if workflow has time-based triggers
  */
 fun WorkflowEntity.hasTimeTrigger(): Boolean {
     return try {
@@ -147,7 +181,7 @@ fun WorkflowEntity.hasTimeTrigger(): Boolean {
 }
 
 /**
- * ✅ Get workflow description for display
+ * Get workflow description for display
  */
 fun WorkflowEntity.getDescription(): String {
     return try {

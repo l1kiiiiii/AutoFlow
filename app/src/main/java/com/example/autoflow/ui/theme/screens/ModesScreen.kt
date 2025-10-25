@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.autoflow.model.ModeTemplate
@@ -416,4 +417,20 @@ fun ModeCard(
             }
         }
     }
+}
+@Preview(showBackground = true)
+@Composable
+fun ModeCardPreview() {
+    ModeCard(
+        mode = PredefinedModes.getAllModes()[0],
+        onModeClick = {}
+    )
+}
+@Preview(showBackground = true)
+@Composable
+fun ActiveModesSectionPreview() {
+    ActiveModesSection(
+        workflows = emptyList(),
+        onStopMode = {}
+    )
 }
