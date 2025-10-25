@@ -4,12 +4,7 @@ import android.util.Log
 import com.example.autoflow.model.Action
 import com.example.autoflow.model.Trigger
 import org.json.JSONArray
-import org.json.JSONObject
-import com.example.autoflow.model.LocationTrigger
-import com.example.autoflow.model.TimeTrigger
-import com.example.autoflow.model.WiFiTrigger
-import com.example.autoflow.model.BluetoothTrigger
-import com.example.autoflow.model.BatteryTrigger
+
 
 private const val TAG = "WorkflowEntityExt"
 
@@ -77,7 +72,7 @@ fun WorkflowEntity.toTriggers(): List<Trigger> {
             val type = json.optString("type", "")
 
             val trigger = when (type) {
-                "LOCATION" -> LocationTrigger(
+                "LOCATION" -> Trigger.LocationTrigger(
                     locationName = json.optString("locationName", "Unknown"),
                     latitude = json.optDouble("latitude", 0.0),
                     longitude = json.optDouble("longitude", 0.0),
@@ -94,22 +89,25 @@ fun WorkflowEntity.toTriggers(): List<Trigger> {
                             days.add(daysArray.getString(j))
                         }
                     }
-                    TimeTrigger(
+                    Trigger.TimeTrigger(
                         time = json.optString("time", ""),
                         days = days
                     )
                 }
-                "WIFI" -> WiFiTrigger(
+                "WIFI" -> Trigger.WiFiTrigger(
                     ssid = json.optString("ssid", ""),
                     state = json.optString("state", "CONNECTED")
                 )
-                "BLUETOOTH" -> BluetoothTrigger(
+                "BLUETOOTH" -> Trigger.BluetoothTrigger(
                     deviceAddress = json.optString("deviceAddress", ""),
                     deviceName = json.optString("deviceName")
                 )
-                "BATTERY" -> BatteryTrigger(
+                "BATTERY" -> Trigger.BatteryTrigger(
                     level = json.optInt("level", 20),
                     condition = json.optString("condition", "below")
+                )
+                "MANUAL" -> Trigger.ManualTrigger(
+                    actionType = json.optString("value", "quick_action")
                 )
                 else -> {
                     Log.w(TAG, "Unknown trigger type: $type")

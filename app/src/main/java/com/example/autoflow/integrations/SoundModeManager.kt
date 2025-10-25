@@ -181,31 +181,15 @@ class SoundModeManager(context: Context) {
                 openDNDSettings()
                 return false
             }
-            try {
-                // Set complete DND: mute ringer and configure policy
-                audioManager?.ringerMode = AudioManager.RINGER_MODE_SILENT
 
-                val policy = NotificationManager.Policy(
-                    0, // priority categories allowed (0 = none)
-                    0, // priority senders (0 = none)
-                    NotificationManager.Policy.PRIORITY_CATEGORY_MEDIA // adjust as desired
-                )
-                notificationManager.setNotificationPolicy(policy)
-
-                // Use INTERRUPTION_FILTER_NONE or PRIORITY depending on desired behavior
-                notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
-
-                Log.d(TAG, "🔕 Complete DND mode activated - Sound muted + notifications blocked")
-                return true
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to enable DND: ${e.message}", e)
-                return false
-            }
+            //  Sets interruption filter to enable DND
+            notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
+            Log.d(TAG, "✅ Set to DND mode")
+            return true
         } else {
             // Fallback to silent mode for older devices
-            audioManager?.ringerMode = AudioManager.RINGER_MODE_SILENT
-            Log.d(TAG, "🔕 DND mode activated (legacy)")
-            return true
+            Log.w(TAG, "DND not available, using Silent mode")
+            return setSilentMode()
         }
     }
 }

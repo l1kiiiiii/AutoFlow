@@ -921,9 +921,8 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             "MANUAL" -> {
                 // ✅ FIXED: Added support for MANUAL trigger type
                 // Manual triggers are user-activated - create a simple trigger with MANUAL type
-                Trigger(
-                    type = "MANUAL",
-                    value = template.config["type"] as? String ?: "quick_action"
+                Trigger.ManualTrigger(  // ✅ ADD THIS!
+                    actionType = template.config["type"] as? String ?: "quick_action"
                 )
             }
             else -> {

@@ -8,13 +8,110 @@ import java.util.Locale
 import java.util.regex.Pattern
 
 /**
- * ✅ Base class for all workflow triggers
+ * ✅ Legacy WiFi Trigger class for backward compatibility
  */
-open class Trigger(
-    open val type: String = "",
-    open val value: String = ""
-) {
+class WiFiTriggerLegacy {
+    @JvmField
+    var ssid: String? = null
+
+    @JvmField
+    var bssid: String? = null
+
+    @JvmField
+    var triggerOn: String? = "connect" // "connect" or "disconnect"
+
+    constructor()
+
+    constructor(ssid: String?, triggerOn: String?) {
+        this.ssid = ssid
+        this.triggerOn = triggerOn
+    }
+}
+
+/**
+ * ✅ Legacy Bluetooth Trigger class for backward compatibility
+ */
+class BluetoothTriggerLegacy {
+    @JvmField
+    var macAddress: String? = null
+
+    @JvmField
+    var deviceName: String? = null
+
+    @JvmField
+    var triggerOn: String? = "connect" // "connect" or "disconnect"
+
+    constructor()
+
+    constructor(macAddress: String?, deviceName: String?, triggerOn: String?) {
+        this.macAddress = macAddress
+        this.deviceName = deviceName
+        this.triggerOn = triggerOn
+    }
+}
+
+/**
+ * ✅ Sealed class representing different types of workflow triggers
+ */
+sealed class Trigger(val type: String, val value: String) {
+
+    /**
+     * Location-based trigger
+     */
+    data class LocationTrigger(
+        val locationName: String,
+        val latitude: Double,
+        val longitude: Double,
+        val radius: Double,
+        val triggerOnEntry: Boolean,
+        val triggerOnExit: Boolean,
+        val triggerOn: String = "both"
+    ) : Trigger(
+        "LOCATION",
+        buildJsonValue(locationName, latitude, longitude, radius, triggerOnEntry, triggerOnExit, triggerOn)
+    )
+
+    /**
+     * WiFi-based trigger
+     */
+    data class WiFiTrigger(
+        val ssid: String? = null,
+        val state: String // "ON", "OFF", "CONNECTED", "DISCONNECTED"
+    ) : Trigger("WIFI", buildWiFiJson(ssid, state))
+
+    /**
+     * Bluetooth-based trigger
+     */
+    data class BluetoothTrigger(
+        val deviceAddress: String,
+        val deviceName: String? = null
+    ) : Trigger("BLUETOOTH", buildBluetoothJson(deviceAddress, deviceName))
+
+    /**
+     * Time-based trigger
+     */
+    data class TimeTrigger(
+        val time: String,
+        val days: List<String>
+    ) : Trigger("TIME", buildTimeJson(time, days))
+
+    /**
+     * Battery level trigger
+     */
+    data class BatteryTrigger(
+        val level: Int,
+        val condition: String
+    ) : Trigger("BATTERY", buildBatteryJson(level, condition))
+
+    /**
+     * ✅ Manual trigger - activated by user tap (for Meeting Mode, etc.)
+     */
+    data class ManualTrigger(
+        val actionType: String = "quick_action"
+    ) : Trigger("MANUAL", buildManualJson(actionType))
+
     // VALIDATION PROPERTIES
+
     val isValid: Boolean
         get() {
             // Basic checks
@@ -29,7 +126,8 @@ open class Trigger(
                 Constants.TRIGGER_BATTERY_LEVEL -> validateBatteryLevelTrigger(value)
                 Constants.TRIGGER_CHARGING_STATE -> validateChargingStateTrigger(value)
                 Constants.TRIGGER_HEADPHONE_CONNECTION -> validateHeadphoneConnectionTrigger(value)
-                "TIME_RANGE" -> true // Always valid for time range triggers
+                "MANUAL" -> true // ✅ Manual triggers are always valid
+                "TIME_RANGE" -> true // ✅ Time range triggers are always valid
                 else -> false
             }
         }
@@ -51,6 +149,9 @@ open class Trigger(
 
                 Constants.TRIGGER_WIFI -> if (!validateWiFiTrigger(value))
                     "Invalid WiFi state or SSID format" else null
+
+                "MANUAL" -> null // ✅ Manual triggers don't need validation
+                "TIME_RANGE" -> null // ✅ Time range triggers validated separately
 
                 else -> "Unknown trigger type: $type"
             }
@@ -101,6 +202,24 @@ open class Trigger(
 
         fun buildBatteryJson(level: Int, condition: String): String {
             return """{"level":$level,"condition":"$condition"}"""
+        }
+
+        /**
+         * ✅ Build JSON for manual trigger
+         */
+        fun buildManualJson(actionType: String): String {
+            return JSONObject().apply {
+                put("type", "MANUAL")
+                put("value", actionType)
+            }.toString()
+        }
+
+        /**
+         * ✅ Build JSON for time range trigger
+         */
+        fun buildTimeRangeJson(startTime: String, endTime: String, days: List<String>): String {
+            val daysJson = days.joinToString(separator = "\",\"", prefix = "[\"", postfix = "\"]")
+            return """{"startTime":"$startTime","endTime":"$endTime","days":$daysJson}"""
         }
 
         //  VALIDATION METHODS
@@ -266,19 +385,23 @@ open class Trigger(
 }
 
 /**
- * ✅ Enhanced Time Trigger with range support
+ * ✅ Enhanced Time Range Trigger with sleep mode support
  */
 class TimeRangeTrigger : Trigger {
     var startTime: String = "22:00"
     var endTime: String = "07:00"
     var isActive: Boolean = false
-    var recurringDays: List<String> = listOf("MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY","SUNDAY")
+    var recurringDays: List<String> = listOf(
+        "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"
+    )
 
     // Primary constructor with default values
     constructor(
         startTime: String = "22:00",
         endTime: String = "07:00",
-        days: List<String> = listOf("MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY","SUNDAY")
+        days: List<String> = listOf(
+            "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"
+        )
     ) : super(
         type = "TIME_RANGE",
         value = buildTimeRangeJson(startTime, endTime, days)
@@ -288,6 +411,9 @@ class TimeRangeTrigger : Trigger {
         this.recurringDays = days
     }
 
+    /**
+     * Check if current time is within the sleep period
+     */
     fun isCurrentlyInSleepPeriod(): Boolean {
         val currentTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
         val currentDay = SimpleDateFormat("EEEE", Locale.getDefault()).format(Date()).uppercase()
@@ -307,92 +433,5 @@ class TimeRangeTrigger : Trigger {
             val daysJson = days.joinToString(separator = "\",\"", prefix = "[\"", postfix = "\"]")
             return """{"startTime":"$startTime","endTime":"$endTime","days":$daysJson}"""
         }
-    }
-}
-
-
-/**
- * ✅ Location-based trigger
- */
-data class LocationTrigger(
-    val locationName: String,
-    val latitude: Double,
-    val longitude: Double,
-    val radius: Double,
-    val triggerOnEntry: Boolean,
-    val triggerOnExit: Boolean,
-    val triggerOn: String = "both"
-) : Trigger(
-    "LOCATION",
-    buildJsonValue(locationName, latitude, longitude, radius, triggerOnEntry, triggerOnExit, triggerOn)
-)
-
-/**
- * WiFi-based trigger
- */
-data class WiFiTrigger(
-    val ssid: String? = null,
-    val state: String // "ON", "OFF", "CONNECTED", "DISCONNECTED"
-) : Trigger("WIFI", buildWiFiJson(ssid, state))
-
-/**
- *  Bluetooth-based trigger
- */
-data class BluetoothTrigger(
-    val deviceAddress: String,
-    val deviceName: String? = null
-) : Trigger("BLUETOOTH", buildBluetoothJson(deviceAddress, deviceName))
-
-/**
- * Time-based trigger
- */
-data class TimeTrigger(
-    val time: String,
-    val days: List<String>
-) : Trigger("TIME", buildTimeJson(time, days))
-
-/**
- *  Battery level trigger
- */
-data class BatteryTrigger(
-    val level: Int,
-    val condition: String
-) : Trigger("BATTERY", buildBatteryJson(level, condition))
-
-// ✅ Legacy WiFi and Bluetooth trigger classes for backward compatibility
-class WiFiTriggerLegacy {
-    @JvmField
-    var ssid: String? = null
-
-    @JvmField
-    var bssid: String? = null
-
-    @JvmField
-    var triggerOn: String? = "connect" // "connect" or "disconnect"
-
-    constructor()
-
-    constructor(ssid: String?, triggerOn: String?) {
-        this.ssid = ssid
-        this.triggerOn = triggerOn
-    }
-}
-
-class BluetoothTriggerLegacy {
-    @JvmField
-    var macAddress: String? = null
-
-    @JvmField
-    var deviceName: String? = null
-
-    @JvmField
-    var triggerOn: String? = "connect" // "connect" or "disconnect"
-
-    constructor()
-
-    constructor(macAddress: String?, deviceName: String?, triggerOn: String?) {
-        this.macAddress = macAddress
-        this.deviceName = deviceName
-        this.triggerOn = triggerOn
     }
 }

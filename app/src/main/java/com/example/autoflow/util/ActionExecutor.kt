@@ -578,7 +578,7 @@ object ActionExecutor {
                             val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
                             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             context.startActivity(intent)
-                            return false // <-- It fails here
+                            return false
                         }
 
                         // Set complete DND mode
