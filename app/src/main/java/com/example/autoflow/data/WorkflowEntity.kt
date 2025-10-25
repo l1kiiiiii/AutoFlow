@@ -36,7 +36,7 @@ data class WorkflowEntity(
     var updatedAt: Long = System.currentTimeMillis(),
 
     @ColumnInfo(name = "mode_id")
-    var modeId: Long? = null, // NULL for custom workflows, ID for mode-based
+    var modeId: Long? = null,
 
     @ColumnInfo(name = "is_mode_workflow")
     var isModeWorkflow: Boolean = false
@@ -45,8 +45,7 @@ data class WorkflowEntity(
         private const val TAG = "WorkflowEntity"
 
         /**
-         * Create WorkflowEntity from triggers and actions
-         * ✅ FIXED: No alarm scheduling here (moved to ViewModel)
+         * ✅ FIXED: Create WorkflowEntity from simple trigger and action data
          */
         fun fromTriggersAndActions(
             workflowName: String,
@@ -56,40 +55,32 @@ data class WorkflowEntity(
             triggerLogic: String = "AND"
         ): WorkflowEntity? {
             return try {
-                Log.d(TAG, "🔨 Creating WorkflowEntity with ${triggers.size} triggers and ${actions.size} actions")
+                Log.d(
+                    TAG,
+                    "🔨 Creating WorkflowEntity with ${triggers.size} triggers and ${actions.size} actions"
+                )
 
-                // Build triggers JSON
+                // Build triggers JSON using base Trigger properties
                 val triggersJson = JSONArray()
                 triggers.forEach { trigger ->
                     val triggerObj = JSONObject().apply {
                         put("type", trigger.type)
                         put("value", trigger.value)
 
-                        when (trigger) {
-                            is Trigger.TimeTrigger -> {
-                                put("time", trigger.time)
-                                put("days", JSONArray(trigger.days))
-                            }
-                            is Trigger.LocationTrigger -> {
-                                put("locationName", trigger.locationName)
-                                put("latitude", trigger.latitude)
-                                put("longitude", trigger.longitude)
-                                put("radius", trigger.radius)
-                                put("triggerOnEntry", trigger.triggerOnEntry)
-                                put("triggerOnExit", trigger.triggerOnExit)
-                                put("triggerOn", trigger.triggerOn)
-                            }
-                            is Trigger.WiFiTrigger -> {
-                                trigger.ssid?.let { put("ssid", it) }
-                                put("state", trigger.state)
-                            }
-                            is Trigger.BluetoothTrigger -> {
-                                put("deviceAddress", trigger.deviceAddress)
-                                trigger.deviceName?.let { put("deviceName", it) }
-                            }
-                            is Trigger.BatteryTrigger -> {
-                                put("level", trigger.level)
-                                put("condition", trigger.condition)
+                        // Parse additional fields from value JSON if needed
+                        if (trigger.value.startsWith("{")) {
+                            try {
+                                val valueJson = JSONObject(trigger.value)
+                                val keys = valueJson.keys()
+                                while (keys.hasNext()) {
+                                    val key = keys.next()
+                                    put(key, valueJson.get(key))
+                                }
+                            } catch (e: Exception) {
+                                Log.w(
+                                    TAG,
+                                    "Could not parse trigger value as JSON: ${trigger.value}"
+                                )
                             }
                         }
                     }
@@ -105,6 +96,7 @@ data class WorkflowEntity(
                         action.title?.let { put("title", it) }
                         action.message?.let { put("message", it) }
                         action.priority?.let { put("priority", it) }
+                        action.duration?.let { put("duration", it) }
                     }
                     actionsJson.put(actionObj)
                 }
@@ -120,13 +112,13 @@ data class WorkflowEntity(
                 )
 
                 Log.d(TAG, "✅ WorkflowEntity created successfully")
-                Log.d(TAG, "   Triggers JSON: ${entity.triggerDetails}")
-                Log.d(TAG, "   Actions JSON: ${entity.actionDetails}")
+                Log.d(TAG, " Triggers JSON: ${entity.triggerDetails}")
+                Log.d(TAG, " Actions JSON: ${entity.actionDetails}")
+                entity  // ← ONLY ONE RETURN STATEMENT NEEDED HERE
 
-                entity
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error creating WorkflowEntity", e)
-                null
+                null  // ← AND ONE IN THE CATCH BLOCK
             }
         }
     }

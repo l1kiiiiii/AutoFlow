@@ -10,12 +10,12 @@ object PredefinedModes {
         name = "Meeting Mode",
         icon = "🤝",
         color = "#2196F3",
-        description = "Instantly silence your phone. Tap to deactivate",
+        description = "Complete DND - blocks all notifications",
         defaultTriggers = listOf(
             TriggerTemplate("MANUAL", mapOf("type" to "quick_action"))
         ),
         defaultActions = listOf(
-            ActionTemplate("SET_SOUND_MODE", mapOf("value" to "DND"))
+            ActionTemplate("SET_SOUND_MODE", mapOf("value" to "dnd"))  // ✅ Only DND mode
         )
     )
 
@@ -23,12 +23,12 @@ object PredefinedModes {
         name = "Office Mode",
         icon = "💼",
         color = "#4CAF50",
-        description = "Optimize for work",
+        description = "Vibrate for work",
         defaultTriggers = listOf(
             TriggerTemplate("LOCATION", mapOf("type" to "office"))
         ),
         defaultActions = listOf(
-            ActionTemplate("SET_SOUND_MODE", mapOf("value" to "Vibrate")),
+            ActionTemplate("SET_SOUND_MODE", mapOf("value" to "vibrate")),
             ActionTemplate("TOGGLE_WIFI", mapOf("value" to "ON"))
         )
     )
@@ -37,12 +37,12 @@ object PredefinedModes {
         name = "Class Mode",
         icon = "📚",
         color = "#FF9800",
-        description = "Silent during classes",
+        description = "Complete DND during classes",
         defaultTriggers = listOf(
             TriggerTemplate("LOCATION", mapOf("type" to "school"))
         ),
         defaultActions = listOf(
-            ActionTemplate("SET_SOUND_MODE", mapOf("value" to "DND"))
+            ActionTemplate("SET_SOUND_MODE", mapOf("value" to "dnd"))  // ✅ DND for classes too
         )
     )
 
@@ -50,12 +50,12 @@ object PredefinedModes {
         name = "Home Mode",
         icon = "🏠",
         color = "#9C27B0",
-        description = "Relax at home",
+        description = "Normal sound at home",
         defaultTriggers = listOf(
             TriggerTemplate("LOCATION", mapOf("type" to "home"))
         ),
         defaultActions = listOf(
-            ActionTemplate("SET_SOUND_MODE", mapOf("value" to "Normal")),
+            ActionTemplate("SET_SOUND_MODE", mapOf("value" to "normal")),
             ActionTemplate("TOGGLE_WIFI", mapOf("value" to "ON"))
         )
     )
@@ -69,20 +69,20 @@ object PredefinedModes {
             TriggerTemplate("TIME", mapOf("time" to "18:00"))
         ),
         defaultActions = listOf(
-            ActionTemplate("SET_SOUND_MODE", mapOf("value" to "Normal"))
+            ActionTemplate("SET_SOUND_MODE", mapOf("value" to "normal"))
         )
     )
 
     val SLEEP_MODE = ModeTemplate(
         name = "Sleep Mode",
         icon = "😴",
-        color = "#607D8B",
-        description = "Quiet mode for bedtime",
+        color = "#37474F",
+        description = "Complete DND for bedtime",
         defaultTriggers = listOf(
             TriggerTemplate("TIME", mapOf("time" to "22:00"))
         ),
         defaultActions = listOf(
-            ActionTemplate("SET_SOUND_MODE", mapOf("value" to "DND")),
+            ActionTemplate("SET_SOUND_MODE", mapOf("value" to "dnd")),  // ✅ DND for sleep
             ActionTemplate("TOGGLE_WIFI", mapOf("value" to "OFF"))
         )
     )
@@ -91,12 +91,12 @@ object PredefinedModes {
         name = "Driving Mode",
         icon = "🚗",
         color = "#FF5722",
-        description = "Safe while driving",
+        description = "Vibrate while driving",
         defaultTriggers = listOf(
             TriggerTemplate("BLUETOOTH", mapOf("deviceType" to "car"))
         ),
         defaultActions = listOf(
-            ActionTemplate("SET_SOUND_MODE", mapOf("value" to "Vibrate"))
+            ActionTemplate("SET_SOUND_MODE", mapOf("value" to "vibrate"))
         )
     )
 
@@ -104,25 +104,28 @@ object PredefinedModes {
         name = "Gym Mode",
         icon = "💪",
         color = "#F44336",
-        description = "Workout time",
+        description = "Vibrate during workout",
         defaultTriggers = listOf(
             TriggerTemplate("LOCATION", mapOf("type" to "gym"))
         ),
         defaultActions = listOf(
-            ActionTemplate("SET_SOUND_MODE", mapOf("value" to "Vibrate"))
+            ActionTemplate("SET_SOUND_MODE", mapOf("value" to "vibrate"))
         )
     )
+
     fun isManualMode(mode: ModeTemplate): Boolean {
         return mode.defaultTriggers.any { it.type == "MANUAL" }
     }
+
     fun getAllModes(): List<ModeTemplate> = listOf(
-        MEETING_MODE,
-        OFFICE_MODE,
-        CLASS_MODE,
-        HOME_MODE,
-        FUN_MODE,
-        SLEEP_MODE,
-        DRIVING_MODE,
-        GYM_MODE
+        MEETING_MODE,    // 🤝 Manual DND (the only manual mode)
+        OFFICE_MODE,     // 💼 Vibrate + WiFi
+        CLASS_MODE,      // 📚 Automatic DND
+        HOME_MODE,       // 🏠 Normal sound
+        FUN_MODE,        // 🎉 Normal sound
+        SLEEP_MODE,      // 😴 Automatic DND
+        DRIVING_MODE,    // 🚗 Vibrate
+        GYM_MODE         // 💪 Vibrate
     )
 }
+

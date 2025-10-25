@@ -3,6 +3,11 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.autoflow">
 
+    <!-- = APP USAGE & MONITORING = -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+
+
     <!-- = LOCATION = -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -21,6 +26,8 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE"/>
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <!-- = NOTIFICATIONS & DND = -->
@@ -94,6 +101,8 @@
             android:launchMode="singleTop"
             android:theme="@style/Theme.AutoFlow" />
 
+
+
         <!--  RECEIVERS  -->
         <receiver
             android:name=".receiver.AlarmReceiver"
@@ -144,6 +153,16 @@
                 <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
             </intent-filter>
         </receiver>
+        <!-- ✅ ADD: Phone state receiver for auto-reply SMS -->
+        <receiver
+            android:name=".receiver.PhoneStateReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter android:priority="1000">
+                <action android:name="android.intent.action.PHONE_STATE" />
+            </intent-filter>
+        </receiver>
+
 
         <receiver
             android:name=".receiver.EmergencyUnblockReceiver"

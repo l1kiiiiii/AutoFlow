@@ -34,6 +34,10 @@ object NotificationHelper {
     private const val CHANNEL_NAME_SCRIPT = "Script Notifications"
     private const val CHANNEL_NAME_ERROR = "Error Notifications"
 
+    const val PRIORITY_LOW = NotificationCompat.PRIORITY_LOW
+    const val PRIORITY_HIGH = NotificationCompat.PRIORITY_HIGH
+    const val PRIORITY_DEFAULT = NotificationCompat.PRIORITY_DEFAULT
+
     /**
      * Create notification channels (Android 8.0+)
      */
@@ -105,13 +109,13 @@ object NotificationHelper {
     }
 
     /**
-     * Send a simple notification
+     * Send a simple notification - FIXED VERSION
      */
     fun sendNotification(
         context: Context,
         title: String,
         message: String,
-        priority: String = Constants.NOTIFICATION_PRIORITY_NORMAL,
+        priority: Int = NotificationCompat.PRIORITY_DEFAULT,
         notificationId: Int = DEFAULT_NOTIFICATION_ID
     ) {
         if (!hasNotificationPermission(context)) {
@@ -120,14 +124,14 @@ object NotificationHelper {
         }
 
         try {
-            val channelId = getChannelId(priority)
-            val priorityInt = getPriorityInt(priority)
+            // ✅ FIXED: Use Int priority directly
+            val channelId = getChannelIdForIntPriority(priority)
 
             val builder = NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(getNotificationIcon())
                 .setContentTitle(title)
                 .setContentText(message)
-                .setPriority(priorityInt)
+                .setPriority(priority) // ✅ Use Int directly
                 .setAutoCancel(true)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))
 
@@ -156,7 +160,7 @@ object NotificationHelper {
     }
 
     /**
-     * Send notification with custom action
+     * Send notification with custom action - FIXED VERSION
      */
     fun sendNotificationWithAction(
         context: Context,
@@ -164,7 +168,7 @@ object NotificationHelper {
         message: String,
         actionTitle: String,
         actionIntent: PendingIntent,
-        priority: String = Constants.NOTIFICATION_PRIORITY_NORMAL,
+        priority: Int = NotificationCompat.PRIORITY_DEFAULT, // ✅ FIXED: Use Int type
         notificationId: Int = DEFAULT_NOTIFICATION_ID
     ) {
         if (!hasNotificationPermission(context)) {
@@ -173,14 +177,14 @@ object NotificationHelper {
         }
 
         try {
-            val channelId = getChannelId(priority)
-            val priorityInt = getPriorityInt(priority)
+            // ✅ FIXED: Use Int priority directly
+            val channelId = getChannelIdForIntPriority(priority)
 
             val builder = NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(getNotificationIcon())
                 .setContentTitle(title)
                 .setContentText(message)
-                .setPriority(priorityInt)
+                .setPriority(priority) // ✅ Use Int directly
                 .setAutoCancel(true)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))
                 .addAction(0, actionTitle, actionIntent)
@@ -196,7 +200,6 @@ object NotificationHelper {
             Log.e(TAG, "❌ Error sending notification", e)
         }
     }
-
     /**
      * Send script notification (for user scripts)
      */
@@ -229,6 +232,33 @@ object NotificationHelper {
 
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error sending script notification", e)
+        }
+    }
+
+    // ✅ NEW: Helper method for Int priority to channel mapping
+    private fun getChannelIdForIntPriority(priority: Int): String {
+        return when (priority) {
+            NotificationCompat.PRIORITY_HIGH, NotificationCompat.PRIORITY_MAX -> CHANNEL_ID_HIGH_PRIORITY
+            NotificationCompat.PRIORITY_LOW, NotificationCompat.PRIORITY_MIN -> CHANNEL_ID_LOW_PRIORITY
+            else -> CHANNEL_ID_DEFAULT
+        }
+    }
+
+    // ✅ KEEP: Original String-based method for backward compatibility
+    private fun getChannelId(priority: String): String {
+        return when (priority.uppercase()) {
+            "HIGH" -> CHANNEL_ID_HIGH_PRIORITY
+            "LOW" -> CHANNEL_ID_LOW_PRIORITY
+            else -> CHANNEL_ID_DEFAULT
+        }
+    }
+
+    // ✅ KEEP: String to Int conversion method
+    private fun getPriorityInt(priority: String): Int {
+        return when (priority.uppercase()) {
+            "HIGH" -> NotificationCompat.PRIORITY_HIGH
+            "LOW" -> NotificationCompat.PRIORITY_LOW
+            else -> NotificationCompat.PRIORITY_DEFAULT
         }
     }
 
@@ -333,21 +363,6 @@ object NotificationHelper {
 
     //  PRIVATE HELPER METHODS 
 
-    private fun getChannelId(priority: String): String {
-        return when (priority.uppercase()) {
-            Constants.NOTIFICATION_PRIORITY_HIGH.uppercase() -> CHANNEL_ID_HIGH_PRIORITY
-            Constants.NOTIFICATION_PRIORITY_LOW.uppercase() -> CHANNEL_ID_LOW_PRIORITY
-            else -> CHANNEL_ID_DEFAULT
-        }
-    }
-
-    private fun getPriorityInt(priority: String): Int {
-        return when (priority.uppercase()) {
-            Constants.NOTIFICATION_PRIORITY_HIGH.uppercase() -> NotificationCompat.PRIORITY_HIGH
-            Constants.NOTIFICATION_PRIORITY_LOW.uppercase() -> NotificationCompat.PRIORITY_LOW
-            else -> NotificationCompat.PRIORITY_DEFAULT
-        }
-    }
 
     private fun getNotificationIcon(): Int {
         // Return your app's notification icon
@@ -365,4 +380,6 @@ object NotificationHelper {
             true
         }
     }
+
+
 }

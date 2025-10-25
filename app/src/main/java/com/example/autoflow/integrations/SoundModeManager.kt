@@ -91,10 +91,10 @@ class SoundModeManager(context: Context) {
         }
 
         return try {
-            when (mode) {
-                "Normal" -> setNormalMode()
-                "Silent" -> setSilentMode()
-                "Vibrate" -> setVibrateMode()
+            when (mode.trim().uppercase()) {
+                "NORMAL", "RING" -> setNormalMode()
+                "SILENT" -> setSilentMode()
+                "VIBRATE" -> setVibrateMode()
                 "DND" -> setDNDMode()
                 else -> {
                     Log.w(TAG, "Unknown mode: $mode")
@@ -182,7 +182,7 @@ class SoundModeManager(context: Context) {
                 return false
             }
 
-            // Set DND mode
+            //  Sets interruption filter to enable DND
             notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
             Log.d(TAG, "✅ Set to DND mode")
             return true
