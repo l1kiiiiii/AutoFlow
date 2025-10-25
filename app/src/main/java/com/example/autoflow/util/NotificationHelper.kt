@@ -115,7 +115,7 @@ object NotificationHelper {
         context: Context,
         title: String,
         message: String,
-        priority: Int = NotificationCompat.PRIORITY_DEFAULT, // ✅ FIXED: Use Int type
+        priority: Int = NotificationCompat.PRIORITY_DEFAULT,
         notificationId: Int = DEFAULT_NOTIFICATION_ID
     ) {
         if (!hasNotificationPermission(context)) {

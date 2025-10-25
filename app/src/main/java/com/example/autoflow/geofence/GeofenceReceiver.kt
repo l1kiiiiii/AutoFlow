@@ -1,4 +1,4 @@
-package com.example.autoflow.receiver
+package com.example.autoflow.geofence
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -10,9 +10,7 @@ import com.example.autoflow.data.toTriggers
 import com.example.autoflow.util.ActionExecutor
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingEvent
-import kotlinx.coroutines.*
 import org.json.JSONObject
-import kotlin.math.*
 import com.example.autoflow.data.WorkflowRepository
 import com.example.autoflow.util.TriggerParser
 import com.example.autoflow.util.Constants

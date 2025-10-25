@@ -91,6 +91,7 @@ class InAppNotificationManager private constructor(private val context: Context)
      * Add SMS auto-reply notification
      */
     fun addSmsReply(phoneNumber: String, message: String, success: Boolean) {
+        Log.d(TAG, "📝 SMS Reply: $phoneNumber - Success: $success - Message: $message")
         addNotification(
             type = if (success) NotificationType.SMS_SENT else NotificationType.ERROR,
             title = if (success) "📱 Auto-Reply Sent" else "❌ Auto-Reply Failed",

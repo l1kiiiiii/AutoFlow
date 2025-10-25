@@ -20,7 +20,7 @@ class ModeDeactivateReceiver : BroadcastReceiver() {
 
         // Restore normal sound mode
         val soundModeManager = SoundModeManager(context)
-        soundModeManager.setRingerMode("Normal")
+        soundModeManager.setSoundMode("Normal")
 
         // Cancel the persistent notification
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

@@ -156,7 +156,37 @@ class AutoReplyManager private constructor(private val context: Context) {
         // You can enhance this with actual location checking
         return isBusinessHours
     }
+    private fun hasRequiredPermissions(): Boolean {
+        val permissions = listOf(
+            Manifest.permission.READ_CALL_LOG,
+            Manifest.permission.SEND_SMS,
+            Manifest.permission.READ_PHONE_STATE
+        )
+
+        return permissions.all { permission ->
+            ActivityCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun showPermissionRequiredNotification() {
+        try {
+            NotificationHelper.sendNotification(
+                context = context,
+                title = "⚠️ Permissions Required",
+                message = "AutoFlow needs SMS and Call Log permissions for auto-reply. Please enable in Settings.",
+                priority = NotificationCompat.PRIORITY_HIGH,
+                notificationId = 9999
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error showing permission notification", e)
+        }
+    }
     suspend fun handleMissedCall(phoneNumber: String) {
+        if (!hasRequiredPermissions()) {
+            Log.e(TAG, "❌ Missing required permissions for auto-reply")
+            showPermissionRequiredNotification()
+            return
+        }
         if (!shouldAutoReply()) {
             Log.d(TAG, "⏭️ Auto-reply conditions not met, skipping")
             return
@@ -269,6 +299,7 @@ class AutoReplyManager private constructor(private val context: Context) {
     private suspend fun sendAutoReply(phoneNumber: String) {
         if (!hasSmsPermission()) {
             Log.e(TAG, "❌ SMS permission not granted")
+            showPermissionRequiredNotification()
             return
         }
 
