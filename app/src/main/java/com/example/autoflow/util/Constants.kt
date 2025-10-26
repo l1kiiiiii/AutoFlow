@@ -99,6 +99,9 @@ object Constants {
     const val NOTIFICATION_CHANNEL_NAME_HIGH_PRIORITY = "AutoFlow High Priority"
     const val NOTIFICATION_CHANNEL_NAME_TRIGGERS = "AutoFlow Triggers"
 
+    // Notification IDs
+    const val NOTIFICATION_ID_MODE_ACTIVE = 1001
+
     // Notification priorities
     const val NOTIFICATION_PRIORITY_LOW = "Low"
     const val NOTIFICATION_PRIORITY_NORMAL = "Normal"

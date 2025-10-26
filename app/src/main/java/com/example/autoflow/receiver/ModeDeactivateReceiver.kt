@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.example.autoflow.integrations.SoundModeManager
+import com.example.autoflow.util.Constants
 
 class ModeDeactivateReceiver : BroadcastReceiver() {
 
@@ -18,13 +19,13 @@ class ModeDeactivateReceiver : BroadcastReceiver() {
 
         Log.d(TAG, "Deactivating $modeName")
 
-        // Restore normal sound mode
+        // Disable DND mode and restore normal interruptions
         val soundModeManager = SoundModeManager(context)
-        soundModeManager.setRingerMode("Normal")
+        soundModeManager.disableDNDMode()
 
         // Cancel the persistent notification
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.cancel(1001)
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        notificationManager?.cancel(Constants.NOTIFICATION_ID_MODE_ACTIVE)
 
         Log.d(TAG, "$modeName deactivated")
     }

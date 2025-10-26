@@ -38,6 +38,7 @@ import com.example.autoflow.integrations.SoundModeManager
 import com.example.autoflow.model.ModeTemplate
 import com.example.autoflow.receiver.ModeDeactivateReceiver
 import com.example.autoflow.ui.screens.TaskCreationScreen
+import com.example.autoflow.util.Constants
 import com.example.autoflow.util.PredefinedModes
 import com.example.autoflow.viewmodel.WorkflowViewModel
 import kotlinx.coroutines.delay
@@ -402,8 +403,8 @@ fun Dashboard(modifier: Modifier = Modifier) {
                                     
                                     if (success) {
                                         // Cancel the persistent notification
-                                        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                                        notificationManager.cancel(1001)
+                                        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                                        notificationManager?.cancel(Constants.NOTIFICATION_ID_MODE_ACTIVE)
                                         
                                         snackbarHostState.showSnackbar(
                                             message = "${mode.name} deactivated!",
@@ -597,5 +598,5 @@ private fun showModeActiveNotification(context: Context, mode: ModeTemplate) {
         )
         .build()
 
-    notificationManager.notify(1001, notification)
+    notificationManager.notify(Constants.NOTIFICATION_ID_MODE_ACTIVE, notification)
 }
