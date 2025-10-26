@@ -393,18 +393,39 @@ fun Dashboard(modifier: Modifier = Modifier) {
                                     return@launch
                                 }
 
-                                // Permission granted, activate mode
-                                val actionValue = mode.defaultActions.firstOrNull()?.config?.get("value") as? String
-                                val success = soundModeManager.setRingerMode(actionValue ?: "DND")
-
-                                if (success) {
-                                    snackbarHostState.showSnackbar(
-                                        message = "${mode.name} activated!",
-                                        duration = SnackbarDuration.Short
-                                    )
-                                    showModeActiveNotification(context, mode)
+                                // Toggle mode: check if DND is already enabled
+                                val isDNDActive = soundModeManager.isDNDEnabled()
+                                
+                                if (isDNDActive) {
+                                    // DND is active, deactivate it
+                                    val success = soundModeManager.disableDNDMode()
+                                    
+                                    if (success) {
+                                        // Cancel the persistent notification
+                                        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                                        notificationManager.cancel(1001)
+                                        
+                                        snackbarHostState.showSnackbar(
+                                            message = "${mode.name} deactivated!",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    } else {
+                                        snackbarHostState.showSnackbar("Failed to deactivate ${mode.name}")
+                                    }
                                 } else {
-                                    snackbarHostState.showSnackbar("Failed to activate ${mode.name}")
+                                    // DND is not active, activate it
+                                    val actionValue = mode.defaultActions.firstOrNull()?.config?.get("value") as? String
+                                    val success = soundModeManager.setRingerMode(actionValue ?: "DND")
+
+                                    if (success) {
+                                        snackbarHostState.showSnackbar(
+                                            message = "${mode.name} activated!",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                        showModeActiveNotification(context, mode)
+                                    } else {
+                                        snackbarHostState.showSnackbar("Failed to activate ${mode.name}")
+                                    }
                                 }
                             }
                         } else {

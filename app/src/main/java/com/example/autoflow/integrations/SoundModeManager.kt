@@ -192,4 +192,31 @@ class SoundModeManager(context: Context) {
             return setSilentMode()
         }
     }
+
+    /**
+     * Disable DND mode and restore normal interruption filter
+     */
+    fun disableDNDMode(): Boolean {
+        if (notificationManager == null) {
+            Log.e(TAG, "NotificationManager is null")
+            return false
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (!notificationManager.isNotificationPolicyAccessGranted) {
+                Log.w(TAG, "DND access not granted - opening settings")
+                openDNDSettings()
+                return false
+            }
+
+            // Disable DND mode - restore all interruptions
+            notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL)
+            Log.d(TAG, "✅ Disabled DND mode")
+            return true
+        } else {
+            // Fallback to normal mode for older devices
+            Log.w(TAG, "DND not available, using Normal mode")
+            return setNormalMode()
+        }
+    }
 }
