@@ -137,6 +137,19 @@ fun Dashboard(modifier: Modifier = Modifier) {
                                 } else {
                                     // Activate meeting mode manually
                                     val soundModeManager = SoundModeManager(context)
+
+                                    if (!soundModeManager.hasDndPermission()) {
+                                        snackbarHostState.showSnackbar(
+                                            message = "Grant Do Not Disturb permission to use Meeting Mode",
+                                            actionLabel = "Grant",
+                                            duration = SnackbarDuration.Long
+                                        ).let { result ->
+                                            if (result == SnackbarResult.ActionPerformed) {
+                                                soundModeManager.requestDndPermission()
+                                            }
+                                        }
+                                        return@launch
+                                    }
                                     val success = soundModeManager.setSoundMode("DND")
 
                                     if (success) {

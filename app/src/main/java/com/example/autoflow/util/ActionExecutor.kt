@@ -108,6 +108,68 @@ object ActionExecutor {
                     toggleBluetooth(context, state)
                 }
 
+                "AUTO_REPLY" -> {
+                    Log.d(TAG, "🤖 Setting up auto-reply")
+
+                    val message = action.message ?: "I'm currently in a meeting and will get back to you soon."
+
+                    // ✅ FIXED: Use proper Action constructor
+                    val autoReplyAction = Action(
+                        type = Constants.ACTION_AUTO_REPLY_SMS,
+                        value = "true"
+                    ).apply {
+                        // Set message after construction
+                        this.message = message
+                    }
+
+                    val success = executeAutoReplySms(context, autoReplyAction)
+
+                    if (success) {
+                        // Also set meeting mode flags for compatibility
+                        val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+                        prefs.edit()
+                            .putBoolean("manual_meeting_mode", true)
+                            .apply()
+
+                        // Start phone state monitoring
+                        val phoneStateManager = PhoneStateManager.getInstance(context)
+                        phoneStateManager.startListening()
+
+                        Log.d(TAG, "✅ Auto-reply activated: $message")
+                    }
+
+                    success
+                }
+
+                "STOP_AUTO_REPLY" -> {
+                    Log.d(TAG, "🚫 Stopping auto-reply")
+
+                    // ✅ FIXED: Use proper Action constructor
+                    val stopAutoReplyAction = Action(
+                        type = Constants.ACTION_AUTO_REPLY_SMS,
+                        value = "false"
+                    )
+
+                    val success = executeAutoReplySms(context, stopAutoReplyAction)
+
+                    if (success) {
+                        // Clear meeting mode flags
+                        val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+                        prefs.edit()
+                            .putBoolean("manual_meeting_mode", false)
+                            .apply()
+
+                        // Stop phone state monitoring
+                        val phoneStateManager = PhoneStateManager.getInstance(context)
+                        phoneStateManager.stopListening()
+
+                        Log.d(TAG, "✅ Auto-reply stopped")
+                    }
+
+                    success
+                }
+
+
                 Constants.ACTION_AUTO_REPLY_SMS -> {
                     executeAutoReplySms(context, action)
                 }

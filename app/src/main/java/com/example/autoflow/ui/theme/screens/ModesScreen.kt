@@ -22,8 +22,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.autoflow.model.ModeTemplate
+import com.example.autoflow.model.TriggerTemplate
 import com.example.autoflow.util.PredefinedModes
 import com.example.autoflow.viewmodel.WorkflowViewModel
+import androidx.compose.ui.window.Dialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,6 +36,10 @@ fun ModesScreen(
 ) {
     // ✅ Observe workflows to check running status
     val workflows by viewModel.workflows.observeAsState(emptyList())
+
+    // ✅ State for dialog
+    var showDialog by remember { mutableStateOf(false) }
+    var selectedMode by remember { mutableStateOf<ModeTemplate?>(null) }
 
     // ✅ Count running modes
     val runningModesCount = workflows.count { it.isEnabled }
@@ -53,12 +59,10 @@ fun ModesScreen(
                         }
                     }
                 },
-                // ✅ Stop All button in top bar
                 actions = {
                     if (runningModesCount > 0) {
                         TextButton(
                             onClick = {
-                                // Stop all running modes
                                 workflows.filter { it.isEnabled }.forEach { workflow ->
                                     viewModel.updateWorkflowEnabled(
                                         workflowId = workflow.id,
@@ -95,7 +99,6 @@ fun ModesScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // ✅ Running modes section at top
             if (runningModesCount > 0) {
                 ActiveModesSection(
                     workflows = workflows,
@@ -112,7 +115,6 @@ fun ModesScreen(
                 )
             }
 
-            // ✅ All modes grid
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 contentPadding = PaddingValues(16.dp),
@@ -121,49 +123,20 @@ fun ModesScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(PredefinedModes.getAllModes()) { mode ->
-                    // ✅ Check if this mode is currently running
                     val runningWorkflow = workflows.find { workflow ->
                         workflow.workflowName.contains(mode.name, ignoreCase = true) &&
                                 workflow.isEnabled
                     }
                     val isRunning = runningWorkflow != null
 
-                    // ✅ Special handling for Meeting Mode
-                    val isMeetingMode = mode.name == "Meeting Mode"
-
                     ModeCard(
                         mode = mode,
                         isRunning = isRunning,
-                        isMeetingMode = isMeetingMode,
+                        isMeetingMode = mode.name == "Meeting Mode", // Keep this for UI differences
                         onModeClick = {
-                            if (isMeetingMode && PredefinedModes.isManualMode(mode)) {
-                                // ✅ For Meeting Mode, toggle it directly
-                                if (isRunning) {
-                                    // Stop Meeting Mode
-                                    runningWorkflow?.let { workflow ->
-                                        viewModel.updateWorkflowEnabled(
-                                            workflowId = workflow.id,
-                                            enabled = false,
-                                            callback = object : WorkflowViewModel.WorkflowOperationCallback {
-                                                override fun onSuccess(message: String) {}
-                                                override fun onError(error: String) {}
-                                            }
-                                        )
-                                    }
-                                } else {
-                                    // ✅ Start Meeting Mode using createWorkflowFromMode
-                                    viewModel.createWorkflowFromMode(
-                                        mode = mode,
-                                        callback = object : WorkflowViewModel.WorkflowOperationCallback {
-                                            override fun onSuccess(message: String) {}
-                                            override fun onError(error: String) {}
-                                        }
-                                    )
-                                }
-                            } else {
-                                // ✅ For other modes, open configuration
-                                onModeSelected(mode)
-                            }
+                            // ✅ ALL MODES NOW SHOW POPUP (including Meeting Mode)
+                            selectedMode = mode
+                            showDialog = true
                         },
                         onStopClick = {
                             if (isRunning && runningWorkflow != null) {
@@ -182,7 +155,71 @@ fun ModesScreen(
             }
         }
     }
+
+    // ✅ Show configuration dialog popup for ALL modes (including Meeting Mode)
+    selectedMode?.let { mode ->
+        ModeConfigurationDialog(
+            mode = mode,
+            isVisible = showDialog,
+            onDismiss = {
+                showDialog = false
+                selectedMode = null
+            },
+            onSave = { config ->
+                when (config) {
+                    is ModeConfig.Manual -> {
+                        viewModel.createWorkflowFromMode(
+                            mode = mode.copy(
+                                defaultTriggers = listOf(
+                                    TriggerTemplate("MANUAL", mapOf("type" to "quick_action"))
+                                )
+                            ),
+                            callback = object : WorkflowViewModel.WorkflowOperationCallback {
+                                override fun onSuccess(message: String) {}
+                                override fun onError(error: String) {}
+                            }
+                        )
+                    }
+                    is ModeConfig.Scheduled -> {
+                        viewModel.createWorkflowFromMode(
+                            mode = mode.copy(
+                                defaultTriggers = listOf(
+                                    TriggerTemplate("TIME", mapOf(
+                                        "startTime" to config.startTime,
+                                        "endTime" to config.endTime,
+                                        "days" to "mon,tue,wed,thu,fri"
+                                    ))
+                                )
+                            ),
+                            callback = object : WorkflowViewModel.WorkflowOperationCallback {
+                                override fun onSuccess(message: String) {}
+                                override fun onError(error: String) {}
+                            }
+                        )
+                    }
+                    is ModeConfig.Endless -> {
+                        viewModel.createWorkflowFromMode(
+                            mode = mode.copy(
+                                defaultTriggers = listOf(
+                                    TriggerTemplate("MANUAL", mapOf("type" to "endless"))
+                                )
+                            ),
+                            callback = object : WorkflowViewModel.WorkflowOperationCallback {
+                                override fun onSuccess(message: String) {}
+                                override fun onError(error: String) {}
+                            }
+                        )
+                    }
+                }
+
+                showDialog = false
+                selectedMode = null
+            }
+        )
+    }
 }
+
+
 
 @Composable
 fun ActiveModesSection(
@@ -418,6 +455,161 @@ fun ModeCard(
         }
     }
 }
+sealed class ModeConfig {
+    object Manual : ModeConfig()
+    object Endless : ModeConfig()
+    data class Scheduled(val startTime: String, val endTime: String) : ModeConfig()
+}
+
+@Composable
+fun ModeConfigurationDialog(
+    mode: ModeTemplate,
+    isVisible: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (ModeConfig) -> Unit
+) {
+    if (isVisible) {
+        Dialog(onDismissRequest = onDismiss) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface // ✅ Fixed
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(24.dp)
+                        .fillMaxWidth()
+                ) {
+                    // Header
+                    Text(
+                        text = "Configure ${mode.name}",
+                        style = MaterialTheme.typography.headlineSmall, // ✅ Fixed
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Mode Type Selection
+                    var selectedMode by remember { mutableStateOf("manual") }
+
+                    // ✅ MOVE TIME VARIABLES HERE (outside if block)
+                    var startTime by remember { mutableStateOf("09:00") }
+                    var endTime by remember { mutableStateOf("17:00") }
+
+                    Text("Mode Type:", fontWeight = FontWeight.Medium)
+
+                    // Manual Mode
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedMode = "manual" }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedMode == "manual",
+                            onClick = { selectedMode = "manual" }
+                        )
+                        Column(modifier = Modifier.padding(start = 8.dp)) {
+                            Text("Manual Control", fontWeight = FontWeight.Medium)
+                            Text("Turn on/off manually", style = MaterialTheme.typography.labelSmall) // ✅ Fixed
+                        }
+                    }
+
+                    // Scheduled Mode
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedMode = "scheduled" }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedMode == "scheduled",
+                            onClick = { selectedMode = "scheduled" }
+                        )
+                        Column(modifier = Modifier.padding(start = 8.dp)) {
+                            Text("Scheduled Mode", fontWeight = FontWeight.Medium)
+                            Text("Set start and end times", style = MaterialTheme.typography.labelSmall) // ✅ Fixed
+                        }
+                    }
+
+                    // Endless Mode
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedMode = "endless" }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedMode == "endless",
+                            onClick = { selectedMode = "endless" }
+                        )
+                        Column(modifier = Modifier.padding(start = 8.dp)) {
+                            Text("Endless Mode", fontWeight = FontWeight.Medium)
+                            Text("Runs until manually stopped", style = MaterialTheme.typography.labelSmall) // ✅ Fixed
+                        }
+                    }
+
+                    // Time Configuration (only for scheduled mode)
+                    if (selectedMode == "scheduled") {
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Start Time
+                        Text("Start Time:", fontWeight = FontWeight.Medium)
+                        OutlinedTextField(
+                            value = startTime,
+                            onValueChange = { startTime = it },
+                            placeholder = { Text("HH:MM") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // End Time
+                        Text("End Time:", fontWeight = FontWeight.Medium)
+                        OutlinedTextField(
+                            value = endTime,
+                            onValueChange = { endTime = it },
+                            placeholder = { Text("HH:MM") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Action Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text("Cancel")
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Button(
+                            onClick = {
+                                val config = when (selectedMode) {
+                                    "manual" -> ModeConfig.Manual
+                                    "scheduled" -> ModeConfig.Scheduled(startTime, endTime)
+                                    "endless" -> ModeConfig.Endless
+                                    else -> ModeConfig.Manual
+                                }
+                                onSave(config)
+                                onDismiss()
+                            }
+                        ) {
+                            Text("Save")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Preview(showBackground = true)
 @Composable
 fun ModeCardPreview() {
