@@ -517,9 +517,8 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
 
                             Log.d(TAG, "💾 Saved previous state: Ringer=$currentRingerMode, DND=$currentDndState")
 
-
                             //  EXECUTE ACTIONS IMMEDIATELY - Enhanced with direct execution
-                            Log.d(TAG, "🎯 Starting manual workflow execution...")
+                            Log.d(TAG, "🎯 Starting manual workflow execution for: ${wf.workflowName}")
 
                             val actions = wf.toActions()
                             Log.d(TAG, "🎯 Found ${actions.size} actions to execute")
@@ -544,20 +543,11 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                             } else {
                                 Log.e(TAG, "❌ Failed to execute Meeting Mode actions")
                             }
-
-
-                            if (success) {
-                                Log.d(TAG, "✅ Meeting Mode DND enabled successfully")
-                            } else {
-                                Log.e(TAG, "❌ Failed to execute Meeting Mode actions")
-                            }
-                        }
+                        } // ✅ FIXED: Close isManualWorkflow block
 
                         // Schedule any time-based triggers
-
                         AlarmScheduler.scheduleWorkflow(getApplication<Application>().applicationContext, wf)
-
-                    }
+                    } // ✅ FIXED: Close workflow?.let block
                 }
 
                 override fun onWorkflowError(error: String) {
@@ -651,8 +641,6 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             }
         })
     }
-
-
     fun getWorkflowById(workflowId: Long, callback: WorkflowByIdCallback) {
         if (workflowId <= 0) {
             callback.onWorkflowError("Invalid workflow ID")

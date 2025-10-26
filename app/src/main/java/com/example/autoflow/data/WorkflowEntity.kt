@@ -118,7 +118,7 @@ data class WorkflowEntity(
 
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error creating WorkflowEntity", e)
-                null  // ← AND ONE IN THE CATCH BLOCK
+                return null  // ← AND ONE IN THE CATCH BLOCK
             }
         }
     }
