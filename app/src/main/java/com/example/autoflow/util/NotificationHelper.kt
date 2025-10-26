@@ -13,110 +13,141 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 
 /**
- * Helper class for managing notifications
- * Handles notification channels, creation, and display
+ * ✅ ENHANCED NotificationHelper - Complete Version
+ * Combines existing functionality with Meeting Mode features
+ * Handles notification channels, creation, and display with backward compatibility
  */
 object NotificationHelper {
 
     private const val TAG = "NotificationHelper"
     private const val DEFAULT_NOTIFICATION_ID = 1000
 
-    // Notification channels
+    // ✅ EXISTING + NEW notification channels (merged)
     private const val CHANNEL_ID_DEFAULT = "autoflow_default"
     private const val CHANNEL_ID_HIGH_PRIORITY = "autoflow_high_priority"
     private const val CHANNEL_ID_LOW_PRIORITY = "autoflow_low_priority"
     private const val CHANNEL_ID_SCRIPT = "autoflow_script"
     private const val CHANNEL_ID_ERROR = "autoflow_error"
 
+    // ✅ NEW Meeting Mode channels
+    private const val CHANNEL_GENERAL = "autoflow_general"
+    private const val CHANNEL_AUTO_REPLY = "autoflow_auto_reply"
+    private const val CHANNEL_MEETING_MODE = "autoflow_meeting_mode"
+
+    // Channel names
     private const val CHANNEL_NAME_DEFAULT = "AutoFlow Notifications"
     private const val CHANNEL_NAME_HIGH = "Important AutoFlow Alerts"
     private const val CHANNEL_NAME_LOW = "AutoFlow Updates"
     private const val CHANNEL_NAME_SCRIPT = "Script Notifications"
     private const val CHANNEL_NAME_ERROR = "Error Notifications"
 
+    // ✅ COMPATIBLE Priority constants
     const val PRIORITY_LOW = NotificationCompat.PRIORITY_LOW
     const val PRIORITY_HIGH = NotificationCompat.PRIORITY_HIGH
     const val PRIORITY_DEFAULT = NotificationCompat.PRIORITY_DEFAULT
 
     /**
-     * Create notification channels (Android 8.0+)
+     * ✅ ENHANCED: Create all notification channels (both existing + new Meeting Mode)
      */
     fun createNotificationChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE)
-                    as? NotificationManager ?: return
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
 
-            // Default channel
-            val defaultChannel = NotificationChannel(
-                CHANNEL_ID_DEFAULT,
-                CHANNEL_NAME_DEFAULT,
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                description = "General AutoFlow notifications"
-                enableVibration(true)
-                enableLights(true)
-            }
+            val channels = listOf(
+                // ✅ EXISTING channels (enhanced)
+                NotificationChannel(
+                    CHANNEL_ID_DEFAULT,
+                    CHANNEL_NAME_DEFAULT,
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply {
+                    description = "General AutoFlow notifications"
+                    enableVibration(true)
+                    enableLights(true)
+                },
 
-            // High priority channel
-            val highPriorityChannel = NotificationChannel(
-                CHANNEL_ID_HIGH_PRIORITY,
-                CHANNEL_NAME_HIGH,
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Important AutoFlow alerts"
-                enableVibration(true)
-                enableLights(true)
-            }
+                NotificationChannel(
+                    CHANNEL_ID_HIGH_PRIORITY,
+                    CHANNEL_NAME_HIGH,
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Important AutoFlow alerts"
+                    enableVibration(true)
+                    enableLights(true)
+                },
 
-            // Low priority channel
-            val lowPriorityChannel = NotificationChannel(
-                CHANNEL_ID_LOW_PRIORITY,
-                CHANNEL_NAME_LOW,
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "AutoFlow status updates"
-                enableVibration(false)
-                enableLights(false)
-            }
+                NotificationChannel(
+                    CHANNEL_ID_LOW_PRIORITY,
+                    CHANNEL_NAME_LOW,
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "AutoFlow status updates"
+                    enableVibration(false)
+                    enableLights(false)
+                },
 
-            // Script notification channel
-            val scriptChannel = NotificationChannel(
-                CHANNEL_ID_SCRIPT,
-                CHANNEL_NAME_SCRIPT,
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                description = "Notifications from user scripts"
-                enableVibration(true)
-            }
+                NotificationChannel(
+                    CHANNEL_ID_SCRIPT,
+                    CHANNEL_NAME_SCRIPT,
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply {
+                    description = "Notifications from user scripts"
+                    enableVibration(true)
+                },
 
-            // Error notification channel
-            val errorChannel = NotificationChannel(
-                CHANNEL_ID_ERROR,
-                CHANNEL_NAME_ERROR,
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Error notifications"
-                enableVibration(true)
-                enableLights(true)
-            }
+                NotificationChannel(
+                    CHANNEL_ID_ERROR,
+                    CHANNEL_NAME_ERROR,
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Error notifications"
+                    enableVibration(true)
+                    enableLights(true)
+                },
 
-            notificationManager.createNotificationChannels(
-                listOf(defaultChannel, highPriorityChannel, lowPriorityChannel, scriptChannel, errorChannel)
+                // ✅ NEW Meeting Mode channels
+                NotificationChannel(
+                    CHANNEL_GENERAL,
+                    "General Notifications",
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply {
+                    description = "General AutoFlow notifications (Meeting Mode compatible)"
+                },
+
+                NotificationChannel(
+                    CHANNEL_AUTO_REPLY,
+                    "Auto-Reply Notifications",
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Notifications when auto-reply SMS is sent"
+                },
+
+                NotificationChannel(
+                    CHANNEL_MEETING_MODE,
+                    "Meeting Mode",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Meeting mode status notifications"
+                }
             )
 
-            Log.d(TAG, "✅ Notification channels created")
+            notificationManager.createNotificationChannels(channels)
+            Log.d(TAG, "✅ All notification channels created (${channels.size} channels)")
         }
     }
 
     /**
-     * Send a simple notification - FIXED VERSION
+     * ✅ PRIMARY: Enhanced sendNotification method with full compatibility
+     * Supports both existing and Meeting Mode calls
      */
+    @JvmStatic
+    @JvmOverloads
     fun sendNotification(
         context: Context,
         title: String,
         message: String,
         priority: Int = NotificationCompat.PRIORITY_DEFAULT,
-        notificationId: Int = DEFAULT_NOTIFICATION_ID
+        notificationId: Int = DEFAULT_NOTIFICATION_ID,
+        channelId: String? = null // ✅ Optional for backward compatibility
     ) {
         if (!hasNotificationPermission(context)) {
             Log.w(TAG, "⚠️ Notification permission not granted")
@@ -124,18 +155,18 @@ object NotificationHelper {
         }
 
         try {
-            // ✅ FIXED: Use Int priority directly
-            val channelId = getChannelIdForIntPriority(priority)
+            // ✅ Smart channel selection
+            val targetChannelId = channelId ?: getChannelIdForIntPriority(priority)
 
-            val builder = NotificationCompat.Builder(context, channelId)
+            val builder = NotificationCompat.Builder(context, targetChannelId)
                 .setSmallIcon(getNotificationIcon())
                 .setContentTitle(title)
                 .setContentText(message)
-                .setPriority(priority) // ✅ Use Int directly
+                .setPriority(priority)
                 .setAutoCancel(true)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))
 
-            // Add content intent to open app
+            // ✅ Add content intent to open app
             val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
             if (intent != null) {
                 val pendingIntent = PendingIntent.getActivity(
@@ -160,15 +191,16 @@ object NotificationHelper {
     }
 
     /**
-     * Send notification with custom action - FIXED VERSION
+     * ✅ EXISTING: Enhanced notification with custom action
      */
+    @JvmStatic
     fun sendNotificationWithAction(
         context: Context,
         title: String,
         message: String,
         actionTitle: String,
         actionIntent: PendingIntent,
-        priority: Int = NotificationCompat.PRIORITY_DEFAULT, // ✅ FIXED: Use Int type
+        priority: Int = NotificationCompat.PRIORITY_DEFAULT,
         notificationId: Int = DEFAULT_NOTIFICATION_ID
     ) {
         if (!hasNotificationPermission(context)) {
@@ -177,14 +209,13 @@ object NotificationHelper {
         }
 
         try {
-            // ✅ FIXED: Use Int priority directly
             val channelId = getChannelIdForIntPriority(priority)
 
             val builder = NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(getNotificationIcon())
                 .setContentTitle(title)
                 .setContentText(message)
-                .setPriority(priority) // ✅ Use Int directly
+                .setPriority(priority)
                 .setAutoCancel(true)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))
                 .addAction(0, actionTitle, actionIntent)
@@ -200,9 +231,11 @@ object NotificationHelper {
             Log.e(TAG, "❌ Error sending notification", e)
         }
     }
+
     /**
-     * Send script notification (for user scripts)
+     * ✅ EXISTING: Script notification (for user scripts)
      */
+    @JvmStatic
     fun sendScriptNotification(
         context: Context,
         title: String,
@@ -235,36 +268,10 @@ object NotificationHelper {
         }
     }
 
-    // ✅ NEW: Helper method for Int priority to channel mapping
-    private fun getChannelIdForIntPriority(priority: Int): String {
-        return when (priority) {
-            NotificationCompat.PRIORITY_HIGH, NotificationCompat.PRIORITY_MAX -> CHANNEL_ID_HIGH_PRIORITY
-            NotificationCompat.PRIORITY_LOW, NotificationCompat.PRIORITY_MIN -> CHANNEL_ID_LOW_PRIORITY
-            else -> CHANNEL_ID_DEFAULT
-        }
-    }
-
-    // ✅ KEEP: Original String-based method for backward compatibility
-    private fun getChannelId(priority: String): String {
-        return when (priority.uppercase()) {
-            "HIGH" -> CHANNEL_ID_HIGH_PRIORITY
-            "LOW" -> CHANNEL_ID_LOW_PRIORITY
-            else -> CHANNEL_ID_DEFAULT
-        }
-    }
-
-    // ✅ KEEP: String to Int conversion method
-    private fun getPriorityInt(priority: String): Int {
-        return when (priority.uppercase()) {
-            "HIGH" -> NotificationCompat.PRIORITY_HIGH
-            "LOW" -> NotificationCompat.PRIORITY_LOW
-            else -> NotificationCompat.PRIORITY_DEFAULT
-        }
-    }
-
     /**
-     * Send error notification
+     * ✅ EXISTING: Send error notification
      */
+    @JvmStatic
     fun sendErrorNotification(
         context: Context,
         title: String,
@@ -298,8 +305,9 @@ object NotificationHelper {
     }
 
     /**
-     * Send progress notification
+     * ✅ EXISTING: Send progress notification
      */
+    @JvmStatic
     fun sendProgressNotification(
         context: Context,
         title: String,
@@ -331,8 +339,49 @@ object NotificationHelper {
     }
 
     /**
-     * Cancel a notification
+     * ✅ NEW: Meeting Mode specific notifications
      */
+    @JvmStatic
+    fun sendMeetingModeNotification(
+        context: Context,
+        title: String,
+        message: String,
+        notificationId: Int = (System.currentTimeMillis() % 10000).toInt()
+    ) {
+        sendNotification(
+            context = context,
+            title = title,
+            message = message,
+            priority = NotificationCompat.PRIORITY_HIGH,
+            notificationId = notificationId,
+            channelId = CHANNEL_MEETING_MODE
+        )
+    }
+
+    /**
+     * ✅ NEW: Auto-reply specific notifications
+     */
+    @JvmStatic
+    fun sendAutoReplyNotification(
+        context: Context,
+        phoneNumber: String,
+        message: String,
+        notificationId: Int = (System.currentTimeMillis() % 10000).toInt()
+    ) {
+        sendNotification(
+            context = context,
+            title = "📱 Auto-Reply Sent",
+            message = "Replied to $phoneNumber: $message",
+            priority = NotificationCompat.PRIORITY_LOW,
+            notificationId = notificationId,
+            channelId = CHANNEL_AUTO_REPLY
+        )
+    }
+
+    /**
+     * ✅ EXISTING: Cancel a notification
+     */
+    @JvmStatic
     fun cancelNotification(context: Context, notificationId: Int) {
         try {
             NotificationManagerCompat.from(context).cancel(notificationId)
@@ -343,8 +392,9 @@ object NotificationHelper {
     }
 
     /**
-     * Cancel all notifications
+     * ✅ EXISTING: Cancel all notifications
      */
+    @JvmStatic
     fun cancelAllNotifications(context: Context) {
         try {
             NotificationManagerCompat.from(context).cancelAll()
@@ -355,21 +405,59 @@ object NotificationHelper {
     }
 
     /**
-     * Check if notifications are enabled
+     * ✅ EXISTING: Check if notifications are enabled
      */
+    @JvmStatic
     fun areNotificationsEnabled(context: Context): Boolean {
         return NotificationManagerCompat.from(context).areNotificationsEnabled()
     }
 
-    //  PRIVATE HELPER METHODS 
+    // ✅ PRIVATE HELPER METHODS
 
+    /**
+     * ✅ NEW: Smart channel selection for Int priority
+     */
+    private fun getChannelIdForIntPriority(priority: Int): String {
+        return when (priority) {
+            NotificationCompat.PRIORITY_HIGH, NotificationCompat.PRIORITY_MAX -> CHANNEL_ID_HIGH_PRIORITY
+            NotificationCompat.PRIORITY_LOW, NotificationCompat.PRIORITY_MIN -> CHANNEL_ID_LOW_PRIORITY
+            else -> CHANNEL_ID_DEFAULT
+        }
+    }
 
+    /**
+     * ✅ EXISTING: String priority support (backward compatibility)
+     */
+    private fun getChannelId(priority: String): String {
+        return when (priority.uppercase()) {
+            "HIGH" -> CHANNEL_ID_HIGH_PRIORITY
+            "LOW" -> CHANNEL_ID_LOW_PRIORITY
+            else -> CHANNEL_ID_DEFAULT
+        }
+    }
+
+    /**
+     * ✅ EXISTING: String to Int priority conversion
+     */
+    private fun getPriorityInt(priority: String): Int {
+        return when (priority.uppercase()) {
+            "HIGH" -> NotificationCompat.PRIORITY_HIGH
+            "LOW" -> NotificationCompat.PRIORITY_LOW
+            else -> NotificationCompat.PRIORITY_DEFAULT
+        }
+    }
+
+    /**
+     * ✅ EXISTING: Get notification icon
+     */
     private fun getNotificationIcon(): Int {
-        // Return your app's notification icon
-        // Replace with actual resource ID
+        // You can replace with your app's actual icon resource
         return android.R.drawable.ic_dialog_info // Placeholder
     }
 
+    /**
+     * ✅ EXISTING: Check notification permission
+     */
     private fun hasNotificationPermission(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ActivityCompat.checkSelfPermission(
@@ -380,6 +468,4 @@ object NotificationHelper {
             true
         }
     }
-
-
 }

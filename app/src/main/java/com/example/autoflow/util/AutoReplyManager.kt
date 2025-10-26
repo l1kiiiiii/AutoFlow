@@ -20,6 +20,7 @@ import com.example.autoflow.model.Action
 import java.util.Calendar
 
 
+
 class AutoReplyManager private constructor(private val context: Context) {
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -581,45 +582,28 @@ class AutoReplyManager private constructor(private val context: Context) {
             Log.e(TAG, "❌ Failed to send universal auto-reply", e)
         }
     }
-    private fun getLastIncomingCallNumber(): String? {
-        return try {
-            // Check if we have call log permission
-            if (ActivityCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG)
-                != PackageManager.PERMISSION_GRANTED) {
-                Log.w(TAG, "⚠️ READ_CALL_LOG permission not granted")
-                return null
-            }
-
-            val contentResolver = context.contentResolver
-            val cursor = contentResolver.query(
+    private suspend fun getLastIncomingCallNumber(): String? = withContext(Dispatchers.IO) {
+        try {
+            val cursor = context.contentResolver.query(
                 android.provider.CallLog.Calls.CONTENT_URI,
-                arrayOf(
-                    android.provider.CallLog.Calls.NUMBER,
-                    android.provider.CallLog.Calls.TYPE,
-                    android.provider.CallLog.Calls.DATE
-                ),
+                arrayOf(android.provider.CallLog.Calls.NUMBER),
                 "${android.provider.CallLog.Calls.TYPE} = ?",
                 arrayOf(android.provider.CallLog.Calls.INCOMING_TYPE.toString()),
-                "${android.provider.CallLog.Calls.DATE} DESC LIMIT 1"
+                "${android.provider.CallLog.Calls.DATE} DESC"
             )
 
             cursor?.use {
                 if (it.moveToFirst()) {
                     val numberIndex = it.getColumnIndex(android.provider.CallLog.Calls.NUMBER)
-                    val number = it.getString(numberIndex)
-
-                    if (!number.isNullOrBlank()) {
-                        Log.d(TAG, "📱 Found incoming call number: $number")
-                        return number
+                    if (numberIndex >= 0) {
+                        return@withContext it.getString(numberIndex)
                     }
                 }
             }
-
-            Log.d(TAG, "⚠️ No recent incoming call number found")
-            null
+            return@withContext null
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error reading call log", e)
-            null
+            Log.e(TAG, "❌ Error getting last call number", e)
+            return@withContext null
         }
     }
 
@@ -691,21 +675,26 @@ class AutoReplyManager private constructor(private val context: Context) {
         }
     }
     // Add this method to your AutoReplyManager class
-    fun handleIncomingCallFromUnknown(context: Context) {
+    suspend fun handleIncomingCallFromUnknown(context: Context) {
         Log.d(TAG, "🔥 handleIncomingCallFromUnknown called")
 
-        coroutineScope.launch {
-            try {
-                if (shouldSendAutoReplyForUnknownNumber()) {
-                    // Send notification instead of SMS (since we don't have a number)
-                    showIncomingCallNotification()
-                    Log.d(TAG, "✅ Handled incoming call from unknown number")
-                } else {
-                    Log.d(TAG, "⚠️ Auto-reply not needed for unknown caller")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Error processing unknown caller", e)
+        try {
+            if (!shouldAutoReply()) {
+                Log.d(TAG, "⚠️ Auto-reply conditions not met")
+                return
             }
+
+            // Get the most recent incoming call number
+            val callerNumber = getLastIncomingCallNumber()
+
+            if (!callerNumber.isNullOrBlank()) {
+                Log.d(TAG, "📞 Found recent caller: $callerNumber")
+                sendAutoReply(callerNumber)
+            } else {
+                Log.d(TAG, "⚠️ No recent caller found")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error in handleIncomingCallFromUnknown", e)
         }
     }
 
@@ -751,7 +740,8 @@ class AutoReplyManager private constructor(private val context: Context) {
 
     private fun hasSmsPermission(): Boolean {
         return ActivityCompat.checkSelfPermission(
-            context, Manifest.permission.SEND_SMS
+            context,
+            Manifest.permission.SEND_SMS
         ) == PackageManager.PERMISSION_GRANTED
     }
 
@@ -759,13 +749,13 @@ class AutoReplyManager private constructor(private val context: Context) {
         try {
             NotificationHelper.sendNotification(
                 context = context,
-                title = "Auto-reply sent",
-                message = "Replied to $phoneNumber: \"$message\"",
-                priority = NotificationCompat.PRIORITY_LOW, // ✅ FIXED: Use Int constant
-                notificationId = (System.currentTimeMillis() % 10000).toInt()
+                title = "📱 Auto-Reply Sent",
+                message = "Replied to $phoneNumber: $message",
+                priority = NotificationCompat.PRIORITY_LOW,
+                notificationId = System.currentTimeMillis().toInt()
             )
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error showing notification", e)
+            Log.e(TAG, "❌ Error showing auto-reply notification", e)
         }
     }
 

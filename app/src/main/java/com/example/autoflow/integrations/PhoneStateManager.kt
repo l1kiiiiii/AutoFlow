@@ -12,16 +12,18 @@ import android.os.Build
 import com.example.autoflow.util.AutoReplyManager
 import java.util.concurrent.Executor
 
-class PhoneStateManager(private val context: Context) {
+class PhoneStateManager private constructor(private val context: Context) {
 
     private val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
     private var phoneStateListener: PhoneStateListener? = null
     private var telephonyCallback: TelephonyCallback? = null
     private var isListening = false
 
+    // ✅ ADD AUTO-REPLY MESSAGE STORAGE
+    private var autoReplyMessage: String = "I'm currently in a meeting and will get back to you shortly."
+
     companion object {
         private const val TAG = "PhoneStateManager"
-
         @Volatile
         private var INSTANCE: PhoneStateManager? = null
 
@@ -32,11 +34,28 @@ class PhoneStateManager(private val context: Context) {
         }
     }
 
+    // ✅ ADD MISSING setAutoReplyMessage METHOD
+    fun setAutoReplyMessage(message: String) {
+        this.autoReplyMessage = message
+        Log.d(TAG, "📱 Auto-reply message updated: $message")
+
+        // Save to preferences for persistence
+        val prefs = context.getSharedPreferences("phone_state_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("auto_reply_message", message).apply()
+    }
+
+    // ✅ ADD getAutoReplyMessage METHOD
+    fun getAutoReplyMessage(): String {
+        // Load from preferences if available
+        val prefs = context.getSharedPreferences("phone_state_prefs", Context.MODE_PRIVATE)
+        return prefs.getString("auto_reply_message", autoReplyMessage) ?: autoReplyMessage
+    }
+
     fun startListening() {
         if (isListening) return
 
         if (!hasRequiredPermissions()) {
-            Log.w(TAG, "❌ Missing required permissions for phone state monitoring")
+            Log.w(TAG, "Missing required permissions for phone state monitoring")
             return
         }
 
@@ -47,11 +66,11 @@ class PhoneStateManager(private val context: Context) {
                 startLegacyListening()
             }
             isListening = true
-            Log.d(TAG, "✅ Phone state monitoring started")
+            Log.d(TAG, "📱 Phone state monitoring started")
         } catch (e: SecurityException) {
-            Log.e(TAG, "❌ Security exception starting phone listener", e)
+            Log.e(TAG, "Security exception starting phone listener", e)
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error starting phone listener", e)
+            Log.e(TAG, "Error starting phone listener", e)
         }
     }
 
@@ -62,19 +81,19 @@ class PhoneStateManager(private val context: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 telephonyCallback?.let { callback ->
                     telephonyManager.unregisterTelephonyCallback(callback)
+                    telephonyCallback = null
                 }
-                telephonyCallback = null
             } else {
                 phoneStateListener?.let { listener ->
                     @Suppress("DEPRECATION")
                     telephonyManager.listen(listener, PhoneStateListener.LISTEN_NONE)
+                    phoneStateListener = null
                 }
-                phoneStateListener = null
             }
             isListening = false
-            Log.d(TAG, "✅ Phone state monitoring stopped")
+            Log.d(TAG, "📱 Phone state monitoring stopped")
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error stopping phone listener", e)
+            Log.e(TAG, "Error stopping phone listener", e)
         }
     }
 
@@ -85,7 +104,6 @@ class PhoneStateManager(private val context: Context) {
                 handleCallStateChange(state, phoneNumber)
             }
         }
-
         telephonyManager.listen(phoneStateListener, PhoneStateListener.LISTEN_CALL_STATE)
     }
 
@@ -97,7 +115,6 @@ class PhoneStateManager(private val context: Context) {
                     handleCallStateChange(state, null)
                 }
             }
-
             val executor: Executor = context.mainExecutor
             telephonyManager.registerTelephonyCallback(executor, telephonyCallback!!)
         }
@@ -110,7 +127,7 @@ class PhoneStateManager(private val context: Context) {
                 onIncomingCall(phoneNumber)
             }
             TelephonyManager.CALL_STATE_IDLE -> {
-                Log.d(TAG, "📞 Call ended")
+                Log.d(TAG, "☎️ Call ended")
             }
             TelephonyManager.CALL_STATE_OFFHOOK -> {
                 Log.d(TAG, "📞 Call answered")
@@ -124,13 +141,14 @@ class PhoneStateManager(private val context: Context) {
             val autoReplyManager = AutoReplyManager.getInstance(context)
             autoReplyManager.handleIncomingCall(phoneNumber)
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error handling incoming call", e)
+            Log.e(TAG, "Error handling incoming call", e)
         }
     }
 
     private fun hasRequiredPermissions(): Boolean {
         return ActivityCompat.checkSelfPermission(
-            context, Manifest.permission.READ_PHONE_STATE
+            context,
+            Manifest.permission.READ_PHONE_STATE
         ) == PackageManager.PERMISSION_GRANTED
     }
 

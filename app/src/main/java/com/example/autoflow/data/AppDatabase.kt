@@ -12,19 +12,23 @@ import com.example.autoflow.model.SavedWiFiNetwork
     entities = [
         WorkflowEntity::class,
         PredefinedModeEntity::class,
+        MeetingModeEntity::class,
         SavedLocation::class,
         SavedWiFiNetwork::class,
         SavedBluetoothDevice::class
     ],
-    version = 6, // Increment version
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
+
+
     abstract fun workflowDao(): WorkflowDao
     abstract fun predefinedModeDao(): PredefinedModeDao
     abstract fun savedLocationDao(): SavedLocationDao
     abstract fun savedWiFiNetworkDao(): SavedWiFiNetworkDao
     abstract fun savedBluetoothDeviceDao(): SavedBluetoothDeviceDao
+    abstract fun meetingModeDao(): MeetingModeDao
 
     companion object {
         @Volatile
@@ -37,7 +41,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "autoflow_database"
                 )
-                    .fallbackToDestructiveMigration()
+                    .fallbackToDestructiveMigration() //  THIS WILL CLEAR DATABASE ON VERSION CHANGE
                     .build()
                 INSTANCE = instance
                 instance

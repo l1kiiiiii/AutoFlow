@@ -1095,7 +1095,9 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         autoReplyMessage: String = Constants.DEFAULT_AUTO_REPLY_MESSAGE,
         callback: WorkflowOperationCallback? = null
     ) {
-        val triggers = listOf<Trigger>() // Manual trigger - user enables it
+        val triggers = listOf(
+            Trigger.ManualTrigger(actionType = "quick_action")
+        ) // Manual trigger - user enables it
 
         val actions = listOf(
             // ✅ FIXED: Use explicit constructor with proper parameters

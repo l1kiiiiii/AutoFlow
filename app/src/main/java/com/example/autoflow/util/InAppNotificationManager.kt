@@ -5,6 +5,7 @@ import android.util.Log
 import com.example.autoflow.integrations.SoundModeManager
 import com.example.autoflow.model.AppNotification
 import com.example.autoflow.model.NotificationType
+import com.example.autoflow.util.InAppNotificationManager.Companion.MAX_NOTIFICATIONS
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
