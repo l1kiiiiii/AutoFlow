@@ -1,6 +1,7 @@
 package com.example.autoflow.util
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.NotificationManager
 import android.content.Context
 import android.content.SharedPreferences
@@ -33,6 +34,7 @@ class AutoReplyManager private constructor(private val context: Context) {
         private const val KEY_LAST_REPLY_TIME = "last_reply_time"
         private const val REPLY_COOLDOWN_MS = 300000 // 5 minutes
 
+        @SuppressLint("StaticFieldLeak")
         @Volatile
         private var INSTANCE: AutoReplyManager? = null
 
@@ -145,7 +147,7 @@ class AutoReplyManager private constructor(private val context: Context) {
             throw e
         }
     }
-    private suspend fun checkMeetingContext(workflows: List<WorkflowEntity>): Boolean {
+    private  fun checkMeetingContext(workflows: List<WorkflowEntity>): Boolean {
         // This would check current location against workflow triggers
         // and current time against time triggers
         // For now, simplified version:
@@ -321,7 +323,7 @@ class AutoReplyManager private constructor(private val context: Context) {
 
             Log.i(TAG, "✅ Auto-reply SMS sent to: $phoneNumber")
 
-            // ✅ ADD: Track SMS success in bell notifications
+            //  Track SMS success in bell notifications
             notificationManager.addSmsReply(phoneNumber, message, true)
 
             // Show standard notification that auto-reply was sent
@@ -329,11 +331,11 @@ class AutoReplyManager private constructor(private val context: Context) {
 
         } catch (e: SecurityException) {
             Log.e(TAG, "❌ SMS permission denied", e)
-            // ✅ ADD: Track SMS failure in bell notifications
+            //  Track SMS failure in bell notifications
             notificationManager.addSmsReply(phoneNumber, "Permission denied", false)
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to send auto-reply SMS", e)
-            // ✅ ADD: Track SMS failure in bell notifications
+            //  Track SMS failure in bell notifications
             notificationManager.addSmsReply(phoneNumber, "Send failed", false)
         }
     }
@@ -533,7 +535,7 @@ class AutoReplyManager private constructor(private val context: Context) {
             Log.i(TAG, "📱 Attempting to send auto-reply SMS...")
             Log.i(TAG, "   💬 Message: \"$message\"")
 
-            // ✅ Try to get the caller's number from recent call logs
+            //  get the caller's number from recent call logs
             val callerNumber = getLastIncomingCallNumber()
 
             if (!callerNumber.isNullOrBlank()) {
@@ -547,7 +549,7 @@ class AutoReplyManager private constructor(private val context: Context) {
 
                         Log.i(TAG, "✅ SMS AUTO-REPLY SENT to: $callerNumber")
 
-                        // ✅ ADD: Track SMS success in bell notifications
+                        //  Track SMS success in bell notifications
                         notificationManager.addSmsReply(callerNumber, message, true)
 
                         // Show notification to YOU that SMS was sent
@@ -558,19 +560,19 @@ class AutoReplyManager private constructor(private val context: Context) {
 
                     } catch (e: Exception) {
                         Log.e(TAG, "❌ Failed to send SMS", e)
-                        // ✅ ADD: Track SMS failure in bell notifications
+                        //  Track SMS failure in bell notifications
                         notificationManager.addSmsReply(callerNumber, "Send failed", false)
                         showSmsFailureNotification(message)
                     }
                 } else {
                     Log.e(TAG, "❌ SMS permission not granted")
-                    // ✅ ADD: Track SMS failure in bell notifications
+                    
                     notificationManager.addSmsReply(callerNumber, "Permission denied", false)
                     showSmsPermissionNotification()
                 }
             } else {
                 Log.w(TAG, "⚠️ Could not determine caller number - showing notification only")
-                // ✅ ADD: Track that call was received but no SMS possible
+                //  Track that call was received but no SMS possible
                 notificationManager.addSmsReply("Unknown caller", "No number available", false)
                 showUniversalCallNotification(message)
             }

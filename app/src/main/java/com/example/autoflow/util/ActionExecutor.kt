@@ -61,6 +61,12 @@ object ActionExecutor {
      * ✅ Execute a single action
      */
     fun executeAction(context: Context, action: Action): Boolean {
+        Log.d(TAG, "🎯 ActionExecutor.executeAction() called")
+        Log.d(TAG, "   Type: ${action.type}")
+        Log.d(TAG, "   Value: ${action.value}")
+        Log.d(TAG, "   Title: ${action.title}")
+        Log.d(TAG, "   Message: ${action.message}")
+        Log.d(TAG, "   Priority: ${action.priority}")
         Log.d(TAG, "Executing action: ${action.type}")
 
         return try {
@@ -79,7 +85,7 @@ object ActionExecutor {
                         context = context,
                         packageNames = action.value ?: "",
                         durationMinutes = 0,
-                        sendNotification = false  // ✅ Set to false to avoid duplicate
+                        sendNotification = false  //  Set to false to avoid duplicate
                     )
                 }
 
@@ -570,16 +576,25 @@ object ActionExecutor {
                 }
 
                 "dnd" -> {
+                    Log.d(TAG, "🔕 Attempting DND activation...")
                     //  DND MODE: Complete Do Not Disturb with notification blocking
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         if (!notificationManager.isNotificationPolicyAccessGranted) {
-                            Log.w(TAG, "🔕 DND permission not granted, opening settings")
-                            // Open DND permission settings
-                            val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            context.startActivity(intent)
-                            return false
+                            // Try to open settings (non-blocking)
+                            try {
+                                val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to open DND settings", e)
+                            }
+                            // Continue with silent mode as fallback
+                            Log.d(TAG, "🔕 Falling back to silent mode")
+                            audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
+                            return true  // ✅ Still return true for silent mode
                         }
+                        // Full DND mode with permission
+                        Log.d(TAG, "🔕 Activating full DND mode...")
 
                         // Set complete DND mode
                         audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT

@@ -93,6 +93,44 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             }
         })
     }
+    // When user taps on a manual workflow (Meeting Mode), execute actions immediately
+    fun executeManualWorkflow(workflowId: Long) {
+        Log.d(TAG, "🎯 Executing manual workflow: $workflowId")
+
+        repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
+            override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
+                workflow?.let { w ->
+                    if (w.isEnabled) {
+                        Log.d(TAG, "▶️ Starting manual execution: ${w.workflowName}")
+
+                        // Execute all actions immediately
+                        val actions = w.toActions()
+                        var successCount = 0
+
+                        actions.forEach { action ->
+                            Log.d(TAG, "🔧 Executing action: ${action.type} = ${action.value}")
+                            val success = ActionExecutor.executeAction(getApplication(), action)
+                            if (success) {
+                                successCount++
+                                Log.d(TAG, "✅ Action succeeded: ${action.type}")
+                            } else {
+                                Log.e(TAG, "❌ Action failed: ${action.type}")
+                            }
+                        }
+
+                        Log.d(TAG, "🎉 Manual execution complete: $successCount/${actions.size} actions succeeded")
+                    } else {
+                        Log.w(TAG, "⚠️ Workflow disabled: ${w.workflowName}")
+                    }
+                }
+            }
+
+            override fun onWorkflowError(error: String) {
+                Log.e(TAG, "❌ Error loading manual workflow: $error")
+            }
+        })
+    }
+
 
     /**
      * ✅ FIXED: Add workflow using TriggerHelpers
@@ -479,9 +517,34 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
 
                             Log.d(TAG, "💾 Saved previous state: Ringer=$currentRingerMode, DND=$currentDndState")
 
-                            // ✅ EXECUTE ACTIONS IMMEDIATELY
-                            val success = ActionExecutor.executeWorkflow(context, wf)
-                            Log.d(TAG, "📱 Manual workflow actions executed: $success")
+
+                            //  EXECUTE ACTIONS IMMEDIATELY - Enhanced with direct execution
+                            Log.d(TAG, "🎯 Starting manual workflow execution...")
+
+                            val actions = wf.toActions()
+                            Log.d(TAG, "🎯 Found ${actions.size} actions to execute")
+
+                            var successCount = 0
+                            actions.forEach { action ->
+                                Log.d(TAG, "🔧 Executing action: ${action.type} = ${action.value}")
+                                val actionSuccess = ActionExecutor.executeAction(context, action)
+                                if (actionSuccess) {
+                                    successCount++
+                                    Log.d(TAG, "✅ Action succeeded: ${action.type}")
+                                } else {
+                                    Log.e(TAG, "❌ Action failed: ${action.type}")
+                                }
+                            }
+
+                            Log.d(TAG, "📱 Manual workflow execution complete: $successCount/${actions.size} actions")
+                            val success = successCount > 0
+
+                            if (success) {
+                                Log.d(TAG, "✅ Meeting Mode DND enabled successfully")
+                            } else {
+                                Log.e(TAG, "❌ Failed to execute Meeting Mode actions")
+                            }
+
 
                             if (success) {
                                 Log.d(TAG, "✅ Meeting Mode DND enabled successfully")

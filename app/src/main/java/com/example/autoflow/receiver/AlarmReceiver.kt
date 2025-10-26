@@ -113,7 +113,7 @@ class AlarmReceiver : BroadcastReceiver() {
             }
         }
     }
-
+/*
     private fun handleNotification(context: Context, intent: Intent) {
         val title = intent.getStringExtra("notification_title") ?: "AutoFlow"
         val message = intent.getStringExtra("notification_message") ?: "Trigger activated"
@@ -151,7 +151,7 @@ class AlarmReceiver : BroadcastReceiver() {
             Toast.makeText(context, "Sound mode: $soundMode", Toast.LENGTH_SHORT).show()
         } else {
             Log.e(TAG, "❌ Failed to change sound mode")
-            if (soundMode == "DND" && !soundModeManager.hasDNDPermission()) {
+            if (soundMode == "DND" && !soundModeManager.DNDPermission()) {
                 Toast.makeText(context, "DND permission required", Toast.LENGTH_LONG).show()
                 soundModeManager.openDNDSettings()
             } else {
@@ -159,7 +159,7 @@ class AlarmReceiver : BroadcastReceiver() {
             }
         }
     }
-
+*/
     private fun handleWiFiToggle(context: Context, intent: Intent) {
         val wifiStateStr = intent.getStringExtra("wifi_state") ?: "false"
         val wifiState = wifiStateStr.toBoolean()

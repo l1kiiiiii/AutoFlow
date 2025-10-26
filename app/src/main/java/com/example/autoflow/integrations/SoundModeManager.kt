@@ -18,12 +18,13 @@ class SoundModeManager(context: Context) {
     companion object {
         private const val TAG = "SoundModeManager"
     }
+
     /**
      * ✅ Check if app has DND permission
      */
     fun hasDndPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            notificationManager?.isNotificationPolicyAccessGranted ?: false // Safe call
+            notificationManager?.isNotificationPolicyAccessGranted ?: false
         } else {
             true // Pre-Marshmallow doesn't need permission
         }
@@ -45,33 +46,36 @@ class SoundModeManager(context: Context) {
     }
 
     /**
-     * ✅ Set ringer mode with permission check
+     * ✅ FIXED: Set ringer mode with permission check
      */
     fun setRingerMode(mode: String): Boolean {
-        // Check if audioManager is available
         if (audioManager == null) {
             Log.e(TAG, "❌ AudioManager is null")
             return false
         }
 
-        // Check permission first
-        if (!hasDndPermission()) {
+        // Check permission first for DND
+        if (mode.uppercase() == "DND" && !hasDndPermission()) {
             Log.w(TAG, "⚠️ Do Not Disturb permission not granted")
             return false
         }
 
         return try {
-            val ringerMode = when (mode.uppercase()) {
-                "SILENT" -> AudioManager.RINGER_MODE_SILENT
-                "VIBRATE" -> AudioManager.RINGER_MODE_VIBRATE
-                "NORMAL" -> AudioManager.RINGER_MODE_NORMAL
-                "DND" -> AudioManager.RINGER_MODE_SILENT
-                else -> AudioManager.RINGER_MODE_NORMAL
+            val result = when (mode.uppercase()) {
+                "SILENT" -> setSilentMode()
+                "VIBRATE" -> setVibrateMode()
+                "NORMAL" -> setNormalMode()
+                "DND" -> setDNDMode()
+                else -> setNormalMode()
             }
 
-            audioManager.ringerMode = ringerMode
-            Log.d(TAG, "✅ Set ringer mode to: $mode")
-            true
+            if (result) {
+                Log.d(TAG, "✅ Set ringer mode to: $mode")
+            } else {
+                Log.e(TAG, "❌ Failed to set ringer mode to: $mode")
+            }
+
+            result
         } catch (e: SecurityException) {
             Log.e(TAG, "❌ SecurityException: Missing DND permission", e)
             false
@@ -80,6 +84,7 @@ class SoundModeManager(context: Context) {
             false
         }
     }
+
     //  PUBLIC METHODS
 
     fun setSoundMode(mode: String): Boolean {
@@ -111,7 +116,7 @@ class SoundModeManager(context: Context) {
     }
 
     fun getCurrentMode(): String {
-        return when (audioManager?.ringerMode) { //  Safe call
+        return when (audioManager?.ringerMode) {
             AudioManager.RINGER_MODE_SILENT -> "Silent"
             AudioManager.RINGER_MODE_VIBRATE -> "Vibrate"
             AudioManager.RINGER_MODE_NORMAL -> "Normal"
@@ -126,13 +131,6 @@ class SoundModeManager(context: Context) {
             }
         }
         return false
-    }
-
-    fun hasDNDPermission(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            return notificationManager?.isNotificationPolicyAccessGranted == true
-        }
-        return true // Not needed on older versions
     }
 
     fun openDNDSettings() {
@@ -151,45 +149,130 @@ class SoundModeManager(context: Context) {
     //  PRIVATE HELPER METHODS
 
     private fun setNormalMode(): Boolean {
-        audioManager!!.ringerMode = AudioManager.RINGER_MODE_NORMAL
-        Log.d(TAG, "✅ Set to Normal mode")
-        return true
+        return try {
+            // First restore DND interruption filter if needed
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && notificationManager != null) {
+                val currentFilter = notificationManager.currentInterruptionFilter
+                if (currentFilter != NotificationManager.INTERRUPTION_FILTER_ALL) {
+                    notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL)
+                    Log.d(TAG, "🔔 DND interruption filter restored to ALL")
+                }
+            }
+
+            // Then restore normal ringer mode
+            audioManager?.ringerMode = AudioManager.RINGER_MODE_NORMAL
+            Log.d(TAG, "🔊 Normal mode activated")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to set normal mode", e)
+            false
+        }
     }
 
     private fun setSilentMode(): Boolean {
-        audioManager!!.ringerMode = AudioManager.RINGER_MODE_SILENT
-        Log.d(TAG, "✅ Set to Silent mode")
-        return true
+        return try {
+            audioManager?.ringerMode = AudioManager.RINGER_MODE_SILENT
+            Log.d(TAG, "🔇 Silent mode activated")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to set silent mode", e)
+            false
+        }
     }
 
     private fun setVibrateMode(): Boolean {
-        audioManager!!.ringerMode = AudioManager.RINGER_MODE_VIBRATE
-        Log.d(TAG, "✅ Set to Vibrate mode")
-        return true
+        return try {
+            audioManager?.ringerMode = AudioManager.RINGER_MODE_VIBRATE
+            Log.d(TAG, "📳 Vibrate mode activated")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to set vibrate mode", e)
+            false
+        }
     }
 
-    private fun setDNDMode(): Boolean {
+    fun isDNDActive(): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && notificationManager != null) {
+                val filter = notificationManager.currentInterruptionFilter
+                val isActive = filter == NotificationManager.INTERRUPTION_FILTER_PRIORITY ||
+                        filter == NotificationManager.INTERRUPTION_FILTER_NONE
+                Log.d(TAG, "🔍 DND status: Filter=$filter, Active=$isActive")
+                return isActive
+            } else {
+                // For older versions, check if ringer is silent
+                val isSilent = audioManager?.ringerMode == AudioManager.RINGER_MODE_SILENT
+                Log.d(TAG, "🔍 Silent mode (legacy DND): $isSilent")
+                return isSilent
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error checking DND status", e)
+            false
+        }
+    }
+
+    /**
+     * ✅ FIXED: Properly activate Do Not Disturb mode
+     */
+    fun setDNDMode(): Boolean {
         if (notificationManager == null) {
-            Log.e(TAG, "NotificationManager is null")
+            Log.e(TAG, "❌ NotificationManager is null")
             return false
         }
 
-        // Check DND permission
+        // Check DND permission first
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (!notificationManager.isNotificationPolicyAccessGranted) {
-                Log.w(TAG, "DND access not granted - opening settings")
-                openDNDSettings()
+                Log.w(TAG, "❌ DND access not granted")
+                requestDndPermission()
                 return false
             }
+        }
 
-            //  Sets interruption filter to enable DND
-            notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
-            Log.d(TAG, "✅ Set to DND mode")
-            return true
-        } else {
-            // Fallback to silent mode for older devices
-            Log.w(TAG, "DND not available, using Silent mode")
-            return setSilentMode()
+        return try {
+            // Step 1: Set ringer to silent first
+            audioManager?.ringerMode = AudioManager.RINGER_MODE_SILENT
+            Log.d(TAG, "🔇 Ringer set to silent for DND")
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                // Step 2: Configure DND policy - only allow alarms
+                val dndPolicy = NotificationManager.Policy(
+                    NotificationManager.Policy.PRIORITY_CATEGORY_ALARMS, // Only alarms allowed
+                    0,    // ✅ FIXED: Use 0 for no priority senders
+                    0 // No suppressed visual effects
+                )
+
+                notificationManager.setNotificationPolicy(dndPolicy)
+                Log.d(TAG, "📋 DND policy configured")
+
+                // Step 3: Activate DND interruption filter
+                notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
+                Log.d(TAG, "🔕 DND interruption filter activated")
+
+                // Step 4: Verify DND is actually active
+                val currentFilter = notificationManager.currentInterruptionFilter
+                val isActive = currentFilter == NotificationManager.INTERRUPTION_FILTER_PRIORITY
+                Log.d(TAG, "🔍 DND verification - Current filter: $currentFilter, Active: $isActive")
+
+                if (!isActive) {
+                    Log.e(TAG, "❌ DND activation failed - filter not set properly")
+                    return false
+                }
+
+                return true
+            } else {
+                // For older Android versions, silent mode is the best we can do
+                Log.d(TAG, "🔕 DND activated (legacy silent mode)")
+                return true
+            }
+
+        } catch (e: SecurityException) {
+            Log.e(TAG, "❌ SecurityException: DND permission required", e)
+            requestDndPermission()
+            false
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to activate DND", e)
+            false
         }
     }
 }
