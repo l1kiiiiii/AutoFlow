@@ -2,6 +2,7 @@ package com.example.autoflow.util
 
 import android.content.Context
 import android.util.Log
+import com.example.autoflow.integrations.PhoneStateManager
 import com.example.autoflow.integrations.SoundModeManager
 import com.example.autoflow.model.AppNotification
 import com.example.autoflow.model.NotificationType
@@ -201,7 +202,6 @@ class InAppNotificationManager private constructor(private val context: Context)
      */
     fun deactivateMeetingMode(): Boolean {
         return if (_meetingModeActive.value) {
-            // Restore sound mode
             try {
                 val soundModeManager = SoundModeManager(context)
                 val success = soundModeManager.setSoundMode("Normal")
@@ -210,15 +210,28 @@ class InAppNotificationManager private constructor(private val context: Context)
                     // Remove meeting mode notification
                     setMeetingMode(false)
 
-                    // Add deactivation success notification
+                    // ✅ ADD: Clear SharedPreferences flags
+                    val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+                    prefs.edit()
+                        .putBoolean("auto_reply_enabled", false)
+                        .putBoolean("manual_meeting_mode", false)
+                        .apply()
+
+                    // ✅ ADD: Stop phone monitoring
+                    val phoneStateManager = PhoneStateManager.getInstance(context)
+                    phoneStateManager.stopListening()
+
+                    // ✅ ADD: Deactivation success notification
                     addNotification(
                         type = NotificationType.SUCCESS,
                         title = "🔔 Meeting Mode Deactivated",
-                        message = "Sound mode restored to normal",
+                        message = "Sound mode restored. Auto-reply disabled.",
                         isClearable = true
                     )
 
                     Log.d(TAG, "🔔 Meeting mode deactivated successfully")
+                    Log.d(TAG, "🚩 Set auto_reply_enabled = false")
+                    Log.d(TAG, "🚩 Set manual_meeting_mode = false")
                     true
                 } else {
                     Log.e(TAG, "❌ Failed to restore sound mode")
@@ -233,6 +246,7 @@ class InAppNotificationManager private constructor(private val context: Context)
             false
         }
     }
+
 
     /**
      * ✅ PERSISTENT: Count unread notifications accurately

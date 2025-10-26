@@ -3,6 +3,7 @@ package com.example.autoflow.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.telephony.SmsManager
 import android.telephony.TelephonyManager
 import android.util.Log
 import com.example.autoflow.util.AutoReplyManager
@@ -134,4 +135,21 @@ class PhoneStateReceiver : BroadcastReceiver() {
             Log.e(TAG, "❌ Error handling unknown caller", e)
         }
     }
+    private fun checkAndSendAutoReply(context: Context, phoneNumber: String) {
+        val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+        val autoReplyEnabled = prefs.getBoolean("auto_reply_enabled", false)
+        val meetingMode = prefs.getBoolean("manual_meeting_mode", false)
+        val message = prefs.getString("auto_reply_message", "I'm currently in a meeting and will get back to you soon.") ?: ""
+
+        if (autoReplyEnabled && meetingMode && phoneNumber.isNotEmpty()) {
+            try {
+                val smsManager = SmsManager.getDefault()
+                smsManager.sendTextMessage(phoneNumber, null, message, null, null)
+                Log.d("PhoneStateReceiver", "📩 Auto-reply SMS sent to: $phoneNumber")
+            } catch (e: Exception) {
+                Log.e("PhoneStateReceiver", "❌ Failed to send SMS: ${e.message}")
+            }
+        }
+    }
+
 }

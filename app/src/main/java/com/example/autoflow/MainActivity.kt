@@ -25,12 +25,16 @@ import androidx.core.net.toUri
 import com.example.autoflow.ui.theme.AutoFlowTheme
 import com.example.autoflow.ui.theme.screens.Dashboard
 import com.example.autoflow.util.NotificationHelper
+import com.example.autoflow.data.AppDatabase
+import com.example.autoflow.data.WorkflowEntity
+import androidx.room.Room
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
-        // ✅ ADD: Multiple permission request codes
         private const val PERMISSION_REQUEST_CODE_BASIC = 1001
         private const val PERMISSION_REQUEST_CODE_LOCATION = 1002
         private const val PERMISSION_REQUEST_CODE_BACKGROUND_LOCATION = 1003
@@ -40,7 +44,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         try {
-            // ✅ Initialize notification channels with error handling
+            // ✅ Initialize notification channels
             try {
                 NotificationHelper.createNotificationChannels(this)
                 Log.d(TAG, "✅ Notification channels created")
@@ -49,7 +53,9 @@ class MainActivity : ComponentActivity() {
                 showError("Failed to initialize notifications: ${e.message}")
             }
 
-            // ✅ ENHANCED: Request ALL permissions in proper sequence
+
+
+            // ✅ Request permissions
             checkAndRequestAllPermissions()
 
             // ✅ Request exact alarm permission for Android 12+
@@ -76,11 +82,68 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // ✅ ENHANCED: Comprehensive permission checking and requesting
+    // ✅ FIXED: Cleanup function with proper imports and database access
+    private fun cleanupDuplicateMeetingModes() {
+        GlobalScope.launch {
+            try {
+                // ✅ Create database instance with proper name
+                val db = Room.databaseBuilder(
+                    applicationContext,
+                    AppDatabase::class.java,
+                    "autoflow_database"  // Use your actual database name
+                ).build()
+
+                // ✅ FIXED: Use suspending function instead of LiveData
+                val dao = db.workflowDao()
+
+                // You need to add a suspending version to your DAO:
+                // @Query("SELECT * FROM workflows")
+                // suspend fun getAllWorkflowsSync(): List<WorkflowEntity>
+
+                // ✅ ALTERNATIVE: Use existing method if you have it
+                val allWorkflows = dao.getAllWorkflowsSync() // Suspending version
+
+                val meetingModes = allWorkflows.filter { workflow ->
+                    workflow.workflowName.contains("Meeting Mode", ignoreCase = true)
+                }
+
+                if (meetingModes.size > 1) {
+                    Log.d(TAG, "🧹 Found ${meetingModes.size} duplicate Meeting Modes to clean up")
+
+                    // Keep only the most recent one, delete the rest
+                    val latestMeetingMode = meetingModes.maxByOrNull { workflow -> workflow.id }
+                    val duplicatesToDelete = meetingModes.filter { workflow ->
+                        workflow.id != latestMeetingMode?.id
+                    }
+
+                    duplicatesToDelete.forEach { workflow ->
+                        dao.delete(workflow)
+                        Log.d(TAG, "🗑️ Deleted duplicate Meeting Mode: ID ${workflow.id}")
+                    }
+
+                    Log.d(TAG, "✅ Cleaned up ${duplicatesToDelete.size} duplicate Meeting Modes")
+
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "🧹 Cleaned up ${duplicatesToDelete.size} duplicate Meeting Modes",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+
+                // Close database
+                db.close()
+
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error cleaning up duplicates", e)
+            }
+        }
+    }
+
     private fun checkAndRequestAllPermissions() {
         val basicPermissions = mutableListOf<String>()
 
-        // SMS and Phone permissions (your existing permissions)
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS)
             != PackageManager.PERMISSION_GRANTED) {
             basicPermissions.add(Manifest.permission.SEND_SMS)
@@ -96,21 +159,17 @@ class MainActivity : ComponentActivity() {
             basicPermissions.add(Manifest.permission.READ_CALL_LOG)
         }
 
-        // Request basic permissions first
         if (basicPermissions.isNotEmpty()) {
             Log.d(TAG, "🔍 Requesting basic permissions: ${basicPermissions.joinToString(", ")}")
             ActivityCompat.requestPermissions(this, basicPermissions.toTypedArray(), PERMISSION_REQUEST_CODE_BASIC)
         } else {
-            // Basic permissions granted, check location permissions
             checkLocationPermissions()
         }
     }
 
-    // ✅ NEW: Check and request location permissions
     private fun checkLocationPermissions() {
         val locationPermissions = mutableListOf<String>()
 
-        // Fine and Coarse location permissions
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) {
             locationPermissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -123,35 +182,20 @@ class MainActivity : ComponentActivity() {
 
         if (locationPermissions.isNotEmpty()) {
             Log.d(TAG, "🌍 Requesting location permissions: ${locationPermissions.joinToString(", ")}")
-
-            // Show explanation to user
-            Toast.makeText(
-                this,
-                "📍 Location permissions needed for location-based workflows",
-                Toast.LENGTH_LONG
-            ).show()
-
+            Toast.makeText(this, "📍 Location permissions needed for location-based workflows", Toast.LENGTH_LONG).show()
             ActivityCompat.requestPermissions(this, locationPermissions.toTypedArray(), PERMISSION_REQUEST_CODE_LOCATION)
         } else {
-            // Location permissions granted, check background location
             checkBackgroundLocationPermission()
         }
     }
 
-    // ✅ NEW: Check and request background location permission (Android 10+)
     private fun checkBackgroundLocationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
                 != PackageManager.PERMISSION_GRANTED) {
 
                 Log.d(TAG, "🌍📱 Requesting background location permission")
-
-                // Show detailed explanation for background location
-                Toast.makeText(
-                    this,
-                    "📍 Background location needed for geofences when app is closed",
-                    Toast.LENGTH_LONG
-                ).show()
+                Toast.makeText(this, "📍 Background location needed for geofences when app is closed", Toast.LENGTH_LONG).show()
 
                 ActivityCompat.requestPermissions(
                     this,
@@ -168,7 +212,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // ✅ ENHANCED: Handle all permission results
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<String>,
@@ -203,7 +246,7 @@ class MainActivity : ComponentActivity() {
         } else {
             Log.w(TAG, "⚠️ Some basic permissions denied")
             Toast.makeText(this, "⚠️ Some permissions denied - features may not work", Toast.LENGTH_LONG).show()
-            checkLocationPermissions() // Continue with location permissions anyway
+            checkLocationPermissions()
         }
     }
 
@@ -254,11 +297,7 @@ class MainActivity : ComponentActivity() {
             }
 
             if (!alarmManager.canScheduleExactAlarms()) {
-                Toast.makeText(
-                    this,
-                    "⏰ Please allow 'Alarms & reminders' permission for scheduled workflows",
-                    Toast.LENGTH_LONG
-                ).show()
+                Toast.makeText(this, "⏰ Please allow 'Alarms & reminders' permission for scheduled workflows", Toast.LENGTH_LONG).show()
 
                 try {
                     val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
@@ -288,13 +327,7 @@ class MainActivity : ComponentActivity() {
                 data = "package:$packageName".toUri()
             }
             startActivity(intent)
-
-            Toast.makeText(
-                this,
-                "Please enable all permissions for AutoFlow in app settings",
-                Toast.LENGTH_LONG
-            ).show()
-
+            Toast.makeText(this, "Please enable all permissions for AutoFlow in app settings", Toast.LENGTH_LONG).show()
             Log.d(TAG, "✅ Opened fallback app settings")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to open app settings", e)
@@ -358,13 +391,7 @@ class MainActivity : ComponentActivity() {
         try {
             val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
             startActivity(intent)
-
-            Toast.makeText(
-                this,
-                "Please enable 'Usage Access' for AutoFlow to block apps",
-                Toast.LENGTH_LONG
-            ).show()
-
+            Toast.makeText(this, "Please enable 'Usage Access' for AutoFlow to block apps", Toast.LENGTH_LONG).show()
             Log.d(TAG, "✅ Opened usage stats permission settings")
         } catch (e: ActivityNotFoundException) {
             Log.e(TAG, "❌ Usage stats settings not available", e)
@@ -375,7 +402,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // ✅ Enable auto-reply for testing
     private fun enableAutoReplyForTesting() {
         try {
             val prefs = getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)

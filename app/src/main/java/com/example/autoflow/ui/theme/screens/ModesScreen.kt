@@ -59,38 +59,6 @@ fun ModesScreen(
                         }
                     }
                 },
-                actions = {
-                    if (runningModesCount > 0) {
-                        TextButton(
-                            onClick = {
-                                workflows.filter { it.isEnabled }.forEach { workflow ->
-                                    viewModel.updateWorkflowEnabled(
-                                        workflowId = workflow.id,
-                                        enabled = false,
-                                        callback = object : WorkflowViewModel.WorkflowOperationCallback {
-                                            override fun onSuccess(message: String) {}
-                                            override fun onError(error: String) {}
-                                        }
-                                    )
-                                }
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PowerSettingsNew,
-                                contentDescription = "Stop All",
-                                tint = Color(0xFFF44336),
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "STOP ALL",
-                                color = Color(0xFFF44336),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-                }
             )
         }
     ) { padding ->

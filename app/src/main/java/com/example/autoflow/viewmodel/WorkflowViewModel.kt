@@ -481,90 +481,67 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
-        // ✅ SMART STATE MANAGEMENT FOR MANUAL WORKFLOWS
         if (enabled) {
+            // ✅ ENABLING WORKFLOW
             repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
                 override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
                     workflow?.let { wf ->
-                        Log.d(TAG, "📋 Checking workflow: ${wf.workflowName}")
+                        Log.d(TAG, "📋 Enabling workflow: ${wf.workflowName}")
 
-                        // Check if this is a manual workflow
                         val triggers = wf.toTriggers()
                         val isManualWorkflow = triggers.any { trigger -> trigger.type == "MANUAL" }
 
                         if (isManualWorkflow) {
-                            Log.d(TAG, "🤝 Manual workflow detected - saving current state first")
+                            Log.d(TAG, "🤝 Manual workflow detected - executing immediately")
 
-                            // ✅ SAVE CURRENT STATE BEFORE ENABLING DND
+                            // ✅ SAVE CURRENT STATE before executing
                             val context = getApplication<Application>().applicationContext
                             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
                             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-                            // Save current ringer mode
                             val currentRingerMode = audioManager.ringerMode
-
-                            // Save current DND state
                             var currentDndState = false
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                                 currentDndState = notificationManager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
                             }
 
-                            // Store previous state in SharedPreferences
+                            // Save state
                             val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
                             prefs.edit()
                                 .putInt("previous_ringer_mode", currentRingerMode)
                                 .putBoolean("previous_dnd_state", currentDndState)
-                                .putBoolean("manual_meeting_mode", true)
                                 .apply()
 
                             Log.d(TAG, "💾 Saved previous state: Ringer=$currentRingerMode, DND=$currentDndState")
 
-                            //  EXECUTE ACTIONS IMMEDIATELY - Enhanced with direct execution
-                            Log.d(TAG, "🎯 Starting manual workflow execution for: ${wf.workflowName}")
+                            // ✅ EXECUTE WORKFLOW ACTIONS
+                            val executionSuccess = ActionExecutor.executeWorkflow(context, wf)
 
-                            val actions = wf.toActions()
-                            Log.d(TAG, "🎯 Found ${actions.size} actions to execute")
-
-                            var successCount = 0
-                            actions.forEach { action ->
-                                Log.d(TAG, "🔧 Executing action: ${action.type} = ${action.value}")
-                                val actionSuccess = ActionExecutor.executeAction(context, action)
-                                if (actionSuccess) {
-                                    successCount++
-                                    Log.d(TAG, "✅ Action succeeded: ${action.type}")
-                                } else {
-                                    Log.e(TAG, "❌ Action failed: ${action.type}")
-                                }
-                            }
-
-                            Log.d(TAG, "📱 Manual workflow execution complete: $successCount/${actions.size} actions")
-                            val success = successCount > 0
-
-                            if (success) {
-                                Log.d(TAG, "✅ Meeting Mode DND enabled successfully")
-                                if (wf.workflowName == "Meeting Mode") {
-                                    val context = getApplication<Application>().applicationContext
-                                    val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+                            if (executionSuccess) {
+                                // ✅ MEETING MODE SPECIFIC: Set auto-reply flags after successful execution
+                                if (wf.workflowName.contains("Meeting Mode", ignoreCase = true)) {
                                     prefs.edit()
                                         .putBoolean("auto_reply_enabled", true)
-                                        .putString("auto_reply_message", "I'm currently in a meeting and will get back to you soon.")
                                         .putBoolean("manual_meeting_mode", true)
                                         .apply()
 
-                                    val phoneStateManager = PhoneStateManager.getInstance(getApplication<Application>())
+                                    val phoneStateManager = PhoneStateManager.getInstance(context)
                                     phoneStateManager.startListening()
 
                                     Log.d(TAG, "🤖 Auto-reply started for Meeting Mode")
+                                    Log.d(TAG, "🚩 Set auto_reply_enabled = true")
                                     Log.d(TAG, "🚩 Set manual_meeting_mode = true")
                                 }
+
+                                Log.d(TAG, "✅ Manual workflow executed successfully")
                             } else {
-                                Log.e(TAG, "❌ Failed to execute Meeting Mode actions")
+                                Log.e(TAG, "❌ Manual workflow execution failed")
                             }
-                        } // ✅ FIXED: Close isManualWorkflow block
+                        }
 
                         // Schedule any time-based triggers
                         AlarmScheduler.scheduleWorkflow(getApplication<Application>().applicationContext, wf)
-                    } // ✅ FIXED: Close workflow?.let block
+                    }
                 }
 
                 override fun onWorkflowError(error: String) {
@@ -573,7 +550,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                 }
             })
         } else {
-            // ✅ SMART RESTORATION WHEN DISABLING
+            // ✅ DISABLING WORKFLOW
             repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
                 override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
                     workflow?.let { wf ->
@@ -588,7 +565,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                             val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
 
-                            // ✅ RESTORE PREVIOUS RINGER MODE (not just normal)
+                            // ✅ RESTORE PREVIOUS RINGER MODE
                             val previousRingerMode = prefs.getInt("previous_ringer_mode", AudioManager.RINGER_MODE_NORMAL)
                             audioManager.ringerMode = previousRingerMode
                             Log.d(TAG, "🔊 Restored previous ringer mode: $previousRingerMode")
@@ -611,26 +588,22 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                                 }
                             }
 
-                            // Clear manual meeting mode flag
-                            prefs.edit()
-                                .putBoolean("manual_meeting_mode", false)
-                                .apply()
-
-                            Log.d(TAG, "✅ Previous state fully restored")
-                            if (wf.workflowName == "Meeting Mode") {
-                                val context = getApplication<Application>().applicationContext
-                                val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+                            // ✅ MEETING MODE SPECIFIC: Clear auto-reply flags
+                            if (wf.workflowName.contains("Meeting Mode", ignoreCase = true)) {
                                 prefs.edit()
                                     .putBoolean("auto_reply_enabled", false)
                                     .putBoolean("manual_meeting_mode", false)
                                     .apply()
 
-                                val phoneStateManager = PhoneStateManager.getInstance(getApplication<Application>())
+                                val phoneStateManager = PhoneStateManager.getInstance(context)
                                 phoneStateManager.stopListening()
 
                                 Log.d(TAG, "🤖 Auto-reply stopped for Meeting Mode")
+                                Log.d(TAG, "🚩 Set auto_reply_enabled = false")
                                 Log.d(TAG, "🚩 Set manual_meeting_mode = false")
                             }
+
+                            Log.d(TAG, "✅ Previous state fully restored")
                         }
                     }
                 }
@@ -653,10 +626,10 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             override fun onUpdateComplete(success: Boolean) {
                 if (success) {
                     loadWorkflows()
-                    val msg = "Workflow ${if (enabled) "enabled" else "disabled"}"
+                    val msg = "Workflow ${if (enabled) "enabled" else "disabled"} successfully"
                     _successMessage.postValue(msg)
                     callback?.onSuccess(msg)
-                    Log.d(TAG, "✅ $msg successfully")
+                    Log.d(TAG, "✅ $msg")
                 } else {
                     val error = "Toggle failed"
                     _errorMessage.postValue(error)
@@ -672,6 +645,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             }
         })
     }
+
 
     fun getWorkflowById(workflowId: Long, callback: WorkflowByIdCallback) {
         if (workflowId <= 0) {
@@ -864,7 +838,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    // ✅ FIXED: Mode creation using TriggerHelpers
+    //  Mode creation using TriggerHelpers
     fun createWorkflowFromMode(mode: ModeTemplate, callback: WorkflowOperationCallback? = null) {
         try {
             // Convert templates to actual triggers and actions
@@ -906,7 +880,41 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                     // Create workflow with real ID
                     val savedWorkflow = workflowEntity.copy(id = insertedId)
 
-                    // ✅ FIXED: Register triggers using TriggerParser
+                    // ✅ CRITICAL FIX: Check for MANUAL triggers and execute immediately
+                    val hasManualTrigger = triggers.any { it.type == "MANUAL" }
+                    val hasTimeTrigger = triggers.any { it.type == "TIME" }
+
+                    when {
+                        hasManualTrigger -> {
+                            Log.d(TAG, "🎯 MANUAL trigger detected - executing immediately")
+
+                            // ✅ Execute the workflow actions RIGHT NOW
+                            val context = getApplication<Application>().applicationContext
+                            val executionSuccess = ActionExecutor.executeWorkflow(context, savedWorkflow)
+
+                            if (executionSuccess) {
+                                Log.d(TAG, "✅ Manual workflow executed successfully")
+                            } else {
+                                Log.e(TAG, "❌ Manual workflow execution failed")
+                            }
+                        }
+
+                        hasTimeTrigger -> {
+                            Log.d(TAG, "⏰ Time trigger for mode workflow")
+
+                            // Schedule time-based triggers
+                            AlarmScheduler.scheduleWorkflow(
+                                getApplication<Application>().applicationContext,
+                                savedWorkflow
+                            )
+                        }
+
+                        else -> {
+                            Log.d(TAG, "🔧 Other trigger types detected")
+                        }
+                    }
+
+                    // ✅ Register triggers for location/other types
                     triggers.forEach { trigger ->
                         when (trigger.type) {
                             "LOCATION" -> {
@@ -923,25 +931,18 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                                     )
                                 }
                             }
-                            "TIME" -> {
-                                // Time triggers handled by AlarmScheduler
-                                Log.d(TAG, "⏰ Time trigger for mode workflow")
+                            "MANUAL" -> {
+                                Log.d(TAG, "📝 Manual trigger registered for future toggles")
                             }
                             else -> {
-                                Log.d(TAG, "Other trigger type: ${trigger.type}")
+                                Log.d(TAG, "🔧 Registering trigger: ${trigger.type}")
                             }
                         }
                     }
 
-                    // Schedule alarms
-                    AlarmScheduler.scheduleWorkflow(
-                        getApplication<Application>().applicationContext,
-                        savedWorkflow
-                    )
-
-                    // Reload and notify
+                    // Reload workflows and notify success
                     loadWorkflows()
-                    val msg = "Mode '${mode.name}' created successfully"
+                    val msg = "Mode '${mode.name}' created and ${if (hasManualTrigger) "activated" else "scheduled"}!"
                     _successMessage.postValue(msg)
                     callback?.onSuccess(msg)
                 }
@@ -958,6 +959,39 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             Log.e(TAG, "❌ Error creating mode", e)
         }
     }
+
+
+
+    /**
+     * ✅ Register workflow triggers (location, etc.)
+     */
+    private fun registerWorkflowTriggers(workflow: WorkflowEntity, triggers: List<com.example.autoflow.model.Trigger>) {
+        triggers.forEach { trigger ->
+            when (trigger.type) {
+                "LOCATION" -> {
+                    val locationData = TriggerParser.parseLocationData(trigger)
+                    locationData?.let { data ->
+                        GeofenceManager.addGeofence(
+                            context = getApplication<Application>().applicationContext,
+                            workflowId = workflow.id,
+                            latitude = data.latitude,
+                            longitude = data.longitude,
+                            radius = data.radius.toFloat(),
+                            triggerOnEntry = data.triggerOnEntry,
+                            triggerOnExit = data.triggerOnExit
+                        )
+                    }
+                }
+                "MANUAL" -> {
+                    Log.d(TAG, "📝 Manual trigger registered for future toggles")
+                }
+                else -> {
+                    Log.d(TAG, "🔧 Registering trigger: ${trigger.type}")
+                }
+            }
+        }
+    }
+
 
     // ✅ FIXED: Convert template to trigger using TriggerHelpers
     private fun convertTemplateToTrigger(template: TriggerTemplate): Trigger {
@@ -1015,30 +1049,35 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun convertTemplateToAction(template: ActionTemplate): Action {
-        return when (template.type) {
-            "SEND_NOTIFICATION" -> {
-                // Use 4-parameter constructor for notifications
-                Action(
-                    type = template.type,
-                    title = template.config["title"] as? String ?: "AutoFlow",
-                    message = template.config["message"] as? String ?: "Notification",
-                    priority = template.config["priority"] as? String ?: "default"
-                )
+        return Action(
+            type = template.type,
+            value = template.config["value"] as? String
+        ).apply {
+            // ✅ Extract all properties from template config
+            this.title = template.config["title"] as? String
+            this.message = template.config["message"] as? String
+            this.priority = template.config["priority"] as? String ?: "Normal"
+
+            // ✅ SPECIAL CASE: For AUTO_REPLY, ensure we have message
+            if (template.type == "AUTO_REPLY" && this.message == null) {
+                this.message = "I'm currently in a meeting and will get back to you soon."
             }
-            "SET_SOUND_MODE", "TOGGLE_WIFI", "TOGGLE_BLUETOOTH" -> {
-                // Use simple constructor, then set value manually
-                val action = Action(type = template.type)
-                action.value = template.config["value"] as? String
-                action
+
+            // ✅ SPECIAL CASE: For SHOW_NOTIFICATION, ensure we have defaults
+            if (template.type == "SHOW_NOTIFICATION") {
+                if (this.title == null) this.title = "Meeting Mode Active"
+                if (this.message == null) this.message = "Your phone is silenced and auto-reply is on."
             }
-            else -> {
-                // Default: simple constructor with optional value
-                val action = Action(type = template.type)
-                action.value = template.config["value"] as? String
-                action
-            }
+
+            Log.d(TAG, "🔧 Converted ActionTemplate:")
+            Log.d(TAG, "   Type: ${template.type}")
+            Log.d(TAG, "   Value: ${template.config["value"]}")
+            Log.d(TAG, "   Title: ${this.title}")
+            Log.d(TAG, "   Message: ${this.message}")
+            Log.d(TAG, "   Priority: ${this.priority}")
         }
     }
+
 
     @SuppressLint("MissingPermission")
     fun stopAllTriggers() {

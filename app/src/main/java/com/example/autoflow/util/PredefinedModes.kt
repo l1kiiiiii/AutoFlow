@@ -25,10 +25,6 @@ object PredefinedModes {
             ))
         )
     )
-
-
-
-
     val OFFICE_MODE = ModeTemplate(
         name = "Office Mode",
         icon = "💼",

@@ -79,8 +79,6 @@ object ActionExecutor {
                 }
 
                 Constants.ACTION_BLOCK_APPS -> {
-                    // ✅ FIXED: Don't send notification from blockApps()
-                    // User should add a separate notification action if they want one
                     blockApps(
                         context = context,
                         packageNames = action.value ?: "",
@@ -93,7 +91,7 @@ object ActionExecutor {
                     unblockApps(context)
                 }
 
-                Constants.ACTION_SET_SOUND_MODE -> {
+                Constants.ACTION_SET_SOUND_MODE,"SET_SOUND_MODE" -> {
                     val mode = action.value ?: "Normal"
                     setSoundMode(context, mode)
                 }
@@ -108,37 +106,40 @@ object ActionExecutor {
                     toggleBluetooth(context, state)
                 }
 
+                "SHOW_NOTIFICATION" -> {
+                    Log.d(TAG, "📢 Showing notification")
+
+                    //  Add proper default values
+                    val title = action.title?.takeIf { it.isNotEmpty() } ?: "Meeting Mode Active"
+                    val message = action.message?.takeIf { it.isNotEmpty() }
+                        ?: "Auto-reply enabled. DND mode is active."
+                    val priority = action.priority ?: "High"
+
+                    sendNotification(context, title, message, priority)
+                }
                 "AUTO_REPLY" -> {
                     Log.d(TAG, "🤖 Setting up auto-reply")
 
                     val message = action.message ?: "I'm currently in a meeting and will get back to you soon."
 
-                    // ✅ FIXED: Use proper Action constructor
-                    val autoReplyAction = Action(
-                        type = Constants.ACTION_AUTO_REPLY_SMS,
-                        value = "true"
-                    ).apply {
-                        // Set message after construction
-                        this.message = message
-                    }
+                    // ✅ CRITICAL FIX: Set SharedPreference flags directly
+                    val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+                    prefs.edit()
+                        .putBoolean("auto_reply_enabled", true)         // ✅ AutoReplyManager checks this
+                        .putBoolean("manual_meeting_mode", true)        // ✅ PhoneStateReceiver checks this
+                        .putString("auto_reply_message", message)       // ✅ Message to send
+                        .putBoolean("auto_reply_only_in_dnd", true)     // ✅ DND condition
+                        .apply()
 
-                    val success = executeAutoReplySms(context, autoReplyAction)
+                    // Start phone state monitoring
+                    val phoneStateManager = PhoneStateManager.getInstance(context)
+                    phoneStateManager.startListening()
 
-                    if (success) {
-                        // Also set meeting mode flags for compatibility
-                        val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
-                        prefs.edit()
-                            .putBoolean("manual_meeting_mode", true)
-                            .apply()
+                    Log.d(TAG, "✅ Auto-reply activated: $message")
+                    Log.d(TAG, "🚩 CRITICAL: Set auto_reply_enabled = true")
+                    Log.d(TAG, "🚩 CRITICAL: Set manual_meeting_mode = true")
 
-                        // Start phone state monitoring
-                        val phoneStateManager = PhoneStateManager.getInstance(context)
-                        phoneStateManager.startListening()
-
-                        Log.d(TAG, "✅ Auto-reply activated: $message")
-                    }
-
-                    success
+                    true
                 }
 
                 "STOP_AUTO_REPLY" -> {
@@ -868,23 +869,28 @@ object ActionExecutor {
 
     // Execute auto-reply SMS action
     private fun executeAutoReplySms(context: Context, action: Action): Boolean {
-        Log.d(TAG, "📱 Executing AUTO_REPLY_SMS action")
+        return try {
+            val isEnabled = action.value == "true"
+            val message = action.message?.takeIf { it.isNotEmpty() }
+                ?: "I'm currently in a meeting and will get back to you soon."
 
-        val enabled = action.value?.toBoolean() ?: true
-        val message = action.message ?: Constants.DEFAULT_AUTO_REPLY_MESSAGE
+            Log.d(TAG, "📱 Executing AUTO_REPLY_SMS action")
 
-        // Save auto-reply settings to SharedPreferences
-        val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
-        prefs.edit()
-            .putBoolean(Constants.PREF_AUTO_REPLY_ENABLED, enabled)
-            .putString(Constants.PREF_AUTO_REPLY_MESSAGE, message)
-            .putBoolean(Constants.PREF_AUTO_REPLY_ONLY_IN_DND, true)
-            .apply()
+            val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+            prefs.edit()
+                .putBoolean(Constants.PREF_AUTO_REPLY_ENABLED, isEnabled)
+                .putString(Constants.PREF_AUTO_REPLY_MESSAGE, message)
+                .putBoolean(Constants.PREF_AUTO_REPLY_ONLY_IN_DND, true)
+                .apply()
 
-        Log.i(TAG, "✅ Auto-reply SMS ${if (enabled) "enabled" else "disabled"}")
-        Log.i(TAG, "   Message: \"$message\"")
-        Log.i(TAG, "   Only in DND: true")
+            Log.i(TAG, "✅ Auto-reply SMS ${if (isEnabled) "enabled" else "disabled"}")
+            Log.i(TAG, "   Message: \"$message\"")
+            Log.i(TAG, "   Only in DND: true")
 
-        return true
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error executing auto-reply SMS", e)
+            false
+        }
     }
 }

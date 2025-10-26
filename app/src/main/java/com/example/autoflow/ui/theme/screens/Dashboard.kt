@@ -119,76 +119,65 @@ fun Dashboard(modifier: Modifier = Modifier) {
                     // ✅ MEETING MODE TOGGLE BUTTON
                     IconButton(
                         onClick = {
-                            scope.launch {
-                                if (meetingModeActive) {
-                                    // Deactivate meeting mode
-                                    val success = notificationManager.deactivateMeetingMode()
-                                    if (success) {
-                                        snackbarHostState.showSnackbar(
-                                            message = "🔔 Meeting Mode Deactivated",
-                                            duration = SnackbarDuration.Short
-                                        )
-                                    } else {
-                                        snackbarHostState.showSnackbar(
-                                            message = "Failed to deactivate meeting mode",
-                                            duration = SnackbarDuration.Short
-                                        )
-                                    }
-                                } else {
-                                    // Activate meeting mode manually
-                                    val soundModeManager = SoundModeManager(context)
-
-                                    if (!soundModeManager.hasDndPermission()) {
-                                        snackbarHostState.showSnackbar(
-                                            message = "Grant Do Not Disturb permission to use Meeting Mode",
-                                            actionLabel = "Grant",
-                                            duration = SnackbarDuration.Long
-                                        ).let { result ->
-                                            if (result == SnackbarResult.ActionPerformed) {
-                                                soundModeManager.requestDndPermission()
-                                            }
+                            if (unreadCount > 0) {
+                                navController.navigate("notifications")
+                            }else {
+                                scope.launch {
+                                    if (meetingModeActive) {
+                                        // Deactivate meeting mode
+                                        val success = notificationManager.deactivateMeetingMode()
+                                        if (success) {
+                                            snackbarHostState.showSnackbar(
+                                                message = "🔔 Meeting Mode Deactivated",
+                                                duration = SnackbarDuration.Short
+                                            )
+                                        } else {
+                                            snackbarHostState.showSnackbar(
+                                                message = "Failed to deactivate meeting mode",
+                                                duration = SnackbarDuration.Short
+                                            )
                                         }
-                                        return@launch
-                                    }
-                                    val success = soundModeManager.setSoundMode("DND")
-
-                                    if (success) {
-                                        notificationManager.setMeetingMode(true, "Manual Meeting Mode")
-                                        snackbarHostState.showSnackbar(
-                                            message = "🔇 Meeting Mode Activated",
-                                            duration = SnackbarDuration.Short
-                                        )
                                     } else {
-                                        snackbarHostState.showSnackbar(
-                                            message = "Failed to activate meeting mode",
-                                            duration = SnackbarDuration.Short
-                                        )
+                                        // Activate meeting mode manually
+                                        val soundModeManager = SoundModeManager(context)
+
+                                        if (!soundModeManager.hasDndPermission()) {
+                                            snackbarHostState.showSnackbar(
+                                                message = "Grant Do Not Disturb permission to use Meeting Mode",
+                                                actionLabel = "Grant",
+                                                duration = SnackbarDuration.Long
+                                            ).let { result ->
+                                                if (result == SnackbarResult.ActionPerformed) {
+                                                    soundModeManager.requestDndPermission()
+                                                }
+                                            }
+                                            return@launch
+                                        }
+                                        val success = soundModeManager.setSoundMode("DND")
+
+                                        if (success) {
+                                            notificationManager.setMeetingMode(
+                                                true,
+                                                "Manual Meeting Mode"
+                                            )
+                                            snackbarHostState.showSnackbar(
+                                                message = "🔇 Meeting Mode Activated",
+                                                duration = SnackbarDuration.Short
+                                            )
+                                        } else {
+                                            snackbarHostState.showSnackbar(
+                                                message = "Failed to activate meeting mode",
+                                                duration = SnackbarDuration.Short
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
-                    ) {
-                        // ✅ Dynamic icon based on meeting mode status
-                        Icon(
-                            imageVector = if (meetingModeActive) {
-                                Icons.Default.DoNotDisturbOn  // Active meeting mode
-                            } else {
-                                Icons.Default.DoNotDisturb    // Inactive meeting mode
-                            },
-                            contentDescription = if (meetingModeActive) {
-                                "Deactivate Meeting Mode"
-                            } else {
-                                "Activate Meeting Mode"
-                            },
-                            tint = if (meetingModeActive) {
-                                MaterialTheme.colorScheme.error  // Red when active
-                            } else {
-                                MaterialTheme.colorScheme.onSurface  // Normal when inactive
-                            }
-                        )
-                    }
+                    ){
 
-                    // ✅ NOTIFICATION BELL (existing functionality)
+                    }
+                    //  NOTIFICATION BELL (existing functionality)
                     IconButton(
                         onClick = {
                             if (unreadCount > 0) {
