@@ -1,11 +1,13 @@
 package com.example.autoflow.receiver
 
+import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import androidx.annotation.RequiresPermission
 import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.toTriggers
 import com.example.autoflow.util.ActionExecutor
@@ -50,11 +52,13 @@ class BluetoothReceiver : BroadcastReceiver() {
         checkBluetoothTriggers(context, stateString, null, null)
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun handleDeviceConnected(context: Context, device: BluetoothDevice) {
         Log.d(TAG, "📱 Device connected: ${device.name} (${device.address})")
         checkBluetoothTriggers(context, "CONNECTED", device.address, device.name)
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun handleDeviceDisconnected(context: Context, device: BluetoothDevice) {
         Log.d(TAG, "📱 Device disconnected: ${device.name} (${device.address})")
         checkBluetoothTriggers(context, "DISCONNECTED", device.address, device.name)

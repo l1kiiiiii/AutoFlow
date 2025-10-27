@@ -29,12 +29,13 @@ class AutoReplyManager private constructor(private val context: Context) {
     companion object {
         private const val TAG = "AutoReplyManager"
         private const val PREF_NAME = "autoflow_autoreply"
+
         private const val KEY_AUTO_REPLY_ENABLED = "auto_reply_enabled"
         private const val KEY_AUTO_REPLY_MESSAGE = "auto_reply_message"
         private const val KEY_MEETING_MODE_ONLY = "meeting_mode_only"
         private const val KEY_LAST_REPLY_TIME = "last_reply_time"
         private const val REPLY_COOLDOWN_MS = 300000 // 5 minutes
-
+        private const val KEY_MANUAL_MEETING_MODE = "manual_meeting_mode"
         @SuppressLint("StaticFieldLeak")
         @Volatile
         private var INSTANCE: AutoReplyManager? = null
@@ -48,6 +49,15 @@ class AutoReplyManager private constructor(private val context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
     suspend fun shouldAutoReply(): Boolean {
         try {
+            val enabled = prefs.getBoolean(KEY_AUTO_REPLY_ENABLED, false)
+            val meetingMode = prefs.getBoolean(KEY_MANUAL_MEETING_MODE, false)
+            val message = prefs.getString(KEY_AUTO_REPLY_MESSAGE, "")
+
+            Log.d(TAG, "🔍 AutoReplyManager reading from 'autoflow_prefs':")
+            Log.d(TAG, "   auto_reply_enabled: $enabled")
+            Log.d(TAG, "   manual_meeting_mode: $meetingMode")
+            Log.d(TAG, "   auto_reply_message: $message")
+
             // 1. Check if auto-reply is enabled
             if (!isAutoReplyEnabled()) {
                 Log.d(TAG, "❌ Auto-reply is disabled")
@@ -93,6 +103,33 @@ class AutoReplyManager private constructor(private val context: Context) {
             false
         }
     }
+    fun checkAutoReplyConditions(context: Context): Boolean {
+        val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+
+        val enabled = prefs.getBoolean(Constants.PREF_AUTO_REPLY_ENABLED, false)
+        val meetingMode = prefs.getBoolean(Constants.PREF_MANUAL_MEETING_MODE, false)
+        val message = prefs.getString(Constants.PREF_AUTO_REPLY_MESSAGE, "")
+
+        //  Debug logging to see what AutoReplyManager reads
+        Log.d(TAG, "🔍 AutoReplyManager reading SharedPreferences:")
+        Log.d(TAG, "   auto_reply_enabled: $enabled")
+        Log.d(TAG, "   manual_meeting_mode: $meetingMode")
+        Log.d(TAG, "   auto_reply_message: $message")
+
+        if (!enabled) {
+            Log.d(TAG, "❌ Auto-reply is disabled")
+            return false
+        }
+
+        if (!meetingMode) {
+            Log.d(TAG, "❌ Not in meeting mode")
+            return false
+        }
+
+        Log.d(TAG, "✅ Auto-reply conditions met!")
+        return true
+    }
+
     private suspend fun isCurrentlyInMeetingMode(): Boolean {
         return try {
             val database = AppDatabase.getDatabase(context)

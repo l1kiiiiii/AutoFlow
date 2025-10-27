@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.telephony.SmsManager
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -28,6 +29,7 @@ import com.example.autoflow.util.NotificationHelper
 import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.WorkflowEntity
 import androidx.room.Room
+import com.example.autoflow.integrations.PhoneStateManager
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 
@@ -52,9 +54,11 @@ class MainActivity : ComponentActivity() {
                 Log.e(TAG, "❌ Failed to create notification channels", e)
                 showError("Failed to initialize notifications: ${e.message}")
             }
+            // ✅ ADD: Check auto-reply system on app start
+            checkAllAutoReplyRequirements(this)
 
-
-
+            // ✅ ADD: Set flags manually for testing (REMOVE after testing)
+            testSetAutoReplyFlags(this)
             // ✅ Request permissions
             checkAndRequestAllPermissions()
 
@@ -210,6 +214,97 @@ class MainActivity : ComponentActivity() {
             Log.d(TAG, "✅ Background location not needed on Android < 10")
             enableAutoReplyForTesting()
         }
+    }
+    // Add to MainActivity.kt or create a utility class
+    fun checkAutoReplyPermissions(context: Context): Boolean {
+        val permissions = arrayOf(
+            Manifest.permission.SEND_SMS,
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.READ_CALL_LOG
+        )
+
+        val missing = permissions.filter { permission ->
+            ActivityCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (missing.isNotEmpty()) {
+            Log.e("AutoReplyCheck", "❌ Missing permissions: ${missing.joinToString(", ")}")
+
+            // Show what's missing
+            missing.forEach { permission ->
+                when (permission) {
+                    Manifest.permission.SEND_SMS ->
+                        Log.e("AutoReplyCheck", "   📱 SMS Permission: DENIED")
+                    Manifest.permission.READ_PHONE_STATE ->
+                        Log.e("AutoReplyCheck", "   📞 Phone State Permission: DENIED")
+                    Manifest.permission.READ_CALL_LOG ->
+                        Log.e("AutoReplyCheck", "   📋 Call Log Permission: DENIED")
+                }
+            }
+            return false
+        }
+
+        Log.d("AutoReplyCheck", "✅ All auto-reply permissions granted")
+        return true
+    }
+
+    // Add to MainActivity.kt to check on app start
+    fun checkAllAutoReplyRequirements(context: Context) {
+        Log.d("AutoReplyCheck", "🔍 Checking all auto-reply requirements...")
+
+        // 1. Check permissions
+        val hasPermissions = checkAutoReplyPermissions(context)
+
+        // 2. Check SharedPreferences
+        val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+        val autoReplyEnabled = prefs.getBoolean("auto_reply_enabled", false)
+        val meetingMode = prefs.getBoolean("manual_meeting_mode", false)
+        val message = prefs.getString("auto_reply_message", "")
+
+        Log.d("AutoReplyCheck", "📋 SharedPreferences Status:")
+        Log.d("AutoReplyCheck", "   auto_reply_enabled: $autoReplyEnabled")
+        Log.d("AutoReplyCheck", "   manual_meeting_mode: $meetingMode")
+        Log.d("AutoReplyCheck", "   auto_reply_message: '$message'")
+
+        // 3. Check if SMS can be sent
+        try {
+            val smsManager = SmsManager.getDefault()
+            Log.d("AutoReplyCheck", "✅ SMS Manager available")
+        } catch (e: Exception) {
+            Log.e("AutoReplyCheck", "❌ SMS Manager not available", e)
+        }
+
+        // 4. Overall status
+        val allGood = hasPermissions && autoReplyEnabled && meetingMode && !message.isNullOrEmpty()
+        Log.d("AutoReplyCheck", if (allGood) "✅ Auto-reply fully ready!" else "❌ Auto-reply has issues")
+    }
+    // Add to MainActivity.kt for testing
+    fun testSetAutoReplyFlags(context: Context) {
+        Log.d("TestAutoReply", "🧪 Manually setting auto-reply flags for testing...")
+
+        val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putBoolean("auto_reply_enabled", true)
+            .putBoolean("manual_meeting_mode", true)
+            .putString("auto_reply_message", "I'm currently in a meeting and will get back to you soon.")
+            .putBoolean("auto_reply_only_in_dnd", true)
+            .apply()
+
+        // Verify immediately
+        val verifyEnabled = prefs.getBoolean("auto_reply_enabled", false)
+        val verifyMeeting = prefs.getBoolean("manual_meeting_mode", false)
+        val verifyMessage = prefs.getString("auto_reply_message", "")
+
+        Log.d("TestAutoReply", "✅ Flags set manually:")
+        Log.d("TestAutoReply", "   auto_reply_enabled: $verifyEnabled")
+        Log.d("TestAutoReply", "   manual_meeting_mode: $verifyMeeting")
+        Log.d("TestAutoReply", "   auto_reply_message: '$verifyMessage'")
+
+        // Start phone monitoring
+        val phoneStateManager = PhoneStateManager.getInstance(context)
+        phoneStateManager.startListening()
+
+        Toast.makeText(context, "Auto-reply flags set manually - test calling now!", Toast.LENGTH_LONG).show()
     }
 
     override fun onRequestPermissionsResult(

@@ -9,6 +9,7 @@ import android.util.Log
 import com.example.autoflow.util.AutoReplyManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -39,6 +40,7 @@ class PhoneStateReceiver : BroadcastReceiver() {
                 TelephonyManager.EXTRA_STATE_IDLE -> {
                     // Call ended - check if we need to auto-reply
                     phoneNumber?.let { number ->
+                        handleCallEnded(context, number)
                         Log.d(TAG, "📵 Call ended, checking auto-reply conditions for: $number")
 
                         coroutineScope.launch {
@@ -135,12 +137,34 @@ class PhoneStateReceiver : BroadcastReceiver() {
             Log.e(TAG, "❌ Error handling unknown caller", e)
         }
     }
+    private fun handleCallEnded(context: Context, phoneNumber: String) {
+        Log.d(TAG, "📵 Call ended, checking auto-reply conditions for: $phoneNumber")
+
+        GlobalScope.launch {
+            try {
+                val autoReplyManager = AutoReplyManager.getInstance(context)
+
+                if (autoReplyManager.shouldAutoReply()) {
+                    Log.d(TAG, "✅ Auto-reply conditions met - sending SMS")
+                    autoReplyManager.handleMissedCall(phoneNumber)
+                } else {
+                    Log.d(TAG, "⏭️ Auto-reply conditions not met, skipping")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error handling auto-reply", e)
+            }
+        }
+    }
+
     private fun checkAndSendAutoReply(context: Context, phoneNumber: String) {
         val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
         val autoReplyEnabled = prefs.getBoolean("auto_reply_enabled", false)
         val meetingMode = prefs.getBoolean("manual_meeting_mode", false)
         val message = prefs.getString("auto_reply_message", "I'm currently in a meeting and will get back to you soon.") ?: ""
 
+        Log.d(TAG, "🔍 Direct check - auto_reply_enabled: $autoReplyEnabled")
+        Log.d(TAG, "🔍 Direct check - manual_meeting_mode: $meetingMode")
+        Log.d(TAG, "🔍 Direct check - message: $message")
         if (autoReplyEnabled && meetingMode && phoneNumber.isNotEmpty()) {
             try {
                 val smsManager = SmsManager.getDefault()

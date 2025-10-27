@@ -34,11 +34,13 @@ import com.example.autoflow.data.toTriggers
 import com.example.autoflow.integrations.PhoneStateManager
 import com.example.autoflow.model.ActionTemplate
 import com.example.autoflow.model.ModeTemplate
+import com.example.autoflow.model.NotificationType
 import com.example.autoflow.model.TriggerTemplate
 import com.example.autoflow.util.AutoReplyManager
 import com.example.autoflow.util.TriggerParser
 import com.example.autoflow.model.TriggerHelpers
 import com.example.autoflow.util.ActionExecutor
+import com.example.autoflow.util.InAppNotificationManager
 
 /**
  * ✅ Fixed WorkflowViewModel using TriggerParser approach
@@ -494,7 +496,6 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                         if (isManualWorkflow) {
                             Log.d(TAG, "🤝 Manual workflow detected - executing immediately")
 
-                            // ✅ SAVE CURRENT STATE before executing
                             val context = getApplication<Application>().applicationContext
                             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
                             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -521,16 +522,16 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                                 // ✅ MEETING MODE SPECIFIC: Set auto-reply flags after successful execution
                                 if (wf.workflowName.contains("Meeting Mode", ignoreCase = true)) {
                                     prefs.edit()
-                                        .putBoolean("auto_reply_enabled", true)
-                                        .putBoolean("manual_meeting_mode", true)
+                                        .putBoolean("auto_reply_enabled", true)      // ✅ CRITICAL
+                                        .putBoolean("manual_meeting_mode", true)     // ✅ CRITICAL
                                         .apply()
 
                                     val phoneStateManager = PhoneStateManager.getInstance(context)
                                     phoneStateManager.startListening()
 
                                     Log.d(TAG, "🤖 Auto-reply started for Meeting Mode")
-                                    Log.d(TAG, "🚩 Set auto_reply_enabled = true")
-                                    Log.d(TAG, "🚩 Set manual_meeting_mode = true")
+                                    Log.d(TAG, "🚩 CRITICAL: Set auto_reply_enabled = true")
+                                    Log.d(TAG, "🚩 CRITICAL: Set manual_meeting_mode = true")
                                 }
 
                                 Log.d(TAG, "✅ Manual workflow executed successfully")
@@ -539,8 +540,10 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                             }
                         }
 
-                        // Schedule any time-based triggers
-                        AlarmScheduler.scheduleWorkflow(getApplication<Application>().applicationContext, wf)
+                        // ✅ Schedule any time-based triggers (only if not manual)
+                        if (!isManualWorkflow) {
+                            AlarmScheduler.scheduleWorkflow(getApplication<Application>().applicationContext, wf)
+                        }
                     }
                 }
 
@@ -591,16 +594,25 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                             // ✅ MEETING MODE SPECIFIC: Clear auto-reply flags
                             if (wf.workflowName.contains("Meeting Mode", ignoreCase = true)) {
                                 prefs.edit()
-                                    .putBoolean("auto_reply_enabled", false)
-                                    .putBoolean("manual_meeting_mode", false)
+                                    .putBoolean("auto_reply_enabled", false)     // ✅ CRITICAL
+                                    .putBoolean("manual_meeting_mode", false)    // ✅ CRITICAL
                                     .apply()
 
                                 val phoneStateManager = PhoneStateManager.getInstance(context)
                                 phoneStateManager.stopListening()
 
+                                // ✅ ADD: Deactivation notification
+                                val inAppNotificationManager = InAppNotificationManager.getInstance(context)
+                                inAppNotificationManager.addNotification(
+                                    type = NotificationType.SUCCESS,
+                                    title = "🔔 Meeting Mode Deactivated",
+                                    message = "Sound mode restored. Auto-reply disabled.",
+                                    isClearable = true
+                                )
+
                                 Log.d(TAG, "🤖 Auto-reply stopped for Meeting Mode")
-                                Log.d(TAG, "🚩 Set auto_reply_enabled = false")
-                                Log.d(TAG, "🚩 Set manual_meeting_mode = false")
+                                Log.d(TAG, "🚩 CRITICAL: Set auto_reply_enabled = false")
+                                Log.d(TAG, "🚩 CRITICAL: Set manual_meeting_mode = false")
                             }
 
                             Log.d(TAG, "✅ Previous state fully restored")
@@ -645,6 +657,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             }
         })
     }
+
 
 
     fun getWorkflowById(workflowId: Long, callback: WorkflowByIdCallback) {

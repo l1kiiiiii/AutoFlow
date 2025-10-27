@@ -247,7 +247,6 @@ class InAppNotificationManager private constructor(private val context: Context)
         }
     }
 
-
     /**
      * ✅ PERSISTENT: Count unread notifications accurately
      */

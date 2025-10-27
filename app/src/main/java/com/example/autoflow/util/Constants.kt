@@ -234,6 +234,7 @@ object Constants {
 
     // Preferences keys
     const val PREF_AUTO_REPLY_ENABLED = "auto_reply_enabled"
+    const val PREF_MANUAL_MEETING_MODE = "manual_meeting_mode"
     const val PREF_AUTO_REPLY_MESSAGE = "auto_reply_message"
     const val PREF_AUTO_REPLY_ONLY_IN_DND = "auto_reply_only_in_dnd"
 

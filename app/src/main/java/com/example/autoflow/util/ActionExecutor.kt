@@ -122,25 +122,36 @@ object ActionExecutor {
 
                     val message = action.message ?: "I'm currently in a meeting and will get back to you soon."
 
-                    // ✅ CRITICAL FIX: Set SharedPreference flags directly
+                    // ✅ CRITICAL FIX: Use Constants for SharedPreferences keys
                     val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
                     prefs.edit()
-                        .putBoolean("auto_reply_enabled", true)         // ✅ AutoReplyManager checks this
-                        .putBoolean("manual_meeting_mode", true)        // ✅ PhoneStateReceiver checks this
-                        .putString("auto_reply_message", message)       // ✅ Message to send
-                        .putBoolean("auto_reply_only_in_dnd", true)     // ✅ DND condition
+                        .putBoolean(Constants.PREF_AUTO_REPLY_ENABLED, true)        // ✅ Use constant key
+                        .putBoolean(Constants.PREF_MANUAL_MEETING_MODE, true)       // ✅ Use constant key
+                        .putString(Constants.PREF_AUTO_REPLY_MESSAGE, message)      // ✅ Use constant key
+                        .putBoolean(Constants.PREF_AUTO_REPLY_ONLY_IN_DND, true)    // ✅ Use constant key
                         .apply()
 
-                    // Start phone state monitoring
+                    // Force immediate save and verify
+                    Log.d(TAG, "🔧 Verifying SharedPreferences after save:")
+                    val verifyEnabled = prefs.getBoolean(Constants.PREF_AUTO_REPLY_ENABLED, false)
+                    val verifyMeetingMode = prefs.getBoolean(Constants.PREF_MANUAL_MEETING_MODE, false)
+                    val verifyMessage = prefs.getString(Constants.PREF_AUTO_REPLY_MESSAGE, "")
+
+                    Log.d(TAG, "🔍 auto_reply_enabled: $verifyEnabled")
+                    Log.d(TAG, "🔍 manual_meeting_mode: $verifyMeetingMode")
+                    Log.d(TAG, "🔍 auto_reply_message: $verifyMessage")
+
                     val phoneStateManager = PhoneStateManager.getInstance(context)
                     phoneStateManager.startListening()
 
                     Log.d(TAG, "✅ Auto-reply activated: $message")
-                    Log.d(TAG, "🚩 CRITICAL: Set auto_reply_enabled = true")
-                    Log.d(TAG, "🚩 CRITICAL: Set manual_meeting_mode = true")
+                    Log.d(TAG, "🚩 SOLUTION #2: Set auto_reply_enabled = true")
+                    Log.d(TAG, "🚩 SOLUTION #2: Set manual_meeting_mode = true")
 
                     true
                 }
+
+
 
                 "STOP_AUTO_REPLY" -> {
                     Log.d(TAG, "🚫 Stopping auto-reply")

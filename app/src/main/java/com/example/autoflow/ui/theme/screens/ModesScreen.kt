@@ -1,5 +1,6 @@
 package com.example.autoflow.ui.theme.screens
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -37,6 +38,11 @@ fun ModesScreen(
     // ✅ Observe workflows to check running status
     val workflows by viewModel.workflows.observeAsState(emptyList())
 
+    // ✅ Find active Meeting Mode specifically
+    val activeMeetingMode = workflows.find {
+        it.workflowName.contains("Meeting Mode", ignoreCase = true) && it.isEnabled
+    }
+
     // ✅ State for dialog
     var showDialog by remember { mutableStateOf(false) }
     var selectedMode by remember { mutableStateOf<ModeTemplate?>(null) }
@@ -58,7 +64,7 @@ fun ModesScreen(
                             )
                         }
                     }
-                },
+                }
             )
         }
     ) { padding ->
@@ -67,9 +73,67 @@ fun ModesScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // ✅ FIX ISSUE #1: Show Active Meeting Mode with DEACTIVATE button
+            if (activeMeetingMode != null) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                "🔇 Meeting Mode Active",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Text(
+                                "Auto-reply enabled • DND mode on",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                // ✅ SOLUTION #1: Disable Meeting Mode from ModesScreen
+                                Log.d("ModesScreen", "🔴 Deactivating Meeting Mode from UI")
+                                viewModel.updateWorkflowEnabled(
+                                    workflowId = activeMeetingMode.id,
+                                    enabled = false,
+                                    callback = object : WorkflowViewModel.WorkflowOperationCallback {
+                                        override fun onSuccess(message: String) {
+                                            Log.d("ModesScreen", "✅ Meeting Mode deactivated: $message")
+                                        }
+                                        override fun onError(error: String) {
+                                            Log.e("ModesScreen", "❌ Error deactivating: $error")
+                                        }
+                                    }
+                                )
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("DEACTIVATE")
+                        }
+                    }
+                }
+            }
+
+            // ✅ Show other running modes if any (except Meeting Mode)
             if (runningModesCount > 0) {
                 ActiveModesSection(
-                    workflows = workflows,
+                    workflows = workflows.filter { !it.workflowName.contains("Meeting Mode", ignoreCase = true) },
                     onStopMode = { workflowId ->
                         viewModel.updateWorkflowEnabled(
                             workflowId = workflowId,
@@ -83,6 +147,7 @@ fun ModesScreen(
                 )
             }
 
+            // ✅ EXISTING: Rest of your modes grid
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 contentPadding = PaddingValues(16.dp),
@@ -91,40 +156,31 @@ fun ModesScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(PredefinedModes.getAllModes()) { mode ->
+                    // ✅ Only show modes that aren't currently active
                     val runningWorkflow = workflows.find { workflow ->
                         workflow.workflowName.contains(mode.name, ignoreCase = true) &&
                                 workflow.isEnabled
                     }
                     val isRunning = runningWorkflow != null
 
-                    ModeCard(
-                        mode = mode,
-                        isRunning = isRunning,
-                        isMeetingMode = mode.name == "Meeting Mode", // Keep this for UI differences
-                        onModeClick = {
-                            // ✅ ALL MODES NOW SHOW POPUP (including Meeting Mode)
-                            selectedMode = mode
-                            showDialog = true
-                        },
-                        onStopClick = {
-                            if (isRunning && runningWorkflow != null) {
-                                viewModel.updateWorkflowEnabled(
-                                    workflowId = runningWorkflow.id,
-                                    enabled = false,
-                                    callback = object : WorkflowViewModel.WorkflowOperationCallback {
-                                        override fun onSuccess(message: String) {}
-                                        override fun onError(error: String) {}
-                                    }
-                                )
-                            }
-                        }
-                    )
+                    if (!isRunning) {  // ✅ Hide active modes from grid
+                        ModeCard(
+                            mode = mode,
+                            isRunning = false,
+                            isMeetingMode = mode.name == "Meeting Mode",
+                            onModeClick = {
+                                selectedMode = mode
+                                showDialog = true
+                            },
+                            onStopClick = { /* Not needed since not running */ }
+                        )
+                    }
                 }
             }
         }
     }
 
-    // ✅ Show configuration dialog popup for ALL modes (including Meeting Mode)
+    // ✅ Show configuration dialog popup for ALL modes
     selectedMode?.let { mode ->
         ModeConfigurationDialog(
             mode = mode,
@@ -143,8 +199,12 @@ fun ModesScreen(
                                 )
                             ),
                             callback = object : WorkflowViewModel.WorkflowOperationCallback {
-                                override fun onSuccess(message: String) {}
-                                override fun onError(error: String) {}
+                                override fun onSuccess(message: String) {
+                                    Log.d("ModesScreen", "✅ Mode activated: $message")
+                                }
+                                override fun onError(error: String) {
+                                    Log.e("ModesScreen", "❌ Mode activation failed: $error")
+                                }
                             }
                         )
                     }
@@ -186,8 +246,6 @@ fun ModesScreen(
         )
     }
 }
-
-
 
 @Composable
 fun ActiveModesSection(
