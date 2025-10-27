@@ -28,7 +28,7 @@ class AutoReplyManager private constructor(private val context: Context) {
 
     companion object {
         private const val TAG = "AutoReplyManager"
-        private const val PREF_NAME = "autoflow_autoreply"
+        private const val PREF_NAME = "autoflow_prefs"
 
         private const val KEY_AUTO_REPLY_ENABLED = "auto_reply_enabled"
         private const val KEY_AUTO_REPLY_MESSAGE = "auto_reply_message"
@@ -198,10 +198,10 @@ class AutoReplyManager private constructor(private val context: Context) {
         // For now, simplified version:
 
         val currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        val isBusinessHours = currentHour in 9..17 // 9 AM to 5 PM
+        //val isBusinessHours = currentHour in 9..17 // 9 AM to 5 PM
 
         // You can enhance this with actual location checking
-        return isBusinessHours
+        return true
     }
     private fun hasRequiredPermissions(): Boolean {
         val permissions = listOf(
