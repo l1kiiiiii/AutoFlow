@@ -21,94 +21,72 @@ object AlarmScheduler {
      * Schedule all alarms for a workflow
      */
     fun scheduleWorkflow(context: Context, workflow: WorkflowEntity) {
-        // ✅ FIXED: Validate workflow ID
-        if (workflow.id <= 0) {
-            Log.w(TAG, "⚠️ Invalid workflow ID: ${workflow.id}. Skipping alarm scheduling.")
-            return
-        }
-
-        if (!workflow.isEnabled) {
-            Log.d(TAG, "⚠️ Workflow ${workflow.id} is disabled. Skipping alarm scheduling.")
-            return
-        }
-
         try {
             val triggers = workflow.toTriggers()
-            val timeTriggers = triggers.filterIsInstance<Trigger.TimeTrigger>()
+            val timeTriggers = triggers.filter { it.type == "TIME" }
 
             if (timeTriggers.isEmpty()) {
-                Log.d(TAG, "⚠️ No time triggers found for workflow ${workflow.id}")
+                Log.d(TAG, "⏰ No time triggers found for workflow: ${workflow.workflowName}")
                 return
             }
 
-            timeTriggers.forEach { trigger ->
-                scheduleAlarmForTrigger(context, workflow.id, trigger)
+            timeTriggers.forEachIndexed { index, trigger ->
+                val timeData = TriggerParser.parseTimeData(trigger)
+                if (timeData != null) {
+                    val (time, days) = timeData
+                    scheduleAlarmForTime(context, workflow, time, days, index)
+                }
             }
 
-            Log.d(TAG, "✅ Scheduled ${timeTriggers.size} alarms for workflow ${workflow.id}")
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error scheduling workflow alarms", e)
+            Log.e(TAG, "❌ Error scheduling workflow: ${workflow.workflowName}", e)
         }
     }
 
     /**
      * Schedule a single alarm for a time trigger
      */
-    private fun scheduleAlarmForTrigger(
+    private fun scheduleAlarmForTime(
         context: Context,
-        workflowId: Long,
-        trigger: Trigger.TimeTrigger
+        workflow: WorkflowEntity,
+        time: String,
+        days: List<String>,
+        index: Int
     ) {
         try {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val triggerTime = parseTime(trigger.time)
 
-            if (triggerTime == null) {
-                Log.e(TAG, "❌ Failed to parse time: ${trigger.time}")
-                return
+            val calendar = Calendar.getInstance()
+            val timeParts = time.split(":")
+            calendar.set(Calendar.HOUR_OF_DAY, timeParts[0].toInt())
+            calendar.set(Calendar.MINUTE, timeParts[1].toInt())
+            calendar.set(Calendar.SECOND, 0)
+
+            // If time has passed today, schedule for tomorrow
+            if (calendar.timeInMillis <= System.currentTimeMillis()) {
+                calendar.add(Calendar.DAY_OF_YEAR, 1)
             }
 
-            // Calculate next occurrence
-            val calendar = Calendar.getInstance().apply {
-                timeInMillis = System.currentTimeMillis()
-                set(Calendar.HOUR_OF_DAY, triggerTime.first)
-                set(Calendar.MINUTE, triggerTime.second)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-
-                // If time has passed today, schedule for tomorrow
-                if (timeInMillis <= System.currentTimeMillis()) {
-                    add(Calendar.DAY_OF_MONTH, 1)
-                }
-            }
-
-            // Create unique request code
-            val requestCode = generateRequestCode(workflowId, trigger.time)
-
-            // Create pending intent
             val intent = Intent(context, AlarmReceiver::class.java).apply {
-                putExtra(Constants.KEY_WORKFLOW_ID, workflowId)
-                putExtra(Constants.KEY_TIME_TRIGGER, trigger.time)
+                putExtra("workflow_id", workflow.id)
+                putExtra("workflow_name", workflow.workflowName)
+                putExtra("trigger_time", time)
             }
 
+            val requestCode = (workflow.id.toString() + index.toString()).toInt()
             val pendingIntent = PendingIntent.getBroadcast(
-                context,
-                requestCode,
-                intent,
+                context, requestCode, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            // Schedule alarm
             alarmManager.setExactAndAllowWhileIdle(
                 AlarmManager.RTC_WAKEUP,
                 calendar.timeInMillis,
                 pendingIntent
             )
 
-            // Save alarm ID
-            saveAlarmId(context, workflowId, requestCode)
+            Log.d(TAG, "⏰ Alarm scheduled for ${workflow.workflowName} at $time")
 
-            Log.d(TAG, "✅ Scheduled alarm for workflow $workflowId at ${trigger.time} (requestCode: $requestCode)")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error scheduling alarm", e)
         }

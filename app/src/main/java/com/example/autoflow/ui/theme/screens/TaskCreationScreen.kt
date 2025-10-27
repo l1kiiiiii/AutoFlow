@@ -99,7 +99,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -113,7 +112,6 @@ import com.example.autoflow.geofence.GeofenceManager
 import com.example.autoflow.model.Action
 import com.example.autoflow.model.Trigger
 import com.example.autoflow.ui.theme.AutoFlowTheme
-import com.example.autoflow.util.AlarmScheduler
 import com.example.autoflow.util.Constants
 import com.example.autoflow.viewmodel.WorkflowViewModel
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -123,7 +121,6 @@ import com.google.android.gms.tasks.CancellationToken
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.gms.tasks.OnTokenCanceledListener
 import kotlinx.coroutines.launch
-import org.json.JSONException
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -137,7 +134,6 @@ import com.example.autoflow.data.toTriggers
 import com.example.autoflow.ui.components.AppSelectorComposable
 import android.content.Intent
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Surface
@@ -154,8 +150,21 @@ import com.example.autoflow.model.SavedLocation
 import com.example.autoflow.model.SavedWiFiNetwork
 import com.example.autoflow.viewmodel.WiFiViewModel
 import com.example.autoflow.viewmodel.BluetoothViewModel
-import android.widget.Toast
 import android.net.wifi.WifiManager
+import android.widget.Toast
+import androidx.compose.material3.Switch
+import androidx.compose.material.icons.filled.*
+import androidx.compose.foundation.background
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.foundation.layout.PaddingValues
+import com.example.autoflow.model.TriggerHelpers
+import com.example.autoflow.util.TriggerParser
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.material3.*
+import androidx.compose.ui.text.font.FontFamily
+import com.example.autoflow.util.AutoReplyManager
+import kotlinx.coroutines.withContext
+
 
 /**
  * Production-ready Task Creation Screen with comprehensive error handling
@@ -245,38 +254,58 @@ fun TaskCreationScreen(
     var bluetoothTriggerType by remember { mutableStateOf("connect") }
 
     // Pre-populate fields if editing
+    // ✅ FIXED: Pre-populate fields if editing
     LaunchedEffect(existingWorkflow) {
         existingWorkflow?.let { workflow ->
             try {
                 taskName = workflow.workflowName
 
-                workflow.toTriggers().firstOrNull()?.let { trigger ->
-                    when (trigger) {
-                        is Trigger.TimeTrigger -> {
+                // ✅ FIXED: Use explicit type for forEach
+                val triggersList: List<Trigger> = workflow.toTriggers()
+                triggersList.forEach { trigger: Trigger ->
+                    when (trigger.type) {
+                        "TIME" -> {
                             timeTriggerExpanded = true
-                            timeValue = trigger.time
+                            val timeData = TriggerParser.parseTimeData(trigger)
+                            timeData?.let { (time, _) ->
+                                timeValue = time
+                            }
                         }
-                        is Trigger.WiFiTrigger -> {
+                        "WIFI" -> {
                             wifiTriggerExpanded = true
-                            wifiState = trigger.state
+                            val wifiData = TriggerParser.parseWifiData(trigger)
+                            wifiData?.let { data ->
+                                wifiState = data.state
+                            }
                         }
-                        is Trigger.BluetoothTrigger -> {
+                        "BLUETOOTH" -> {
                             bluetoothDeviceTriggerExpanded = true
-                            bluetoothDeviceAddress = trigger.deviceAddress
+                            val bluetoothData = TriggerParser.parseBluetoothData(trigger)
+                            bluetoothData?.let { data ->
+                                bluetoothDeviceAddress = data.deviceAddress
+                            }
                         }
-                        is Trigger.LocationTrigger -> {
+                        "LOCATION" -> {
                             locationTriggerExpanded = true
-                            locationName = trigger.locationName
-                            locationDetailsInput = "${trigger.latitude},${trigger.longitude}"
-                            radiusValue = trigger.radius.toFloat()
+                            val locationData = TriggerParser.parseLocationData(trigger)
+                            locationData?.let { data ->
+                                locationName = data.locationName
+                                locationDetailsInput = "${data.latitude},${data.longitude}"
+                                radiusValue = data.radius.toFloat()
+                                triggerOnOption = when {
+                                    data.triggerOnEntry && data.triggerOnExit -> "Both"
+                                    data.triggerOnEntry -> "Entry"
+                                    data.triggerOnExit -> "Exit"
+                                    else -> "Entry"
+                                }
+                            }
                         }
-                        is Trigger.BatteryTrigger -> {
-                        Log.d("TaskCreation", "Battery trigger found but not supported in UI")
-                    }
                     }
                 }
 
-                workflow.toActions().firstOrNull()?.let { action ->
+                // ✅ FIXED: Handle actions similarly
+                val actionsList: List<Action> = workflow.toActions()
+                actionsList.firstOrNull()?.let { action: Action ->
                     when (action.type) {
                         Constants.ACTION_SEND_NOTIFICATION -> {
                             sendNotificationActionExpanded = true
@@ -466,7 +495,7 @@ fun TaskCreationScreen(
         }
     }
 }
-//  COMPOSABLE COMPONENTS 
+//  COMPOSABLE COMPONENTS
 
 @Composable
 private fun TaskNameCard(
@@ -535,7 +564,6 @@ private fun TriggersCard(
     onBluetoothTriggerTypeChange: (String) -> Unit,
     context: Context
 ) {
-    // Find this section in TaskCreationScreen (around line 500-600)
     val availableTriggers = listOf(
         "Time" to Icons.Default.Schedule,
         "Location" to Icons.Default.LocationOn,
@@ -626,7 +654,7 @@ private fun TriggersCard(
     }
 }
 
-//  UPDATED ACTIONS CARD 
+//  UPDATED ACTIONS CARD
 
 @Composable
 private fun ActionsCard(
@@ -732,7 +760,7 @@ private fun ActionsCard(
         }
     }
 }
-//  NEW ACTION CONTENT COMPONENTS 
+//  NEW ACTION CONTENT COMPONENTS
 
 @Composable
 private fun SetSoundModeContent(
@@ -1240,7 +1268,7 @@ private fun AppPickerDialog(
         }
     )
 }
-//  UTILITY FUNCTIONS 
+//  UTILITY FUNCTIONS
 
 private fun getInstalledApps(context: Context): List<AppInfo> {
     return try {
@@ -1272,7 +1300,7 @@ private fun getInstalledApps(context: Context): List<AppInfo> {
         packageName
     }
 }
-//  SUPPORTING COMPONENTS AND DATA CLASSES 
+//  SUPPORTING COMPONENTS AND DATA CLASSES
 
 data class SoundModeOption(
     val name: String,
@@ -1320,7 +1348,7 @@ private fun SaveButtonsCard(
     }
 }
 
-//  EXPANDABLE SECTIONS 
+//  EXPANDABLE SECTIONS
 
 @Composable
 private fun ExpandableTriggerSection(
@@ -1439,6 +1467,14 @@ private fun LocationTriggerContent(
     var currentAddress by remember { mutableStateOf<String?>(null) }
     var showLocationPermissionDialog by remember { mutableStateOf(false) }
 
+    // ✅ ADD: Location ViewModel and Save states
+    val locationViewModel: LocationViewModel = viewModel()
+    val savedLocations by locationViewModel.allLocations.observeAsState(emptyList())
+    var showSaveLocationDialog by remember { mutableStateOf(false) }
+    var isSavingLocation by remember { mutableStateOf(false) }
+    var showLocationDropdown by remember { mutableStateOf(false) }
+    var selectedSavedLocation by remember { mutableStateOf<SavedLocation?>(null) }
+
     // Radius text field state
     var radiusText by remember { mutableStateOf(radiusValue.roundToInt().toString()) }
     var radiusError by remember { mutableStateOf<String?>(null) }
@@ -1460,12 +1496,17 @@ private fun LocationTriggerContent(
                 context = context,
                 fusedLocationClient = fusedLocationClient,
                 onLocationReceived = { lat, lng, address ->
-                    onLocationDetailsChange("$lat,$lng")
-                    currentAddress = address
-                    if (locationName.isEmpty()) {
-                        onLocationNameChange(address ?: "Current Location")
+                    if (isValidCoordinates(lat, lng)) {
+                        onLocationDetailsChange("$lat,$lng")
+                        currentAddress = address
+                        if (locationName.isEmpty()) {
+                            onLocationNameChange(address ?: "Current Location")
+                        }
+                        isLoadingLocation = false
+                    } else {
+                        locationError = "Invalid location detected: ($lat, $lng). Please try again."
+                        isLoadingLocation = false
                     }
-                    isLoadingLocation = false
                 },
                 onError = { error ->
                     locationError = error
@@ -1480,24 +1521,139 @@ private fun LocationTriggerContent(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Location Name Field
-        OutlinedTextField(
-            value = locationName,
-            onValueChange = onLocationNameChange,
-            label = { Text("Location Name") },
-            placeholder = { Text("Home, Office, etc.") },
-            modifier = Modifier.fillMaxWidth(),
-            leadingIcon = { Icon(Icons.Default.Home, null) },
-            supportingText = {
-                if (currentAddress != null) {
-                    Text(
-                        "Detected: $currentAddress",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
+
+        // ✅ ENHANCED: Location Name Field with Saved Location Dropdown
+        ExposedDropdownMenuBox(
+            expanded = showLocationDropdown,
+            onExpandedChange = { showLocationDropdown = it }
+        ) {
+            OutlinedTextField(
+                value = locationName,
+                onValueChange = { newValue ->
+                    onLocationNameChange(newValue)
+                    selectedSavedLocation = null // Clear selection when manually typing
+                },
+                label = { Text("Location Name") },
+                placeholder = { Text("Select saved or enter new") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(),
+                leadingIcon = {
+                    Icon(
+                        if (selectedSavedLocation != null) Icons.Default.Star else Icons.Default.Home,
+                        null,
+                        tint = if (selectedSavedLocation != null)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                },
+                trailingIcon = {
+                    Row {
+                        if (savedLocations.isNotEmpty()) {
+                            IconButton(onClick = { showLocationDropdown = !showLocationDropdown }) {
+                                Icon(
+                                    if (showLocationDropdown) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                    contentDescription = "Select saved location"
+                                )
+                            }
+                        }
+                    }
+                },
+                supportingText = {
+                    if (currentAddress != null) {
+                        Text(
+                            "Detected: $currentAddress",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            )
+
+            // Dropdown Menu with Saved Locations
+            ExposedDropdownMenu(
+                expanded = showLocationDropdown,
+                onDismissRequest = { showLocationDropdown = false }
+            ) {
+                if (savedLocations.isEmpty()) {
+                    DropdownMenuItem(
+                        text = {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    Icons.Default.LocationOn,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    "No saved locations",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        onClick = { /* Do nothing */ }
+                    )
+                } else {
+                    savedLocations.forEach { location ->
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        if (location.isFavorite) Icons.Filled.Star else Icons.Default.LocationOn,
+                                        contentDescription = null,
+                                        tint = if (location.isFavorite)
+                                            MaterialTheme.colorScheme.primary
+                                        else
+                                            MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            location.name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            "${String.format("%.4f", location.latitude)}, ${String.format("%.4f", location.longitude)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            },
+                            onClick = {
+                                selectedSavedLocation = location
+                                onLocationNameChange(location.name)
+                                onLocationDetailsChange("${location.latitude},${location.longitude}")
+                                onRadiusChange(location.radius.toFloat())
+                                showLocationDropdown = false
+                                Toast.makeText(context, "✓ Loaded: ${location.name}", Toast.LENGTH_SHORT).show()
+                            },
+                            leadingIcon = {
+                                if (selectedSavedLocation?.id == location.id) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        )
+                    }
                 }
             }
-        )
+        }
 
         // Coordinates Field with Auto-Detect Button
         Row(
@@ -1539,12 +1695,17 @@ private fun LocationTriggerContent(
                             context = context,
                             fusedLocationClient = fusedLocationClient,
                             onLocationReceived = { lat, lng, address ->
-                                onLocationDetailsChange("$lat,$lng")
-                                currentAddress = address
-                                if (locationName.isEmpty()) {
-                                    onLocationNameChange(address ?: "Current Location")
+                                if (isValidCoordinates(lat, lng)) {
+                                    onLocationDetailsChange("$lat,$lng")
+                                    currentAddress = address
+                                    if (locationName.isEmpty()) {
+                                        onLocationNameChange(address ?: "Current Location")
+                                    }
+                                    isLoadingLocation = false
+                                } else {
+                                    locationError = "Invalid location detected: ($lat, $lng). Please try again."
+                                    isLoadingLocation = false
                                 }
-                                isLoadingLocation = false
                             },
                             onError = { error ->
                                 locationError = error
@@ -1575,8 +1736,8 @@ private fun LocationTriggerContent(
             }
         }
 
-        // Location Preview Card
-        if (locationDetailsInput.isNotBlank()) {
+        // ✅ SAVE LOCATION SECTION - appears when location is ready
+        if (locationName.isNotBlank() && locationDetailsInput.isNotBlank() && isValidCoordinates(locationDetailsInput)) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -1584,27 +1745,64 @@ private fun LocationTriggerContent(
                 )
             ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Column {
-                        Text(
-                            "Location Set",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
                         )
-                        Text(
-                            locationDetailsInput,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Column {
+                            Text(
+                                locationName,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                locationDetailsInput,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "Radius: ${radiusValue.roundToInt()}m",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // ✅ SAVE LOCATION BUTTON
+                    OutlinedButton(
+                        onClick = {
+                            showSaveLocationDialog = true
+                        },
+                        enabled = !isSavingLocation,
+                        modifier = Modifier.height(48.dp)
+                    ) {
+                        if (isSavingLocation) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.Save,
+                                "Save Location",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Save")
                     }
                 }
             }
@@ -1612,8 +1810,7 @@ private fun LocationTriggerContent(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        //  UPDATED: Radius Input with Indoor Presets 
-
+        // Radius Input Section
         Text(
             "Trigger Radius",
             style = MaterialTheme.typography.titleMedium,
@@ -1630,7 +1827,6 @@ private fun LocationTriggerContent(
                 value = radiusText,
                 onValueChange = { newValue ->
                     radiusText = newValue
-                    // Validate and update radius
                     val parsedValue = newValue.toIntOrNull()
                     when {
                         newValue.isEmpty() -> {
@@ -1660,7 +1856,6 @@ private fun LocationTriggerContent(
                 ),
                 keyboardActions = KeyboardActions(
                     onDone = {
-                        // Validate on done
                         val parsedValue = radiusText.toIntOrNull()
                         if (parsedValue != null && parsedValue in 10..5000) {
                             onRadiusChange(parsedValue.toFloat())
@@ -1681,7 +1876,7 @@ private fun LocationTriggerContent(
                 singleLine = true
             )
 
-            // ✅ UPDATED: Quick preset buttons with indoor options
+            // Quick preset buttons
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -1692,7 +1887,7 @@ private fun LocationTriggerContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                // ✅ NEW: Indoor/Small Space Presets Row
+                // Indoor/Small Space Presets
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -1723,9 +1918,7 @@ private fun LocationTriggerContent(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(2.dp))
-
-                // Standard Presets Row
+                // Standard Presets
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -1749,9 +1942,7 @@ private fun LocationTriggerContent(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(2.dp))
-
-                // Large Area Presets Row
+                // Large Area Presets
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -1780,7 +1971,7 @@ private fun LocationTriggerContent(
             }
         }
 
-        // Fine-tuned Slider for visual adjustment
+        // Fine-tuned Slider
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -1799,7 +1990,7 @@ private fun LocationTriggerContent(
                     radiusError = null
                 },
                 valueRange = 10f..5000f,
-                steps = 498, // More granular steps (10m increments)
+                steps = 498,
                 modifier = Modifier.fillMaxWidth(),
                 colors = SliderDefaults.colors(
                     thumbColor = MaterialTheme.colorScheme.primary,
@@ -1813,26 +2004,13 @@ private fun LocationTriggerContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    "10m",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "1km",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "2.5km",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "5km",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                listOf("10m", "1km", "2.5km", "5km").forEach { label ->
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
 
@@ -1942,171 +2120,41 @@ private fun LocationTriggerContent(
                 }
             }
         }
-        Spacer(modifier = Modifier.height(16.dp))
+    }
 
-        // SAVE LOCATION SECTION
-        // Add this RIGHT BEFORE the "Get Current Location" button in LocationTriggerContent
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-// ✅ PICK FROM SAVED LOCATIONS BUTTON
-        val locationViewModel: LocationViewModel = viewModel()
-        val savedLocations by locationViewModel.allLocations.observeAsState(emptyList())
-        var showLocationDropdown by remember { mutableStateOf(false) }
-        var selectedSavedLocation by remember { mutableStateOf<SavedLocation?>(null) }
-
-// Location Name with Dropdown
-        ExposedDropdownMenuBox(
-            expanded = showLocationDropdown,
-            onExpandedChange = { showLocationDropdown = it }
-        ) {
-            OutlinedTextField(
-                value = locationName,
-                onValueChange = { newValue ->
-                    onLocationNameChange(newValue)
-                    selectedSavedLocation = null // Clear selection when manually typing
-                },
-                label = { Text("Location Name") },
-                placeholder = { Text("Select saved or enter new") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .menuAnchor(),
-                trailingIcon = {
-                    Row {
-                        if (savedLocations.isNotEmpty()) {
-                            IconButton(onClick = { showLocationDropdown = !showLocationDropdown }) {
-                                Icon(
-                                    if (showLocationDropdown) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
-                                    contentDescription = "Select saved location"
-                                )
-                            }
-                        }
-                    }
-                },
-                leadingIcon = {
-                    Icon(
-                        if (selectedSavedLocation != null) Icons.Default.Star else Icons.Default.Place,
-                        contentDescription = null,
-                        tint = if (selectedSavedLocation != null)
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = if (selectedSavedLocation != null)
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.outline
-                )
-            )
-
-            // Dropdown Menu with Saved Locations
-            ExposedDropdownMenu(
-                expanded = showLocationDropdown,
-                onDismissRequest = { showLocationDropdown = false }
-            ) {
-                if (savedLocations.isEmpty()) {
-                    // No saved locations message
-                    DropdownMenuItem(
-                        text = {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(8.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Icon(
-                                    Icons.Default.LocationOn,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    "No saved locations",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        },
-                        onClick = { /* Do nothing */ }
-                    )
-                } else {
-                    // List all saved locations
-                    savedLocations.forEach { location ->
-                        DropdownMenuItem(
-                            text = {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        if (location.isFavorite) Icons.Filled.Star else Icons.Default.LocationOn,
-                                        contentDescription = null,
-                                        tint = if (location.isFavorite)
-                                            MaterialTheme.colorScheme.primary
-                                        else
-                                            MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            location.name,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            "${
-                                                String.format(
-                                                    "%.4f",
-                                                    location.latitude
-                                                )
-                                            }, ${String.format("%.4f", location.longitude)}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            },
-                            onClick = {
-                                // Auto-fill all fields when location is selected
-                                selectedSavedLocation = location
-                                onLocationNameChange(location.name)
-
-                                // ✅ FIX: Ensure proper coordinate format with consistent decimal places
-                                val formattedCoords = "${location.latitude},${location.longitude}"
-                                onLocationDetailsChange(formattedCoords)
-
-                                // ✅ FIX: Make sure to update radius value from saved location
-                                onRadiusChange(location.radius.toFloat())
-
-                                showLocationDropdown = false
-
-                                // Show success feedback
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "✓ Loaded: ${location.name}",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
-                            },
-                            leadingIcon = {
-                                if (selectedSavedLocation?.id == location.id) {
-                                    Icon(
-                                        Icons.Default.Check,
-                                        contentDescription = "Selected",
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
+    // ✅ SAVE LOCATION DIALOG
+    if (showSaveLocationDialog) {
+        SaveLocationToRoomDialog(
+            initialName = locationName,
+            coordinates = locationDetailsInput,
+            radius = radiusValue,
+            onSave = { name, address, isFavorite ->
+                scope.launch {
+                    try {
+                        isSavingLocation = true
+                        saveLocationToRoom(
+                            locationViewModel = locationViewModel,
+                            name = name,
+                            address = address,
+                            coordinates = locationDetailsInput,
+                            radius = radiusValue,
+                            isFavorite = isFavorite
                         )
+                        showSaveLocationDialog = false
+                        Toast.makeText(context, "✅ Location '$name' saved!", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "❌ Failed to save: ${e.message}", Toast.LENGTH_LONG).show()
+                    } finally {
+                        isSavingLocation = false
                     }
                 }
-            }
-        }
-
+            },
+            onDismiss = { showSaveLocationDialog = false },
+            isLoading = isSavingLocation
+        )
     }
 }
+
 
 //: Helper functions with indoor support
 private fun getRadiusDescription(radius: Int): String {
@@ -2134,7 +2182,7 @@ private fun getRadiusUseCase(radius: Int): String {
 }
 
 // Permission Dialog (same as before)...
-//  LOCATION FETCHING FUNCTION 
+//  LOCATION FETCHING FUNCTION
 
 @SuppressLint("MissingPermission")
 private fun fetchCurrentLocation(
@@ -2189,7 +2237,7 @@ private fun fetchCurrentLocation(
     }
 }
 
-//  REVERSE GEOCODING 
+//  REVERSE GEOCODING
 
 private fun getAddressFromCoordinates(
     context: Context,
@@ -2665,7 +2713,7 @@ fun BluetoothTriggerContent(
     }
 }
 
-//  ACTION CONTENT COMPONENTS 
+//  ACTION CONTENT COMPONENTS
 
 @Composable
 private fun NotificationActionContent(
@@ -2791,7 +2839,7 @@ private fun RunScriptContent(
     }
 }
 
-//  ERROR DIALOG 
+//  ERROR DIALOG
 
 @Composable
 private fun ErrorDialog(
@@ -2811,6 +2859,9 @@ private fun ErrorDialog(
     )
 }
 //  SAVE HANDLER
+/**
+ * ✅ FIXED: Complete handleSaveTask function with proper variable scoping
+ */
 private suspend fun handleSaveTask(
     context: Context,
     viewModel: WorkflowViewModel,
@@ -2848,7 +2899,7 @@ private suspend fun handleSaveTask(
 
         // 1. VALIDATE TASK NAME
         if (taskName.isBlank()) {
-            Log.e("TaskCreation", "❌ Task name is blank")
+            Log.e("TaskCreation", "Task name is blank")
             onError("Task name cannot be empty")
             return
         }
@@ -2858,43 +2909,42 @@ private suspend fun handleSaveTask(
         val hasLocationTrigger = locationTriggerExpanded && locationDetailsInput.isNotBlank()
         val hasWifiTrigger = wifiTriggerExpanded
         val hasTimeTrigger = timeTriggerExpanded && timeValue.isNotBlank()
-        val hasBluetoothTrigger =
-            bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank()
-        Log.d("TaskCreation", "=== TRIGGER CHECK ===")
-        Log.d("TaskCreation", "Location: $hasLocationTrigger")
-        Log.d("TaskCreation", "WiFi: $hasWifiTrigger")
-        Log.d("TaskCreation", "Time: $hasTimeTrigger")
-        Log.d("TaskCreation", "Bluetooth: $hasBluetoothTrigger")
+        val hasBluetoothTrigger = bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank()
+
+        Log.d("TaskCreation", "🔍 TRIGGER CHECK:")
+        Log.d("TaskCreation", "  Location: $hasLocationTrigger")
+        Log.d("TaskCreation", "  WiFi: $hasWifiTrigger")
+        Log.d("TaskCreation", "  Time: $hasTimeTrigger")
+        Log.d("TaskCreation", "  Bluetooth: $hasBluetoothTrigger")
 
         // 3. VALIDATE AT LEAST ONE TRIGGER
         if (!hasLocationTrigger && !hasWifiTrigger && !hasTimeTrigger && !hasBluetoothTrigger) {
-            Log.e("TaskCreation", "❌ No trigger configured")
+            Log.e("TaskCreation", "No trigger configured")
             onError("Please configure at least ONE trigger")
             return
         }
         Log.d("TaskCreation", "✅ At least one trigger is configured")
 
-        // 4. CREATE LIST OF ALL CONFIGURED TRIGGERS
+        // 4. ✅ CREATE LIST OF ALL CONFIGURED TRIGGERS (DECLARE triggers HERE)
         val triggers = mutableListOf<Trigger>()
+
         if (hasTimeTrigger) {
-            Log.d("TaskCreation", "→ Adding TIME trigger: $timeValue")
-            triggers.add(Trigger.TimeTrigger(time = timeValue, days = listOf()))
+            Log.d("TaskCreation", "Adding TIME trigger: $timeValue")
+            triggers.add(TriggerHelpers.createTimeTrigger(timeValue, listOf()))
         }
+
         if (hasWifiTrigger) {
-            Log.d("TaskCreation", "→ Adding WIFI trigger: $wifiState")
-            triggers.add(Trigger.WiFiTrigger(ssid = null, state = wifiState))
+            Log.d("TaskCreation", "Adding WIFI trigger: $wifiState")
+            triggers.add(TriggerHelpers.createWifiTrigger(null, wifiState))
         }
+
         if (hasBluetoothTrigger) {
-            Log.d("TaskCreation", "→ Adding BLUETOOTH trigger: $bluetoothDeviceAddress")
-            triggers.add(
-                Trigger.BluetoothTrigger(
-                    deviceAddress = bluetoothDeviceAddress,
-                    deviceName = null
-                )
-            )
+            Log.d("TaskCreation", "Adding BLUETOOTH trigger: $bluetoothDeviceAddress")
+            triggers.add(TriggerHelpers.createBluetoothTrigger(bluetoothDeviceAddress, null))
         }
+
         if (hasLocationTrigger) {
-            Log.d("TaskCreation", "→ Adding LOCATION trigger")
+            Log.d("TaskCreation", "Adding LOCATION trigger")
             val parts = locationDetailsInput.split(",").map { it.trim() }
             if (parts.size != 2) {
                 onError("Invalid coordinates. Use format: latitude,longitude")
@@ -2906,23 +2956,17 @@ private suspend fun handleSaveTask(
                 onError("Invalid coordinate values")
                 return
             }
-            triggers.add(
-                Trigger.LocationTrigger(
-                    locationName = locationName.ifEmpty { "Unnamed Location" },
-                    latitude = lat,
-                    longitude = lng,
-                    radius = radiusValue.toDouble(),
-                    triggerOnEntry = triggerOnOption == "Entry" || triggerOnOption == "Both",
-                    triggerOnExit = triggerOnOption == "Exit" || triggerOnOption == "Both",
-                    triggerOn = when (triggerOnOption) {
-                        "Entry" -> "enter"
-                        "Exit" -> "exit"
-                        "Both" -> "both"
-                        else -> "enter"
-                    }
-                )
-            )
+
+            triggers.add(TriggerHelpers.createLocationTrigger(
+                locationName = locationName.ifEmpty { "Unnamed Location" },
+                latitude = lat,
+                longitude = lng,
+                radius = radiusValue.toDouble(),
+                triggerOnEntry = triggerOnOption == "Entry" || triggerOnOption == "Both",
+                triggerOnExit = triggerOnOption == "Exit" || triggerOnOption == "Both"
+            ))
         }
+
         Log.d("TaskCreation", "✅ Total triggers created: ${triggers.size}")
 
         // 5. CHECK WHICH ACTIONS ARE CONFIGURED
@@ -2931,74 +2975,82 @@ private suspend fun handleSaveTask(
         val hasScriptAction = runScriptActionExpanded && scriptText.isNotBlank()
         val hasSoundModeAction = setSoundModeActionExpanded
         val hasBlockAppAction = blockAppsActionExpanded && selectedAppsToBlock.isNotEmpty()
-        Log.d("TaskCreation", "=== ACTION CHECK ===")
-        Log.d("TaskCreation", "Notification: $hasNotificationAction")
-        Log.d("TaskCreation", "Toggle: $hasToggleAction")
-        Log.d("TaskCreation", "Script: $hasScriptAction")
-        Log.d("TaskCreation", "Sound Mode: $hasSoundModeAction")
-        Log.d("TaskCreation", "Block Apps: $hasBlockAppAction")
+        val hasUnblockAppAction = unblockAppsActionExpanded
+
+        Log.d("TaskCreation", "🔍 ACTION CHECK:")
+        Log.d("TaskCreation", "  Notification: $hasNotificationAction")
+        Log.d("TaskCreation", "  Toggle: $hasToggleAction")
+        Log.d("TaskCreation", "  Script: $hasScriptAction")
+        Log.d("TaskCreation", "  Sound Mode: $hasSoundModeAction")
+        Log.d("TaskCreation", "  Block Apps: $hasBlockAppAction")
+        Log.d("TaskCreation", "  Unblock Apps: $hasUnblockAppAction")
 
         // 6. VALIDATE AT LEAST ONE ACTION
-        if (!hasNotificationAction && !hasToggleAction && !hasScriptAction && !hasSoundModeAction && !hasBlockAppAction) {
-            Log.e("TaskCreation", "❌ No action configured")
+        if (!hasNotificationAction && !hasToggleAction && !hasScriptAction &&
+            !hasSoundModeAction && !hasBlockAppAction && !hasUnblockAppAction) {
+            Log.e("TaskCreation", "No action configured")
             onError("Please configure at least ONE action")
             return
         }
         Log.d("TaskCreation", "✅ At least one action is configured")
 
-        // 7. CREATE LIST OF ALL CONFIGURED ACTIONS
+        // 7. ✅ CREATE LIST OF ALL CONFIGURED ACTIONS (DECLARE actions HERE)
         val actions = mutableListOf<Action>()
 
         if (hasNotificationAction) {
-            Log.d("TaskCreation", "→ Adding NOTIFICATION action")
-            actions.add(
-                Action(
-                    Constants.ACTION_SEND_NOTIFICATION,
-                    notificationTitle,
-                    notificationMessage,
-                    notificationPriority
-                )
-            )
+            Log.d("TaskCreation", "Adding NOTIFICATION action")
+            actions.add(Action(
+                type = Constants.ACTION_SEND_NOTIFICATION,
+                title = notificationTitle,
+                message = notificationMessage,
+                priority = notificationPriority
+            ))
         }
+
         if (hasToggleAction) {
-            Log.d("TaskCreation", "→ Adding TOGGLE action: $toggleSetting")
+            Log.d("TaskCreation", "Adding TOGGLE action: $toggleSetting")
             val actionType = when {
                 toggleSetting.startsWith("WIFI") -> Constants.ACTION_TOGGLE_WIFI
                 toggleSetting.startsWith("BLUETOOTH") -> Constants.ACTION_TOGGLE_BLUETOOTH
                 else -> Constants.ACTION_TOGGLE_WIFI
             }
-            actions.add(Action(actionType, null, null, null).apply { value = toggleSetting })
+            actions.add(Action(type = actionType).apply {
+                value = toggleSetting
+            })
         }
+
         if (hasSoundModeAction) {
-            Log.d("TaskCreation", "→ Adding SOUND MODE action: $soundMode")
-            actions.add(Action(Constants.ACTION_SET_SOUND_MODE, null, null, null).apply {
+            Log.d("TaskCreation", "Adding SOUND MODE action: $soundMode")
+            actions.add(Action(type = Constants.ACTION_SET_SOUND_MODE).apply {
                 value = soundMode
             })
         }
-        //  Block Apps Action
-        if (blockAppsActionExpanded && selectedAppsToBlock.isNotEmpty()) {
-            Log.d("TaskCreation", "→ Adding BLOCK APPS action: ${selectedAppsToBlock.size} apps")
-            Log.d("TaskCreation", "→ Apps: ${selectedAppsToBlock.joinToString()}")
-            // Store as comma-separated package names
+
+        if (hasBlockAppAction) {
+            Log.d("TaskCreation", "Adding BLOCK APPS action: ${selectedAppsToBlock.size} apps")
+            Log.d("TaskCreation", "Apps: ${selectedAppsToBlock.joinToString()}")
             val appsToBlock = selectedAppsToBlock.joinToString(",")
-            actions.add(Action(Constants.ACTION_BLOCK_APPS, null, null, null).apply {
+            actions.add(Action(type = Constants.ACTION_BLOCK_APPS).apply {
                 value = appsToBlock
             })
         }
-        //  ADD UNBLOCK APPS ACTION
-        if (unblockAppsActionExpanded) {
-            Log.d("TaskCreation", "→ Adding UNBLOCK APPS action")
-            actions.add(Action(Constants.ACTION_UNBLOCK_APPS, null, null, null))
+
+        if (hasUnblockAppAction) {
+            Log.d("TaskCreation", "Adding UNBLOCK APPS action")
+            actions.add(Action(type = Constants.ACTION_UNBLOCK_APPS))
         }
+
         if (hasScriptAction) {
-            Log.d("TaskCreation", "→ Adding SCRIPT action")
-            actions.add(Action(Constants.ACTION_RUN_SCRIPT, null, null, null).apply {
+            Log.d("TaskCreation", "Adding SCRIPT action")
+            actions.add(Action(type = Constants.ACTION_RUN_SCRIPT).apply {
                 value = scriptText
             })
         }
+
         Log.d("TaskCreation", "✅ Total actions created: ${actions.size}")
 
-        // 8. SAVE TO DATABASE (uses first trigger/action for compatibility)
+        // 8. SAVE TO DATABASE
+        Log.d("TaskCreation", "💾 Saving workflow...")
         if (workflowId != null) {
             viewModel.updateWorkflow(
                 workflowId = workflowId,
@@ -3016,42 +3068,51 @@ private suspend fun handleSaveTask(
             )
         }
 
-        // 9. SCHEDULE ALARMS FOR TIME TRIGGERS
         Log.d("TaskCreation", "✅ Workflow saved. Triggers will be automatically registered.")
-        // 10. ADD GEOFENCES FOR LOCATION TRIGGERS
-        if (workflowId == null || workflowId <= 0L) {
-            Log.w("TaskCreation", "Skipping geofence registration: invalid workflowId=$workflowId")
-        } else{
-            triggers.filterIsInstance<Trigger.LocationTrigger>().forEach { locationTrigger ->
+
+        // 9. ADD GEOFENCES FOR LOCATION TRIGGERS
+        if (workflowId == null || workflowId == 0L) {
+            Log.w("TaskCreation", "⚠️ Skipping geofence registration - invalid workflowId: $workflowId")
+        } else {
+            // ✅ FIXED: Explicit type for filter and forEach
+            val locationTriggers: List<Trigger> = triggers.filter { it.type == "LOCATION" }
+            locationTriggers.forEach { trigger: Trigger ->
                 try {
-                    GeofenceManager.addGeofence(
-                        context,
-                        workflowId,
-                        locationTrigger.latitude,
-                        locationTrigger.longitude,
-                        locationTrigger.radius.toFloat(),
-                        locationTrigger.triggerOnEntry,
-                        locationTrigger.triggerOnExit
-                    )
+                    val locationData = TriggerParser.parseLocationData(trigger)
+                    locationData?.let { data ->
+                        GeofenceManager.addGeofence(
+                            context,
+                            workflowId,
+                            data.latitude,
+                            data.longitude,
+                            data.radius.toFloat(),
+                            data.triggerOnEntry,
+                            data.triggerOnExit
+                        )
+                        Log.d("TaskCreation", "✅ Geofence registered for location: ${data.locationName}")
+                    }
                 } catch (e: Exception) {
                     Log.e("TaskCreation", "❌ Geofence setup failed", e)
                 }
             }
-    }
+        }
+
         onSuccess()
+
     } catch (e: NumberFormatException) {
-        Log.e("TaskCreation", "❌ Number format error", e)
+        Log.e("TaskCreation", "Number format error", e)
         onError("Invalid number: ${e.message}")
-    } catch (e: JSONException) {
-        Log.e("TaskCreation", "❌ JSON error", e)
+    } catch (e: org.json.JSONException) {
+        Log.e("TaskCreation", "JSON error", e)
         onError("Location data error: ${e.message}")
     } catch (e: Exception) {
-        Log.e("TaskCreation", "❌ Unexpected error", e)
+        Log.e("TaskCreation", "Unexpected error", e)
         onError("Error: ${e.message}")
     }
 }
 
-//  UTILITY FUNCTIONS 
+
+//  UTILITY FUNCTIONS
 
 data class BluetoothDeviceInfo(val name: String, val address: String)
 
@@ -3276,6 +3337,587 @@ private fun validateScript(scriptCode: String) {
         Log.i("ScriptValidation", "Validation passed")
     }
 }
+
+// ✅ Auto-Reply Settings Card for TaskCreationScreen
+@Composable
+fun AutoReplySettingsCard(
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val autoReplyManager = remember { AutoReplyManager.getInstance(context) }
+
+    var autoReplyEnabled by remember { mutableStateOf(autoReplyManager.isAutoReplyEnabled()) }
+    var meetingModeOnly by remember { mutableStateOf(autoReplyManager.isMeetingModeOnly()) }
+    var autoReplyMessage by remember { mutableStateOf(autoReplyManager.getAutoReplyMessage()) }
+    var showMessageEditor by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    Icons.Default.PhoneCallback,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    "Auto-Reply SMS",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Enable/Disable Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Enable Auto-Reply",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        "Automatically reply to missed calls with SMS",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = autoReplyEnabled,
+                    onCheckedChange = { enabled ->
+                        autoReplyEnabled = enabled
+                        autoReplyManager.setAutoReplyEnabled(enabled)
+                    }
+                )
+            }
+
+            if (autoReplyEnabled) {
+                HorizontalDivider()
+
+                // Meeting Mode Only Toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Meeting Mode Only",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            "Only reply during active meeting workflows",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = meetingModeOnly,
+                        onCheckedChange = { meetingOnly ->
+                            meetingModeOnly = meetingOnly
+                            autoReplyManager.setMeetingModeOnly(meetingOnly)
+                        }
+                    )
+                }
+
+                // Message Editor
+                OutlinedButton(
+                    onClick = { showMessageEditor = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Edit Auto-Reply Message")
+                }
+
+                // Preview Message
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            "Current Message:",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            autoReplyMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // Message Editor Dialog
+    if (showMessageEditor) {
+        var tempMessage by remember { mutableStateOf(autoReplyMessage) }
+
+        AlertDialog(
+            onDismissRequest = { showMessageEditor = false },
+            title = { Text("Edit Auto-Reply Message") },
+            text = {
+                OutlinedTextField(
+                    value = tempMessage,
+                    onValueChange = { tempMessage = it },
+                    label = { Text("Message") },
+                    placeholder = { Text("Enter your auto-reply message...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 4
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        autoReplyMessage = tempMessage
+                        autoReplyManager.setAutoReplyMessage(tempMessage)
+                        showMessageEditor = false
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMessageEditor = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun LocationTriggerSection(
+    isLocationEnabled: Boolean,
+    selectedLocation: String,
+    onLocationToggle: (Boolean) -> Unit,
+    onLocationSelected: (String) -> Unit
+) {
+    // Simple hardcoded locations (no database, no ViewModels)
+    val commonLocations = listOf("Home", "Office", "School", "Gym", "Mall", "Hospital")
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isLocationEnabled)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            else
+                MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            // Header with toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = null,
+                        tint = if (isLocationEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Location Trigger",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                Switch(
+                    checked = isLocationEnabled,
+                    onCheckedChange = onLocationToggle
+                )
+            }
+
+            if (isLocationEnabled) {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Simple text input
+                OutlinedTextField(
+                    value = selectedLocation,
+                    onValueChange = onLocationSelected,
+                    label = { Text("Location Name") },
+                    placeholder = { Text("Enter location (e.g., Home, Office)") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = null
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Common locations section
+                Text(
+                    text = "📍 Quick Select",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Quick select chips
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
+                ) {
+                    items(commonLocations.size) { index ->
+                        val location = commonLocations[index]
+                        FilterChip(
+                            onClick = { onLocationSelected(location) },
+                            label = { Text(location) },
+                            selected = selectedLocation == location,
+                            leadingIcon = if (selectedLocation == location) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            } else null
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Help text
+                Text(
+                    text = "💡 Enter any location name. Your workflow will activate when you arrive at this location.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            RoundedCornerShape(8.dp)
+                        )
+                        .padding(12.dp)
+                )
+            }
+        }
+    }
+}
+private fun isValidCoordinates(latitude: Double, longitude: Double): Boolean {
+    return !(latitude == 0.0 && longitude == 0.0) &&
+            latitude >= -90.0 && latitude <= 90.0 &&
+            longitude >= -180.0 && longitude <= 180.0 &&
+            !latitude.isNaN() && !longitude.isNaN()
+}
+
+private fun isValidCoordinates(coordinates: String): Boolean {
+    return try {
+        val parts = coordinates.split(",").map { it.trim() }
+        if (parts.size != 2) return false
+
+        val lat = parts[0].toDoubleOrNull() ?: return false
+        val lng = parts[1].toDoubleOrNull() ?: return false
+
+        isValidCoordinates(lat, lng)
+    } catch (e: Exception) {
+        false
+    }
+}
+@Composable
+private fun SaveLocationToRoomDialog(
+    initialName: String,
+    coordinates: String,
+    radius: Float,
+    onSave: (name: String, address: String, isFavorite: Boolean) -> Unit,
+    onDismiss: () -> Unit,
+    isLoading: Boolean = false
+) {
+    var locationName by remember { mutableStateOf(initialName) }
+    var locationAddress by remember { mutableStateOf("") }
+    var isFavorite by remember { mutableStateOf(false) }
+    var nameError by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = { if (!isLoading) onDismiss() },
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Default.Save, contentDescription = null)
+                Text("Save Location to Database")
+            }
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = locationName,
+                    onValueChange = {
+                        locationName = it
+                        nameError = null
+                    },
+                    label = { Text("Location Name") },
+                    placeholder = { Text("e.g., Home, Office, Gym") },
+                    modifier = Modifier.fillMaxWidth(),
+                    isError = nameError != null,
+                    supportingText = nameError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                    leadingIcon = { Icon(Icons.Default.LocationOn, null) }
+                )
+
+                OutlinedTextField(
+                    value = locationAddress,
+                    onValueChange = { locationAddress = it },
+                    label = { Text("Address (Optional)") },
+                    placeholder = { Text("Street address or description") },
+                    modifier = Modifier.fillMaxWidth(),
+                    leadingIcon = { Icon(Icons.Default.Home, null) },
+                    maxLines = 2
+                )
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            "Location Details",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Coordinates:", style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                coordinates,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Radius:", style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                "${radius.roundToInt()}m",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            if (isFavorite) Icons.Filled.Star else Icons.Default.StarBorder,
+                            contentDescription = null,
+                            tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            "Mark as Favorite",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Switch(
+                        checked = isFavorite,
+                        onCheckedChange = { isFavorite = it }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    when {
+                        locationName.isBlank() -> {
+                            nameError = "Location name is required"
+                        }
+                        coordinates.isBlank() -> {
+                            nameError = "Coordinates are required"
+                        }
+                        else -> {
+                            onSave(locationName.trim(), locationAddress.trim(), isFavorite)
+                        }
+                    }
+                },
+                enabled = !isLoading
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text("Save Location")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isLoading
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+// Save location to Room database
+private suspend fun saveLocationToRoom(
+    locationViewModel: LocationViewModel,
+    name: String,
+    address: String,
+    coordinates: String,
+    radius: Float,
+    isFavorite: Boolean
+) = withContext(Dispatchers.IO) {
+    try {
+        val parts = coordinates.split(",").map { it.trim() }
+        if (parts.size != 2) {
+            throw IllegalArgumentException("Invalid coordinate format")
+        }
+
+        val latitude = parts[0].toDoubleOrNull()
+            ?: throw IllegalArgumentException("Invalid latitude: ${parts[0]}")
+        val longitude = parts[1].toDoubleOrNull()
+            ?: throw IllegalArgumentException("Invalid longitude: ${parts[1]}")
+
+        if (!isValidCoordinates(latitude, longitude)) {
+            throw IllegalArgumentException("Coordinates are out of valid range")
+        }
+
+        // ✅ FIX: Pass radius as Double (will be converted to Int in LocationViewModel)
+        locationViewModel.saveLocation(
+            name = name,
+            latitude = latitude,
+            longitude = longitude,
+            radius = radius.toDouble(), // ✅ Convert Float to Double
+            address = address
+        )
+
+        Log.d("TaskCreation", "✅ Saved location to Room DB: $name at ($latitude, $longitude)")
+
+    } catch (e: Exception) {
+        Log.e("TaskCreation", "❌ Failed to save location to Room DB", e)
+        throw e
+    }
+}
+
+/**
+ * ✅ Individual saved location item
+ */
+@Composable
+private fun LocationItem(
+    location: SavedLocation,
+    isSelected: Boolean,
+    onSelected: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSelected() },
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected)
+                MaterialTheme.colorScheme.primaryContainer
+            else
+                MaterialTheme.colorScheme.surface
+        ),
+        border = if (isSelected)
+            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        else null
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = location.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                )
+                Text(
+                    text = "${String.format("%.4f", location.latitude)}, ${String.format("%.4f", location.longitude)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+
+            Row {
+                if (isSelected) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Selected",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+    }
+}
+
 
 //  PREVIEW
 @Preview(showBackground = true, name = "Task Creation Screen Preview")

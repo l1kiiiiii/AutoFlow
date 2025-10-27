@@ -1,15 +1,19 @@
 package com.example.autoflow.blocker
 
 import android.accessibilityservice.AccessibilityService
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import com.example.autoflow.policy.BlockPolicy
+import com.example.autoflow.blocker.BlockActivity
 
+@SuppressLint("AccessibilityPolicy")
 class AppBlockAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "AppBlockService"
+        private const val THROTTLE_INTERVAL_MS = 1000L
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -26,10 +30,9 @@ class AppBlockAccessibilityService : AccessibilityService() {
             packageName == this.packageName) {
             return
         }
-
         Log.d(TAG, "📱 App launched: $packageName")
 
-        // ✅ FIXED: Use getBlockedPackages() and check if blocking is enabled
+        //  Use getBlockedPackages() and check if blocking is enabled
         if (BlockPolicy.isBlockingEnabled(this)) {
             val blockedPackages = BlockPolicy.getBlockedPackages(this)
 

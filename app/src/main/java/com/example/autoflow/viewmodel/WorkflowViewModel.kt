@@ -3,8 +3,12 @@ package com.example.autoflow.viewmodel
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Application
+import android.app.NotificationManager
+import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
+import android.media.AudioManager
+import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
@@ -14,6 +18,7 @@ import androidx.lifecycle.MutableLiveData
 import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.data.WorkflowRepository
+import com.example.autoflow.data.toActions
 import com.example.autoflow.geofence.GeofenceManager
 import com.example.autoflow.integrations.BLEManager
 import com.example.autoflow.integrations.LocationManager
@@ -26,16 +31,21 @@ import org.json.JSONObject
 import com.example.autoflow.util.AlarmScheduler
 import org.json.JSONArray
 import com.example.autoflow.data.toTriggers
+import com.example.autoflow.integrations.PhoneStateManager
 import com.example.autoflow.model.ActionTemplate
 import com.example.autoflow.model.ModeTemplate
+import com.example.autoflow.model.NotificationType
 import com.example.autoflow.model.TriggerTemplate
-
+import com.example.autoflow.util.AutoReplyManager
+import com.example.autoflow.util.TriggerParser
+import com.example.autoflow.model.TriggerHelpers
+import com.example.autoflow.util.ActionExecutor
+import com.example.autoflow.util.InAppNotificationManager
 
 /**
- * Modern WorkflowViewModel using Coroutines
+ * ✅ Fixed WorkflowViewModel using TriggerParser approach
  * Manages workflow CRUD operations and trigger monitoring
  */
-@Suppress("unused", "MemberVisibilityCanBePrivate") // Public API for UI components
 class WorkflowViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: WorkflowRepository
@@ -55,41 +65,78 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
     private val locationManager = LocationManager(application)
     private val wifiManager = WiFiManager(application)
 
+    private val autoReplyManager = AutoReplyManager.getInstance(application)
+
     companion object {
         private const val TAG = "WorkflowViewModel"
     }
 
     init {
         val database = AppDatabase.getDatabase(application)
-        repository = WorkflowRepository(database.workflowDao())  
+        repository = WorkflowRepository(database.workflowDao())
         loadWorkflows()
         Log.d(TAG, "ViewModel initialized")
     }
 
-    //  WORKFLOW CRUD OPERATIONS 
+    // ✅ WORKFLOW CRUD OPERATIONS
 
     fun loadWorkflows() {
         repository.getAllWorkflows(object : WorkflowRepository.WorkflowCallback {
             override fun onWorkflowsLoaded(workflows: MutableList<WorkflowEntity>) {
                 Log.d(TAG, "✅ Loaded ${workflows.size} workflows from database")
                 workflows.forEach {
-                    Log.d(TAG, "  - ${it.workflowName} (ID: ${it.id})")
-                }
+                    Log.d(TAG, " - ${it.workflowName} (ID: ${it.id})")
+                }  // ← ADD THIS CLOSING BRACE
                 _workflows.postValue(workflows)
             }
 
             override fun onWorkflowsError(error: String) {
                 Log.e(TAG, "Failed to load workflows: $error")
+                _errorMessage.postValue(error)
+            }
+        })
+    }
+    // When user taps on a manual workflow (Meeting Mode), execute actions immediately
+    fun executeManualWorkflow(workflowId: Long) {
+        Log.d(TAG, "🎯 Executing manual workflow: $workflowId")
+
+        repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
+            override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
+                workflow?.let { w ->
+                    if (w.isEnabled) {
+                        Log.d(TAG, "▶️ Starting manual execution: ${w.workflowName}")
+
+                        // Execute all actions immediately
+                        val actions = w.toActions()
+                        var successCount = 0
+
+                        actions.forEach { action ->
+                            Log.d(TAG, "🔧 Executing action: ${action.type} = ${action.value}")
+                            val success = ActionExecutor.executeAction(getApplication(), action)
+                            if (success) {
+                                successCount++
+                                Log.d(TAG, "✅ Action succeeded: ${action.type}")
+                            } else {
+                                Log.e(TAG, "❌ Action failed: ${action.type}")
+                            }
+                        }
+
+                        Log.d(TAG, "🎉 Manual execution complete: $successCount/${actions.size} actions succeeded")
+                    } else {
+                        Log.w(TAG, "⚠️ Workflow disabled: ${w.workflowName}")
+                    }
+                }
+            }
+
+            override fun onWorkflowError(error: String) {
+                Log.e(TAG, "❌ Error loading manual workflow: $error")
             }
         })
     }
 
 
-
-
     /**
-     *  Add workflow with proper ID handling
-     * Geofences and alarms are now registered AFTER insertion
+     * ✅ FIXED: Add workflow using TriggerHelpers
      */
     fun addWorkflow(
         workflowName: String,
@@ -140,38 +187,41 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                     // ✅ Create workflow with REAL ID
                     val savedWorkflow = workflowEntity.copy(id = insertedId)
 
-                    // ✅ Register triggers with correct ID
+                    // ✅ FIXED: Register triggers using TriggerParser
                     triggers.forEach { trigger ->
-                        when (trigger) {
-                            is Trigger.LocationTrigger -> {
-                                val success = GeofenceManager.addGeofence(
-                                    context = getApplication<Application>().applicationContext,
-                                    workflowId = insertedId,  // ✅ Use real ID
-                                    latitude = trigger.latitude,
-                                    longitude = trigger.longitude,
-                                    radius = trigger.radius.toFloat(),
-                                    triggerOnEntry = trigger.triggerOnEntry,
-                                    triggerOnExit = trigger.triggerOnExit
-                                )
-                                if (success) {
-                                    Log.d(TAG, "✅ Geofence registered for workflow $insertedId")
-                                } else {
-                                    Log.e(TAG, "❌ Failed to register geofence for workflow $insertedId")
+                        when (trigger.type) {
+                            "LOCATION" -> {
+                                val locationData = TriggerParser.parseLocationData(trigger)
+                                locationData?.let { data ->
+                                    val success = GeofenceManager.addGeofence(
+                                        context = getApplication<Application>().applicationContext,
+                                        workflowId = insertedId,
+                                        latitude = data.latitude,
+                                        longitude = data.longitude,
+                                        radius = data.radius.toFloat(),
+                                        triggerOnEntry = data.triggerOnEntry,
+                                        triggerOnExit = data.triggerOnExit
+                                    )
+                                    if (success) {
+                                        Log.d(TAG, "✅ Geofence registered for workflow $insertedId")
+                                    } else {
+                                        Log.e(TAG, "❌ Failed to register geofence for workflow $insertedId")
+                                    }
                                 }
                             }
-                            is Trigger.TimeTrigger -> {
+                            "TIME" -> {
                                 // Time triggers handled by AlarmScheduler
                                 Log.d(TAG, "⏰ Time trigger will be scheduled by AlarmScheduler")
                             }
-                            is Trigger.WiFiTrigger -> {
+                            "WIFI" -> {
                                 // WiFi triggers handled by TriggerMonitoringService
                                 Log.d(TAG, "📶 WiFi trigger registered for workflow $insertedId")
                             }
-                            is Trigger.BluetoothTrigger -> {
+                            "BLUETOOTH" -> {
                                 // Bluetooth triggers handled by BLETriggerWorker
                                 Log.d(TAG, "📡 Bluetooth trigger registered for workflow $insertedId")
                             }
-                            is Trigger.BatteryTrigger -> {
+                            "BATTERY" -> {
                                 // Battery triggers handled by TriggerMonitoringService
                                 Log.d(TAG, "🔋 Battery trigger registered for workflow $insertedId")
                             }
@@ -181,7 +231,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                     // ✅ Schedule alarms for time-based triggers (with correct ID)
                     AlarmScheduler.scheduleWorkflow(
                         getApplication<Application>().applicationContext,
-                        savedWorkflow  // ✅ Has real ID, not 0
+                        savedWorkflow
                     )
 
                     // Reload workflows and show success
@@ -190,8 +240,6 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                         "Workflow '$workflowName' created with ${triggers.size} trigger(s) and ${actions.size} action(s)"
                     )
                 }
-
-
 
                 override fun onInsertError(error: String) {
                     _errorMessage.postValue("Failed to create workflow: $error")
@@ -205,7 +253,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * ✅ FIXED: Update workflow with proper validation
+     * ✅ FIXED: Update workflow using TriggerParser approach
      */
     fun updateWorkflow(
         workflowId: Long,
@@ -246,39 +294,12 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         }
 
         try {
-            // Build triggers JSON array
+            // ✅ FIXED: Build triggers JSON array using new approach
             val triggersJsonArray = JSONArray()
             triggers.forEach { trigger ->
                 val triggerJson = JSONObject().apply {
                     put("type", trigger.type)
                     put("value", trigger.value)
-
-                    when (trigger) {
-                        is Trigger.LocationTrigger -> {
-                            put("locationName", trigger.locationName)
-                            put("latitude", trigger.latitude)
-                            put("longitude", trigger.longitude)
-                            put("radius", trigger.radius)
-                            put("triggerOnEntry", trigger.triggerOnEntry)
-                            put("triggerOnExit", trigger.triggerOnExit)
-                        }
-                        is Trigger.TimeTrigger -> {
-                            put("time", trigger.time)
-                            put("days", JSONArray(trigger.days))
-                        }
-                        is Trigger.WiFiTrigger -> {
-                            trigger.ssid?.let { put("ssid", it) }
-                            put("state", trigger.state)
-                        }
-                        is Trigger.BluetoothTrigger -> {
-                            put("deviceAddress", trigger.deviceAddress)
-                            trigger.deviceName?.let { put("deviceName", it) }
-                        }
-                        is Trigger.BatteryTrigger -> {
-                            put("level", trigger.level)
-                            put("condition", trigger.condition)
-                        }
-                    }
                 }
                 triggersJsonArray.put(triggerJson)
             }
@@ -362,7 +383,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
     fun deleteWorkflow(workflowId: Long, callback: WorkflowOperationCallback? = null) {
         if (workflowId <= 0) {
             val error = "Invalid workflow ID"
-            _errorMessage.value = error  // ✅ Use .value
+            _errorMessage.value = error
             callback?.onError(error)
             return
         }
@@ -371,15 +392,11 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
                 if (workflow != null) {
                     try {
-                        // ✅ FIXED: Parse as JSONArray, not JSONObject
-                        val triggersArray = org.json.JSONArray(workflow.triggerDetails)
+                        // ✅ FIXED: Clean up using toTriggers() extension
+                        val triggers = workflow.toTriggers()
 
-                        // Clean up each trigger
-                        for (i in 0 until triggersArray.length()) {
-                            val triggerJson = triggersArray.getJSONObject(i)
-                            val triggerType = triggerJson.optString("type")
-
-                            when (triggerType) {
+                        triggers.forEach { trigger ->
+                            when (trigger.type) {
                                 Constants.TRIGGER_LOCATION -> {
                                     GeofenceManager.removeGeofence(
                                         getApplication<Application>().applicationContext,
@@ -407,17 +424,17 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                         if (success) {
                             loadWorkflows()
                             val msg = "Workflow deleted"
-                            _successMessage.value = msg  // ✅ Use .value
+                            _successMessage.value = msg
                             callback?.onSuccess(msg)
                         } else {
                             val error = "Delete failed"
-                            _errorMessage.value = error  // ✅ Use .value
+                            _errorMessage.value = error
                             callback?.onError(error)
                         }
                     }
 
                     override fun onDeleteError(error: String) {
-                        _errorMessage.value = error  // ✅ Use .value
+                        _errorMessage.value = error
                         callback?.onError(error)
                     }
                 })
@@ -430,17 +447,17 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                         if (success) {
                             loadWorkflows()
                             val msg = "Workflow deleted"
-                            _successMessage.value = msg  // ✅ Use .value
+                            _successMessage.value = msg
                             callback?.onSuccess(msg)
                         } else {
                             val error = "Delete failed"
-                            _errorMessage.value = error  // ✅ Use .value
+                            _errorMessage.value = error
                             callback?.onError(error)
                         }
                     }
 
                     override fun onDeleteError(error: String) {
-                        _errorMessage.value = error  // ✅ Use .value
+                        _errorMessage.value = error
                         callback?.onError(error)
                     }
                 })
@@ -448,9 +465,8 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         })
     }
 
-
     /**
-     * ✅ FIXED: Update workflow enabled state with alarm handling
+     * ✅ Update workflow enabled state with alarm handling
      */
     fun updateWorkflowEnabled(
         workflowId: Long,
@@ -466,52 +482,184 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
-        // Cancel/schedule alarms based on enabled state
-        if (!enabled) {
+        if (enabled) {
+            // ✅ ENABLING WORKFLOW
+            repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
+                override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
+                    workflow?.let { wf ->
+                        Log.d(TAG, "📋 Enabling workflow: ${wf.workflowName}")
+
+                        val triggers = wf.toTriggers()
+                        val isManualWorkflow = triggers.any { trigger -> trigger.type == "MANUAL" }
+
+                        if (isManualWorkflow) {
+                            Log.d(TAG, "🤝 Manual workflow detected - executing immediately")
+
+                            val context = getApplication<Application>().applicationContext
+                            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+                            val currentRingerMode = audioManager.ringerMode
+                            var currentDndState = false
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                currentDndState = notificationManager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
+                            }
+
+                            // Save state
+                            val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+                            prefs.edit()
+                                .putInt("previous_ringer_mode", currentRingerMode)
+                                .putBoolean("previous_dnd_state", currentDndState)
+                                .apply()
+
+                            Log.d(TAG, "💾 Saved previous state: Ringer=$currentRingerMode, DND=$currentDndState")
+
+                            // ✅ MEETING MODE SPECIFIC: Set auto-reply flags after successful execution
+                            if (wf.workflowName.contains("Meeting Mode", ignoreCase = true)) {
+                                Log.d(TAG, "🤝 Meeting Mode workflow detected - setting auto-reply flags")
+
+                                prefs.edit()
+                                    .putBoolean(Constants.PREF_AUTO_REPLY_ENABLED, true) // Should set this to true
+                                    .putBoolean(Constants.PREF_MANUAL_MEETING_MODE, true) // Should set this to true
+                                    .apply()
+
+                                val phoneStateManager = PhoneStateManager.getInstance(context)
+                                phoneStateManager.startListening()
+
+                                Log.d(TAG, "🤖 Auto-reply started for Meeting Mode")
+                                Log.d(TAG, "🚩 CRITICAL: Set auto_reply_enabled = true")
+                                Log.d(TAG, "🚩 CRITICAL: Set manual_meeting_mode = true")
+                            }
+
+                            // ✅ EXECUTE WORKFLOW ACTIONS
+                            val executionSuccess = ActionExecutor.executeWorkflow(context, wf)
+
+                            if (executionSuccess) {
+                                Log.d(TAG, "✅ Manual workflow executed successfully")
+                            } else {
+                                Log.e(TAG, "❌ Manual workflow execution failed")
+                            }
+                        }
+
+                        // ✅ Schedule any time-based triggers (only if not manual)
+                        if (!isManualWorkflow) {
+                            AlarmScheduler.scheduleWorkflow(getApplication<Application>().applicationContext, wf)
+                        }
+                    }
+                }
+
+                override fun onWorkflowError(error: String) {
+                    Log.e(TAG, "❌ Error loading workflow: $error")
+                    callback?.onError(error)
+                }
+            })
+        } else {
+            // ✅ DISABLING WORKFLOW
+            repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
+                override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
+                    workflow?.let { wf ->
+                        val triggers = wf.toTriggers()
+                        val isManualWorkflow = triggers.any { trigger -> trigger.type == "MANUAL" }
+
+                        if (isManualWorkflow) {
+                            Log.d(TAG, "🤝 Manual workflow disabled - restoring previous state")
+
+                            val context = getApplication<Application>().applicationContext
+                            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                            val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+
+                            // ✅ RESTORE PREVIOUS RINGER MODE
+                            val previousRingerMode = prefs.getInt("previous_ringer_mode", AudioManager.RINGER_MODE_NORMAL)
+                            audioManager.ringerMode = previousRingerMode
+                            Log.d(TAG, "🔊 Restored previous ringer mode: $previousRingerMode")
+
+                            // ✅ RESTORE PREVIOUS DND STATE
+                            val previousDndState = prefs.getBoolean("previous_dnd_state", false)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                try {
+                                    if (notificationManager.isNotificationPolicyAccessGranted) {
+                                        val targetFilter = if (previousDndState) {
+                                            NotificationManager.INTERRUPTION_FILTER_PRIORITY
+                                        } else {
+                                            NotificationManager.INTERRUPTION_FILTER_ALL
+                                        }
+                                        notificationManager.setInterruptionFilter(targetFilter)
+                                        Log.d(TAG, "🔔 Restored previous DND state: $previousDndState")
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "❌ Error restoring DND state: ${e.message}")
+                                }
+                            }
+
+                            // ✅ MEETING MODE SPECIFIC: Clear auto-reply flags
+                            if (wf.workflowName.contains("Meeting Mode", ignoreCase = true)) {
+                                prefs.edit()
+                                    .putBoolean(Constants.PREF_AUTO_REPLY_ENABLED, false) // Should set this to false
+                                    .putBoolean(Constants.PREF_MANUAL_MEETING_MODE, false) // Should set this to false
+                                    .apply()
+
+                                val phoneStateManager = PhoneStateManager.getInstance(context)
+                                phoneStateManager.stopListening()
+
+                                // ✅ ADD: Deactivation notification
+                                val inAppNotificationManager = InAppNotificationManager.getInstance(context)
+                                inAppNotificationManager.addNotification(
+                                    type = NotificationType.SUCCESS,
+                                    title = "🔔 Meeting Mode Deactivated",
+                                    message = "Sound mode restored. Auto-reply disabled.",
+                                    isClearable = true
+                                )
+
+                                Log.d(TAG, "🤖 Auto-reply stopped for Meeting Mode")
+                                Log.d(TAG, "🚩 CRITICAL: Set auto_reply_enabled = false")
+                                Log.d(TAG, "🚩 CRITICAL: Set manual_meeting_mode = false")
+                            }
+
+                            Log.d(TAG, "✅ Previous state fully restored")
+                        }
+                    }
+                }
+
+                override fun onWorkflowError(error: String) {
+                    Log.e(TAG, "❌ Error loading workflow for cleanup: $error")
+                }
+            })
+
+            // Cancel alarms
             AlarmScheduler.cancelWorkflowAlarms(
                 getApplication<Application>().applicationContext,
                 workflowId
             )
             Log.d(TAG, "⏰ Cancelled alarms for disabled workflow $workflowId")
-        } else {
-            // Re-enable: need to reschedule
-            repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
-                override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
-                    workflow?.let {
-                        AlarmScheduler.scheduleWorkflow(
-                            getApplication<Application>().applicationContext,
-                            it
-                        )
-                        Log.d(TAG, "⏰ Rescheduled alarms for enabled workflow $workflowId")
-                    }
-                }
-
-                override fun onWorkflowError(error: String) {
-                    Log.e(TAG, "Error rescheduling alarms: $error")
-                }
-            })
         }
 
+        // ✅ Update database
         repository.updateWorkflowEnabled(workflowId, enabled, object : WorkflowRepository.UpdateCallback {
             override fun onUpdateComplete(success: Boolean) {
                 if (success) {
                     loadWorkflows()
-                    val msg = "Workflow ${if (enabled) "enabled" else "disabled"}"
+                    val msg = "Workflow ${if (enabled) "enabled" else "disabled"} successfully"
                     _successMessage.postValue(msg)
                     callback?.onSuccess(msg)
+                    Log.d(TAG, "✅ $msg")
                 } else {
                     val error = "Toggle failed"
                     _errorMessage.postValue(error)
                     callback?.onError(error)
+                    Log.e(TAG, "❌ $error")
                 }
             }
 
             override fun onUpdateError(error: String) {
                 _errorMessage.postValue(error)
                 callback?.onError(error)
+                Log.e(TAG, "❌ Update error: $error")
             }
         })
     }
+
+
 
     fun getWorkflowById(workflowId: Long, callback: WorkflowByIdCallback) {
         if (workflowId <= 0) {
@@ -531,7 +679,9 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             }
         })
     }
-    // TRIGGER MONITORING
+
+    // ✅ TRIGGER MONITORING - FIXED using TriggerParser
+
     @SuppressLint("MissingPermission")
     @RequiresPermission(anyOf = [Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION])
     fun checkTrigger(trigger: Trigger, callback: TriggerCallback) {
@@ -555,9 +705,17 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         }
 
         try {
+            // ✅ FIXED: Parse Bluetooth data from JSON
+            val bluetoothData = TriggerParser.parseBluetoothData(trigger)
+            if (bluetoothData == null) {
+                callback.onTriggerFired(trigger, false)
+                return
+            }
+
             bleManager.startScanning(object : BLEManager.BLECallback {
                 override fun onDeviceDetected(deviceAddress: String, deviceName: String) {
-                    val matched = deviceAddress == trigger.value || deviceName == trigger.value
+                    val matched = deviceAddress == bluetoothData.deviceAddress ||
+                            (bluetoothData.deviceName != null && deviceName == bluetoothData.deviceName)
                     callback.onTriggerFired(trigger, matched)
                 }
 
@@ -582,9 +740,16 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         }
 
         try {
+            // ✅ FIXED: Parse location data from JSON
+            val locationData = TriggerParser.parseLocationData(trigger)
+            if (locationData == null) {
+                callback.onTriggerFired(trigger, false)
+                return
+            }
+
             locationManager.getLastLocation(object : LocationManager.Callback {
                 override fun onLocationReceived(location: Location) {
-                    val inRange = isInRange(location, trigger.value)
+                    val inRange = isInRange(location, locationData)
                     callback.onTriggerFired(trigger, inRange)
                 }
 
@@ -604,18 +769,37 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
 
     private fun handleTimeTrigger(trigger: Trigger, callback: TriggerCallback) {
         try {
-            if (trigger.value.isBlank()) {
+            // ✅ FIXED: Parse time data from JSON
+            val timeData = TriggerParser.parseTimeData(trigger)
+            if (timeData == null) {
                 callback.onTriggerFired(trigger, false)
                 return
             }
 
-            val targetTime = trigger.value.trim().toLong()
+            val (targetTime, days) = timeData
             val currentTime = System.currentTimeMillis()
-            val isTriggered = currentTime >= targetTime &&
-                    (currentTime - targetTime) <= Constants.TIME_WINDOW_MS
+
+            // Convert time string to milliseconds for comparison
+            val timeParts = targetTime.split(":")
+            if (timeParts.size != 2) {
+                callback.onTriggerFired(trigger, false)
+                return
+            }
+
+            val targetHour = timeParts[0].toIntOrNull() ?: 0
+            val targetMinute = timeParts[1].toIntOrNull() ?: 0
+
+            val calendar = java.util.Calendar.getInstance()
+            calendar.set(java.util.Calendar.HOUR_OF_DAY, targetHour)
+            calendar.set(java.util.Calendar.MINUTE, targetMinute)
+            calendar.set(java.util.Calendar.SECOND, 0)
+
+            val targetTimeMs = calendar.timeInMillis
+            val isTriggered = currentTime >= targetTimeMs &&
+                    (currentTime - targetTimeMs) <= Constants.TIME_WINDOW_MS
 
             callback.onTriggerFired(trigger, isTriggered)
-        } catch (e: NumberFormatException) {
+        } catch (e: Exception) {
             Log.e(TAG, "Time format error", e)
             callback.onTriggerFired(trigger, false)
         }
@@ -629,8 +813,15 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         }
 
         try {
+            // ✅ FIXED: Parse WiFi data from JSON
+            val wifiData = TriggerParser.parseWifiData(trigger)
+            if (wifiData == null) {
+                callback.onTriggerFired(trigger, false)
+                return
+            }
+
             val wifiState = wifiManager.isWiFiEnabled()
-            val expectedState = Constants.WIFI_STATE_ON.equals(trigger.value, ignoreCase = true)
+            val expectedState = Constants.WIFI_STATE_ON.equals(wifiData.state, ignoreCase = true)
             callback.onTriggerFired(trigger, wifiState == expectedState)
         } catch (e: Exception) {
             Log.e(TAG, "WiFi error", e)
@@ -645,30 +836,23 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         ) == PackageManager.PERMISSION_GRANTED
     }
 
-    private fun isInRange(location: Location, value: String): Boolean {
-        if (value.isBlank()) return false
-
+    // ✅ FIXED: Updated location range checking
+    private fun isInRange(location: Location, locationData: com.example.autoflow.util.LocationData): Boolean {
         return try {
-            val parts = value.split(",")
-            if (parts.size < 2) return false
-
-            val targetLat = parts[0].trim().toDouble()
-            val targetLng = parts[1].trim().toDouble()
-            val radius = if (parts.size > 2) parts[2].trim().toFloat()
-            else Constants.LOCATION_DEFAULT_RADIUS
-
             val results = FloatArray(1)
             Location.distanceBetween(
                 location.latitude, location.longitude,
-                targetLat, targetLng, results
+                locationData.latitude, locationData.longitude, results
             )
 
-            results[0] <= radius
+            results[0] <= locationData.radius
         } catch (e: Exception) {
-            Log.e(TAG, "Location parse error", e)
+            Log.e(TAG, "Location range error", e)
             false
         }
     }
+
+    //  Mode creation using TriggerHelpers
     fun createWorkflowFromMode(mode: ModeTemplate, callback: WorkflowOperationCallback? = null) {
         try {
             // Convert templates to actual triggers and actions
@@ -686,7 +870,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             // Create workflow entity
             val workflowEntity = WorkflowEntity.fromTriggersAndActions(
                 workflowName = mode.name,
-                isEnabled = true, // ✅ ADDED: Missing parameter
+                isEnabled = true,
                 triggers = triggers,
                 actions = actions,
                 triggerLogic = "AND"
@@ -710,39 +894,69 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                     // Create workflow with real ID
                     val savedWorkflow = workflowEntity.copy(id = insertedId)
 
-                    // Register triggers with correct ID
-                    triggers.forEach { trigger ->
-                        when (trigger) {
-                            is Trigger.LocationTrigger -> {
-                                GeofenceManager.addGeofence(
-                                    context = getApplication<Application>().applicationContext,
-                                    workflowId = insertedId,
-                                    latitude = trigger.latitude,
-                                    longitude = trigger.longitude,
-                                    radius = trigger.radius.toFloat(),
-                                    triggerOnEntry = trigger.triggerOnEntry,
-                                    triggerOnExit = trigger.triggerOnExit
-                                )
+                    // ✅ CRITICAL FIX: Check for MANUAL triggers and execute immediately
+                    val hasManualTrigger = triggers.any { it.type == "MANUAL" }
+                    val hasTimeTrigger = triggers.any { it.type == "TIME" }
+
+                    when {
+                        hasManualTrigger -> {
+                            Log.d(TAG, "🎯 MANUAL trigger detected - executing immediately")
+
+                            // ✅ Execute the workflow actions RIGHT NOW
+                            val context = getApplication<Application>().applicationContext
+                            val executionSuccess = ActionExecutor.executeWorkflow(context, savedWorkflow)
+
+                            if (executionSuccess) {
+                                Log.d(TAG, "✅ Manual workflow executed successfully")
+                            } else {
+                                Log.e(TAG, "❌ Manual workflow execution failed")
                             }
-                            is Trigger.TimeTrigger -> {
-                                // Time triggers handled by AlarmScheduler
-                                Log.d(TAG, "⏰ Time trigger for mode workflow")
+                        }
+
+                        hasTimeTrigger -> {
+                            Log.d(TAG, "⏰ Time trigger for mode workflow")
+
+                            // Schedule time-based triggers
+                            AlarmScheduler.scheduleWorkflow(
+                                getApplication<Application>().applicationContext,
+                                savedWorkflow
+                            )
+                        }
+
+                        else -> {
+                            Log.d(TAG, "🔧 Other trigger types detected")
+                        }
+                    }
+
+                    // ✅ Register triggers for location/other types
+                    triggers.forEach { trigger ->
+                        when (trigger.type) {
+                            "LOCATION" -> {
+                                val locationData = TriggerParser.parseLocationData(trigger)
+                                locationData?.let { data ->
+                                    GeofenceManager.addGeofence(
+                                        context = getApplication<Application>().applicationContext,
+                                        workflowId = insertedId,
+                                        latitude = data.latitude,
+                                        longitude = data.longitude,
+                                        radius = data.radius.toFloat(),
+                                        triggerOnEntry = data.triggerOnEntry,
+                                        triggerOnExit = data.triggerOnExit
+                                    )
+                                }
+                            }
+                            "MANUAL" -> {
+                                Log.d(TAG, "📝 Manual trigger registered for future toggles")
                             }
                             else -> {
-                                Log.d(TAG, "Other trigger type: ${trigger.type}")
+                                Log.d(TAG, "🔧 Registering trigger: ${trigger.type}")
                             }
                         }
                     }
 
-                    // Schedule alarms
-                    AlarmScheduler.scheduleWorkflow(
-                        getApplication<Application>().applicationContext,
-                        savedWorkflow
-                    )
-
-                    // Reload and notify
+                    // Reload workflows and notify success
                     loadWorkflows()
-                    val msg = "Mode '${mode.name}' created successfully"
+                    val msg = "Mode '${mode.name}' created and ${if (hasManualTrigger) "activated" else "scheduled"}!"
                     _successMessage.postValue(msg)
                     callback?.onSuccess(msg)
                 }
@@ -760,18 +974,47 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+
+
+    /**
+     * ✅ Register workflow triggers (location, etc.)
+     */
+    private fun registerWorkflowTriggers(workflow: WorkflowEntity, triggers: List<com.example.autoflow.model.Trigger>) {
+        triggers.forEach { trigger ->
+            when (trigger.type) {
+                "LOCATION" -> {
+                    val locationData = TriggerParser.parseLocationData(trigger)
+                    locationData?.let { data ->
+                        GeofenceManager.addGeofence(
+                            context = getApplication<Application>().applicationContext,
+                            workflowId = workflow.id,
+                            latitude = data.latitude,
+                            longitude = data.longitude,
+                            radius = data.radius.toFloat(),
+                            triggerOnEntry = data.triggerOnEntry,
+                            triggerOnExit = data.triggerOnExit
+                        )
+                    }
+                }
+                "MANUAL" -> {
+                    Log.d(TAG, "📝 Manual trigger registered for future toggles")
+                }
+                else -> {
+                    Log.d(TAG, "🔧 Registering trigger: ${trigger.type}")
+                }
+            }
+        }
+    }
+
+
+    // ✅ FIXED: Convert template to trigger using TriggerHelpers
     private fun convertTemplateToTrigger(template: TriggerTemplate): Trigger {
         return when (template.type) {
             "TIME" -> {
                 val time = template.config["time"] as? String ?: "00:00"
                 val daysString = template.config["days"] as? String ?: ""
-                val days = if (daysString.isBlank()) emptyList()
-                else daysString.split(",").map { it.trim() }
-
-                Trigger.TimeTrigger(
-                    time = time,
-                    days = days
-                )
+                val days = if (daysString.isBlank()) emptyList() else daysString.split(",").map { it.trim() }
+                TriggerHelpers.createTimeTrigger(time, days)
             }
             "LOCATION" -> {
                 val locationName = template.config["locationName"] as? String ?: "Set Location"
@@ -786,59 +1029,66 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                     else -> 0.0
                 }
                 val radius = when (val rad = template.config["radius"]) {
-                    is Number -> rad.toDouble() // ✅ CHANGED: Convert to Double, not Int
+                    is Number -> rad.toDouble()
                     is String -> rad.toDoubleOrNull() ?: 100.0
                     else -> 100.0
                 }
-
-                Trigger.LocationTrigger(
-                    locationName = locationName,
-                    latitude = latitude,
-                    longitude = longitude,
-                    radius = radius, // Now it's Double
-                    triggerOnEntry = template.config["triggerOnEntry"] as? Boolean ?: true,
-                    triggerOnExit = template.config["triggerOnExit"] as? Boolean ?: false,
-                    triggerOn = template.config["triggerOn"] as? String ?: "enter"
+                val triggerOnEntry = template.config["triggerOnEntry"] as? Boolean ?: true
+                val triggerOnExit = template.config["triggerOnExit"] as? Boolean ?: false
+                TriggerHelpers.createLocationTrigger(
+                    locationName, latitude, longitude, radius, triggerOnEntry, triggerOnExit
                 )
             }
             "WIFI" -> {
-                Trigger.WiFiTrigger(
-                    ssid = template.config["ssid"] as? String,
-                    state = template.config["state"] as? String ?: "connected"
-                )
+                val ssid = template.config["ssid"] as? String
+                val state = template.config["state"] as? String ?: "connected"
+                TriggerHelpers.createWifiTrigger(ssid, state)
             }
             "BLUETOOTH" -> {
-                Trigger.BluetoothTrigger(
-                    deviceAddress = template.config["deviceAddress"] as? String ?: "",
-                    deviceName = template.config["deviceName"] as? String
-                )
+                val deviceAddress = template.config["deviceAddress"] as? String ?: ""
+                val deviceName = template.config["deviceName"] as? String
+                TriggerHelpers.createBluetoothTrigger(deviceAddress, deviceName)
             }
-            else -> throw IllegalArgumentException("Unknown trigger type: ${template.type}")
-        }
-    }
-    private fun convertTemplateToAction(template: ActionTemplate): Action {
-        return when (template.type) {
-            "SEND_NOTIFICATION" -> {
-                // Use 4-parameter constructor for notifications
-                Action(
-                    type = template.type,
-                    title = template.config["title"] as? String ?: "AutoFlow",
-                    message = template.config["message"] as? String ?: "Notification",
-                    priority = template.config["priority"] as? String ?: "default"
+            "MANUAL" -> {
+                // ✅ FIXED: Added support for MANUAL trigger type
+                // Manual triggers are user-activated - create a simple trigger with MANUAL type
+                Trigger.ManualTrigger(  // ✅ ADD THIS!
+                    actionType = template.config["type"] as? String ?: "quick_action"
                 )
-            }
-            "SET_SOUND_MODE", "TOGGLE_WIFI", "TOGGLE_BLUETOOTH" -> {
-                // Use simple constructor, then set value manually
-                val action = Action(type = template.type)
-                action.value = template.config["value"] as? String
-                action
             }
             else -> {
-                // Default: simple constructor with optional value
-                val action = Action(type = template.type)
-                action.value = template.config["value"] as? String
-                action
+                throw IllegalArgumentException("Unknown trigger type: ${template.type}")
             }
+        }
+    }
+
+    private fun convertTemplateToAction(template: ActionTemplate): Action {
+        return Action(
+            type = template.type,
+            value = template.config["value"] as? String
+        ).apply {
+            // ✅ Extract all properties from template config
+            this.title = template.config["title"] as? String
+            this.message = template.config["message"] as? String
+            this.priority = template.config["priority"] as? String ?: "Normal"
+
+            // ✅ SPECIAL CASE: For AUTO_REPLY, ensure we have message
+            if (template.type == "AUTO_REPLY" && this.message == null) {
+                this.message = "I'm currently in a meeting and will get back to you soon."
+            }
+
+            // ✅ SPECIAL CASE: For SHOW_NOTIFICATION, ensure we have defaults
+            if (template.type == "SHOW_NOTIFICATION") {
+                if (this.title == null) this.title = "Meeting Mode Active"
+                if (this.message == null) this.message = "Your phone is silenced and auto-reply is on."
+            }
+
+            Log.d(TAG, "🔧 Converted ActionTemplate:")
+            Log.d(TAG, "   Type: ${template.type}")
+            Log.d(TAG, "   Value: ${template.config["value"]}")
+            Log.d(TAG, "   Title: ${this.title}")
+            Log.d(TAG, "   Message: ${this.message}")
+            Log.d(TAG, "   Priority: ${this.priority}")
         }
     }
 
@@ -854,7 +1104,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    // CALLBACK INTERFACES
+    // ✅ CALLBACK INTERFACES
 
     interface WorkflowOperationCallback {
         fun onSuccess(message: String)
@@ -871,12 +1121,7 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * Restore all geofences for enabled workflows
-     * Call this ONLY when app starts (e.g., in MainActivity.onCreate())
-     */
-    /**
-     * Restore all geofences for enabled workflows
-     * Call this ONLY when app starts (e.g., in MainActivity.onCreate())
+     * ✅ FIXED: Restore all geofences using TriggerParser
      */
     fun restoreGeofences() {
         Log.d(TAG, "🔄 Restoring geofences for all enabled workflows...")
@@ -893,20 +1138,23 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
                             val triggers = workflow.toTriggers()
 
                             triggers.forEach { trigger ->
-                                if (trigger is Trigger.LocationTrigger) {
-                                    val success = GeofenceManager.addGeofence(
-                                        context = getApplication<Application>().applicationContext,
-                                        workflowId = workflow.id,
-                                        latitude = trigger.latitude,
-                                        longitude = trigger.longitude,
-                                        radius = trigger.radius.toFloat(),
-                                        triggerOnEntry = trigger.triggerOnEntry,
-                                        triggerOnExit = trigger.triggerOnExit
-                                    )
+                                if (trigger.type == "LOCATION") {
+                                    val locationData = TriggerParser.parseLocationData(trigger)
+                                    locationData?.let { data ->
+                                        val success = GeofenceManager.addGeofence(
+                                            context = getApplication<Application>().applicationContext,
+                                            workflowId = workflow.id,
+                                            latitude = data.latitude,
+                                            longitude = data.longitude,
+                                            radius = data.radius.toFloat(),
+                                            triggerOnEntry = data.triggerOnEntry,
+                                            triggerOnExit = data.triggerOnExit
+                                        )
 
-                                    if (success) {
-                                        restoredCount++
-                                        Log.d(TAG, "✅ Restored geofence for workflow ${workflow.id}: ${workflow.workflowName}")
+                                        if (success) {
+                                            restoredCount++
+                                            Log.d(TAG, "✅ Restored geofence for workflow ${workflow.id}: ${workflow.workflowName}")
+                                        }
                                     }
                                 }
                             }
@@ -924,21 +1172,80 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             }
         })
     }
-    // LIFECYCLE
 
+    // ✅ LIFECYCLE
+
+    fun createMeetingModeWorkflow(
+        workflowName: String = "Meeting Mode",
+        autoReplyMessage: String = Constants.DEFAULT_AUTO_REPLY_MESSAGE,
+        callback: WorkflowOperationCallback? = null
+    ) {
+        val triggers = listOf(
+            Trigger.ManualTrigger(actionType = "quick_action")
+        ) // Manual trigger - user enables it
+
+        val actions = listOf(
+            // ✅ FIXED: Use explicit constructor with proper parameters
+            Action(
+                type = Constants.ACTION_SET_SOUND_MODE,
+                title = "Set Sound Mode",
+                message = "DND mode activated",
+                priority = "high"
+            ).apply {
+                value = "DND" // Set value after construction
+            },
+
+            Action(
+                type = Constants.ACTION_AUTO_REPLY_SMS,
+                title = "Auto-reply enabled",
+                message = autoReplyMessage,
+                priority = "normal"
+            ).apply {
+                value = "true" // Enable auto-reply
+            }
+        )
+
+        addWorkflow(workflowName, triggers, actions, "AND")
+    }
+
+    // ✅ NEW: Toggle auto-reply for existing workflows
+    fun toggleAutoReply(enabled: Boolean, message: String = Constants.DEFAULT_AUTO_REPLY_MESSAGE) {
+        val prefs = getApplication<Application>().getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putBoolean(Constants.PREF_AUTO_REPLY_ENABLED, enabled)
+            .putString(Constants.PREF_AUTO_REPLY_MESSAGE, message)
+            .apply()
+
+        val phoneStateManager = PhoneStateManager.getInstance(getApplication())
+        if (enabled) {
+            phoneStateManager.startListening()
+            _successMessage.postValue("Auto-reply enabled: \"$message\"")
+        } else {
+            phoneStateManager.stopListening()
+            _successMessage.postValue("Auto-reply disabled")
+        }
+    }
+
+    // ✅ SINGLE onCleared() method combining both implementations
     @SuppressLint("MissingPermission")
     override fun onCleared() {
         super.onCleared()
         Log.d(TAG, "🧹 Cleaning up ViewModel")
 
         try {
+            // Clean up integration managers
             bleManager.cleanup()
             wifiManager.cleanup()
             locationManager.cleanup()
             repository.cleanup()
+
+            // Clean up phone state and auto-reply managers
+            PhoneStateManager.getInstance(getApplication()).cleanup()
+            AutoReplyManager.getInstance(getApplication()).cleanup()
+
             Log.d(TAG, "✅ Cleanup complete")
         } catch (e: Exception) {
-            Log.e(TAG, "Cleanup error", e)
+            Log.e(TAG, "❌ Cleanup error", e)
         }
     }
 }

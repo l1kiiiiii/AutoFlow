@@ -14,16 +14,18 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
-import androidx.compose.ui.test.isEnabled
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.example.autoflow.R
 import com.example.autoflow.data.AppDatabase
+import com.example.autoflow.data.WorkflowRepository
+import com.example.autoflow.data.toActions
 import com.example.autoflow.integrations.SoundModeManager
 import com.example.autoflow.model.Action
 import com.example.autoflow.util.ActionExecutor
 import com.example.autoflow.util.Constants
+import com.example.autoflow.util.Constants.EXTRA_WORKFLOW_ID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -37,59 +39,81 @@ class AlarmReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        // Extract workflow ID from intent
-        val workflowId = intent.getLongExtra(Constants.KEY_WORKFLOW_ID, -1L)
+        Log.d(TAG, "🔔 AlarmReceiver triggered")
 
-        if (workflowId == -1L|| workflowId == 0L) {
-            Log.e(TAG, "❌ Invalid workflow ID received")
-            return
+        // ✅ FIX: Validate workflow ID with proper error handling
+        val workflowId = intent.getLongExtra(EXTRA_WORKFLOW_ID, -1L)
+
+        if (workflowId <= 0) {
+            Log.e(TAG, "❌ Invalid workflow ID received: $workflowId")
+            return  // Don't crash, just return
         }
 
-        Log.d(TAG, "⏰ Alarm triggered for workflow: $workflowId")
+        Log.d(TAG, "⏰ Processing alarm for workflow ID: $workflowId")
 
-        // Use goAsync() to allow coroutine to complete before receiver dies
-        val pendingResult = goAsync()
-
-        // Execute workflow in background thread
+        // Execute workflow asynchronously
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Load workflow from database
                 val database = AppDatabase.getDatabase(context)
-                val workflow = database.workflowDao().getByIdSync(workflowId)  // ✅ FIXED: getByIdSync
+                val repository = WorkflowRepository(database.workflowDao())
 
-                if (workflow == null) {
-                    Log.e(TAG, "❌ Workflow $workflowId not found in database")
-                    pendingResult.finish()
-                    return@launch
-                }
+                repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
+                    override fun onWorkflowLoaded(workflow: com.example.autoflow.data.WorkflowEntity?) {
+                        workflow?.let { w ->
+                            if (w.isEnabled) {
+                                Log.d(TAG, "✅ Executing workflow: ${w.workflowName}")
 
-                // Check if workflow is enabled
-                if (!workflow.isEnabled) {
-                    Log.d(TAG, "⚠️ Workflow $workflowId is disabled, skipping execution")
-                    pendingResult.finish()
-                    return@launch
-                }
+                                // ✅ FIXED: Execute all actions individually
+                                val actions = w.toActions()
+                                var successCount = 0
+                                var failCount = 0
 
-                Log.d(TAG, "✅ Executing workflow: ${workflow.workflowName}")
-                Log.d(TAG, "   Triggers: ${workflow.triggerDetails}")
-                Log.d(TAG, "   Actions: ${workflow.actionDetails}")
+                                actions.forEach { action ->
+                                    try {
+                                        val success = ActionExecutor.executeAction(context, action)
+                                        if (success) {
+                                            successCount++
+                                            Log.d(TAG, "✅ Action executed: ${action.type}")
+                                        } else {
+                                            failCount++
+                                            Log.w(TAG, "⚠️ Action failed: ${action.type}")
+                                        }
+                                    } catch (e: Exception) {
+                                        failCount++
+                                        Log.e(TAG, "❌ Action error: ${action.type}", e)
+                                    }
+                                }
 
-                // Execute all actions in the workflow
-                // ActionExecutor will parse the actionDetails JSON and execute each action
-                // with its proper title, message, priority, etc.
-                ActionExecutor.executeWorkflow(context, workflow)
+                                Log.d(TAG, "🎉 Workflow completed: ${w.workflowName}")
+                                Log.d(TAG, "   ✅ Success: $successCount actions")
+                                Log.d(TAG, "   ❌ Failed: $failCount actions")
 
-                Log.d(TAG, "✅ Workflow execution completed")
+                                // Show completion toast
+                                CoroutineScope(Dispatchers.Main).launch {
+                                    Toast.makeText(
+                                        context,
+                                        "Workflow '${w.workflowName}' executed ($successCount/${actions.size} actions)",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            } else {
+                                Log.d(TAG, "⏭️ Workflow disabled: ${w.workflowName}")
+                            }
+                        } ?: run {
+                            Log.w(TAG, "⚠️ Workflow not found: ID $workflowId")
+                        }
+                    }
 
+                    override fun onWorkflowError(error: String) {
+                        Log.e(TAG, "❌ Error loading workflow: $error")
+                    }
+                })
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Error executing workflow $workflowId: ${e.message}", e)
-            } finally {
-                // Always finish the pending result
-                pendingResult.finish()
+                Log.e(TAG, "❌ Error in AlarmReceiver", e)
             }
         }
     }
-
+/*
     private fun handleNotification(context: Context, intent: Intent) {
         val title = intent.getStringExtra("notification_title") ?: "AutoFlow"
         val message = intent.getStringExtra("notification_message") ?: "Trigger activated"
@@ -127,7 +151,7 @@ class AlarmReceiver : BroadcastReceiver() {
             Toast.makeText(context, "Sound mode: $soundMode", Toast.LENGTH_SHORT).show()
         } else {
             Log.e(TAG, "❌ Failed to change sound mode")
-            if (soundMode == "DND" && !soundModeManager.hasDNDPermission()) {
+            if (soundMode == "DND" && !soundModeManager.DNDPermission()) {
                 Toast.makeText(context, "DND permission required", Toast.LENGTH_LONG).show()
                 soundModeManager.openDNDSettings()
             } else {
@@ -135,7 +159,7 @@ class AlarmReceiver : BroadcastReceiver() {
             }
         }
     }
-
+*/
     private fun handleWiFiToggle(context: Context, intent: Intent) {
         val wifiStateStr = intent.getStringExtra("wifi_state") ?: "false"
         val wifiState = wifiStateStr.toBoolean()
@@ -184,6 +208,7 @@ class AlarmReceiver : BroadcastReceiver() {
     /**
      * Show WiFi toggle notification with full-screen intent
      */
+    @SuppressLint("FullScreenIntentPolicy")
     private fun showWiFiToggleNotification(context: Context, wifiState: Boolean) {
         createNotificationChannel(context)
 
@@ -313,6 +338,7 @@ class AlarmReceiver : BroadcastReceiver() {
     /**
      * Show Bluetooth toggle notification with full-screen intent
      */
+    @SuppressLint("FullScreenIntentPolicy")
     private fun showBluetoothToggleNotification(context: Context, bluetoothState: Boolean) {
         createNotificationChannel(context)
 
