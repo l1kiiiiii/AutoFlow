@@ -522,7 +522,7 @@ fun ModeConfigurationDialog(
                     var endTime by remember { mutableStateOf("17:00") }
 
                     Text("Mode Type:", fontWeight = FontWeight.Medium)
-
+                    /*
                     // Manual Mode
                     Row(
                         modifier = Modifier
@@ -540,9 +540,9 @@ fun ModeConfigurationDialog(
                             Text("Turn on/off manually", style = MaterialTheme.typography.labelSmall) // ✅ Fixed
                         }
                     }
-
+                    */
                     // Scheduled Mode
-                    Row(
+                    /*Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { selectedMode = "scheduled" }
@@ -558,6 +558,8 @@ fun ModeConfigurationDialog(
                             Text("Set start and end times", style = MaterialTheme.typography.labelSmall) // ✅ Fixed
                         }
                     }
+
+                     */
 
                     // Endless Mode
                     Row(
