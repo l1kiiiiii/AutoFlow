@@ -64,6 +64,14 @@ class AutoReplyManager private constructor(private val context: Context) {
                 return false
             }
 
+            if (!enabled) {
+                Log.d(TAG, "❌ Auto-reply is disabled")
+                return false
+            }
+            if (!meetingMode) {
+                Log.d(TAG, "❌ Not in manual meeting mode")
+                return false
+            }
             // 2. Check if we're in meeting mode only setting
             if (isMeetingModeOnly()) {
                 // 3. Check if we're currently in an active meeting mode workflow
@@ -164,7 +172,6 @@ class AutoReplyManager private constructor(private val context: Context) {
             action.type == "SET_SOUND_MODE" &&
                     (action.value == "DND" || action.value == "Silent")
         }
-
         return nameContainsMeetingKeyword || hasSoundModeAction
     }
     private fun isInCooldown(phoneNumber: String): Boolean {

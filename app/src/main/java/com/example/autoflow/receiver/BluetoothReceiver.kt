@@ -6,8 +6,9 @@ import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.util.Log
-import androidx.annotation.RequiresPermission
+import androidx.core.app.ActivityCompat
 import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.toTriggers
 import com.example.autoflow.util.ActionExecutor
@@ -52,16 +53,56 @@ class BluetoothReceiver : BroadcastReceiver() {
         checkBluetoothTriggers(context, stateString, null, null)
     }
 
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun handleDeviceConnected(context: Context, device: BluetoothDevice) {
-        Log.d(TAG, "📱 Device connected: ${device.name} (${device.address})")
-        checkBluetoothTriggers(context, "CONNECTED", device.address, device.name)
+        // ✅ FIXED: Check permission before accessing device name
+        if (hasBluetoothPermission(context)) {
+            try {
+                val deviceName = device.name ?: "Unknown Device"
+                val deviceAddress = device.address
+
+                Log.d(TAG, "📱 Device connected: $deviceName ($deviceAddress)")
+                checkBluetoothTriggers(context, "CONNECTED", deviceAddress, deviceName)
+            } catch (e: SecurityException) {
+                Log.e(TAG, "❌ Bluetooth permission denied for device name", e)
+                // Use address only if name is not accessible
+                checkBluetoothTriggers(context, "CONNECTED", device.address, "Unknown Device")
+            }
+        } else {
+            Log.w(TAG, "⚠️ Missing Bluetooth permission, using limited info")
+            checkBluetoothTriggers(context, "CONNECTED", device.address, "Unknown Device")
+        }
     }
 
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun handleDeviceDisconnected(context: Context, device: BluetoothDevice) {
-        Log.d(TAG, "📱 Device disconnected: ${device.name} (${device.address})")
-        checkBluetoothTriggers(context, "DISCONNECTED", device.address, device.name)
+        // ✅ FIXED: Check permission before accessing device name
+        if (hasBluetoothPermission(context)) {
+            try {
+                val deviceName = device.name ?: "Unknown Device"
+                val deviceAddress = device.address
+
+                Log.d(TAG, "📱 Device disconnected: $deviceName ($deviceAddress)")
+                checkBluetoothTriggers(context, "DISCONNECTED", deviceAddress, deviceName)
+            } catch (e: SecurityException) {
+                Log.e(TAG, "❌ Bluetooth permission denied for device name", e)
+                checkBluetoothTriggers(context, "DISCONNECTED", device.address, "Unknown Device")
+            }
+        } else {
+            Log.w(TAG, "⚠️ Missing Bluetooth permission, using limited info")
+            checkBluetoothTriggers(context, "DISCONNECTED", device.address, "Unknown Device")
+        }
+    }
+
+    // ✅ ADD: Permission check helper
+    private fun hasBluetoothPermission(context: Context): Boolean {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            // Android 12+ requires BLUETOOTH_CONNECT permission
+            ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
+                    PackageManager.PERMISSION_GRANTED
+        } else {
+            // Android 11 and below use legacy BLUETOOTH permission
+            ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH) ==
+                    PackageManager.PERMISSION_GRANTED
+        }
     }
 
     private fun checkBluetoothTriggers(context: Context, state: String, deviceAddress: String?, deviceName: String?) {

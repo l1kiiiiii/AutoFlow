@@ -1,5 +1,6 @@
 package com.example.autoflow.service
 
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -16,6 +17,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.autoflow.blocker.BlockActivity
 import com.example.autoflow.policy.BlockPolicy
+import android.content.pm.ServiceInfo
 
 /**
  * Foreground service that monitors foreground apps and blocks them if in blocked list
@@ -33,6 +35,7 @@ class AppBlockService : Service() {
     private lateinit var usageStatsManager: UsageStatsManager
     private var isRunning = false
 
+    @SuppressLint("ForegroundServiceType")
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "📱 AppBlockService created")
@@ -42,7 +45,13 @@ class AppBlockService : Service() {
         // Create foreground notification
         createNotificationChannel()
         val notification = createNotification()
-        startForeground(NOTIFICATION_ID, notification)
+        // startForeground(NOTIFICATION_ID, notification)//-isssue
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
 
         isRunning = true
         startMonitoring()

@@ -208,6 +208,7 @@ class AlarmReceiver : BroadcastReceiver() {
     /**
      * Show WiFi toggle notification with full-screen intent
      */
+    @SuppressLint("FullScreenIntentPolicy")
     private fun showWiFiToggleNotification(context: Context, wifiState: Boolean) {
         createNotificationChannel(context)
 
@@ -337,6 +338,7 @@ class AlarmReceiver : BroadcastReceiver() {
     /**
      * Show Bluetooth toggle notification with full-screen intent
      */
+    @SuppressLint("FullScreenIntentPolicy")
     private fun showBluetoothToggleNotification(context: Context, bluetoothState: Boolean) {
         createNotificationChannel(context)
 

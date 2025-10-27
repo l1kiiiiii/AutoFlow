@@ -83,12 +83,12 @@ object PredefinedModes {
         name = "Sleep Mode",
         icon = "😴",
         color = "#37474F",
-        description = "Complete DND for bedtime",
+        description = "Complete SILENT for bedtime",
         defaultTriggers = listOf(
             TriggerTemplate("TIME", mapOf("time" to "22:00"))
         ),
         defaultActions = listOf(
-            ActionTemplate("SET_SOUND_MODE", mapOf("value" to "dnd")),  // ✅ DND for sleep
+            ActionTemplate("SET_SOUND_MODE", mapOf("value" to "silent")),  // ✅ DND for sleep
             ActionTemplate("TOGGLE_WIFI", mapOf("value" to "OFF"))
         )
     )

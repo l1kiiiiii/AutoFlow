@@ -1,12 +1,14 @@
 package com.example.autoflow.blocker
 
 import android.accessibilityservice.AccessibilityService
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import com.example.autoflow.policy.BlockPolicy
 import com.example.autoflow.blocker.BlockActivity
 
+@SuppressLint("AccessibilityPolicy")
 class AppBlockAccessibilityService : AccessibilityService() {
 
     companion object {

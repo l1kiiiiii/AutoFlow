@@ -68,7 +68,7 @@ fun BlockScreen(
 ) {
     var showEmergencyDialog by remember { mutableStateOf(false) }
     var isLongPressing by remember { mutableStateOf(false) }
-    var pressProgress by remember { mutableStateOf(0f) }
+    var pressProgress by remember { mutableFloatStateOf(0f) }
     val scope = rememberCoroutineScope()
 
     Box(

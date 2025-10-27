@@ -122,36 +122,42 @@ object ActionExecutor {
 
                     val message = action.message ?: "I'm currently in a meeting and will get back to you soon."
 
-                    // ✅ CRITICAL FIX: Use Constants for SharedPreferences keys
-                    val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
-                    prefs.edit()
-                        .putBoolean(Constants.PREF_AUTO_REPLY_ENABLED, true)        // ✅ Use constant key
-                        .putBoolean(Constants.PREF_MANUAL_MEETING_MODE, true)       // ✅ Use constant key
-                        .putString(Constants.PREF_AUTO_REPLY_MESSAGE, message)      // ✅ Use constant key
-                        .putBoolean(Constants.PREF_AUTO_REPLY_ONLY_IN_DND, true)    // ✅ Use constant key
-                        .apply()
+                    // ✅ GUARANTEED FIX: Use absolute, direct SharedPreferences setting
+                    try {
+                        val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
+                        val editor = prefs.edit()
+                        editor.putBoolean("auto_reply_enabled", true)
+                        editor.putBoolean("manual_meeting_mode", true)
+                        editor.putString("auto_reply_message", message)
+                        editor.putBoolean("auto_reply_only_in_dnd", true)
+                        val success = editor.commit()  // ✅ Use commit() instead of apply() for immediate save
 
-                    // Force immediate save and verify
-                    Log.d(TAG, "🔧 Verifying SharedPreferences after save:")
-                    val verifyEnabled = prefs.getBoolean(Constants.PREF_AUTO_REPLY_ENABLED, false)
-                    val verifyMeetingMode = prefs.getBoolean(Constants.PREF_MANUAL_MEETING_MODE, false)
-                    val verifyMessage = prefs.getString(Constants.PREF_AUTO_REPLY_MESSAGE, "")
+                        Log.d(TAG, "💾 SharedPreferences commit result: $success")
 
-                    Log.d(TAG, "🔍 auto_reply_enabled: $verifyEnabled")
-                    Log.d(TAG, "🔍 manual_meeting_mode: $verifyMeetingMode")
-                    Log.d(TAG, "🔍 auto_reply_message: $verifyMessage")
+                        // ✅ VERIFY IMMEDIATELY what was actually saved
+                        val verifyEnabled = prefs.getBoolean("auto_reply_enabled", false)
+                        val verifyMeeting = prefs.getBoolean("manual_meeting_mode", false)
+                        val verifyMessage = prefs.getString("auto_reply_message", "")
 
-                    val phoneStateManager = PhoneStateManager.getInstance(context)
-                    phoneStateManager.startListening()
+                        Log.d(TAG, "🔍 VERIFICATION - What was actually saved:")
+                        Log.d(TAG, "   auto_reply_enabled: $verifyEnabled")
+                        Log.d(TAG, "   manual_meeting_mode: $verifyMeeting")
+                        Log.d(TAG, "   auto_reply_message: '$verifyMessage'")
 
-                    Log.d(TAG, "✅ Auto-reply activated: $message")
-                    Log.d(TAG, "🚩 SOLUTION #2: Set auto_reply_enabled = true")
-                    Log.d(TAG, "🚩 SOLUTION #2: Set manual_meeting_mode = true")
+                        if (verifyEnabled && verifyMeeting) {
+                            val phoneStateManager = PhoneStateManager.getInstance(context)
+                            phoneStateManager.startListening()
+                            Log.d(TAG, "✅ Auto-reply SUCCESSFULLY activated with verification")
+                        } else {
+                            Log.e(TAG, "❌ SharedPreferences not properly saved!")
+                        }
 
-                    true
+                        true
+                    } catch (e: Exception) {
+                        Log.e(TAG, "❌ Error setting auto-reply flags", e)
+                        false
+                    }
                 }
-
-
 
                 "STOP_AUTO_REPLY" -> {
                     Log.d(TAG, "🚫 Stopping auto-reply")
