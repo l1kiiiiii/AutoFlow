@@ -43,6 +43,7 @@ class PhoneStateReceiver : BroadcastReceiver() {
                         handleCallEnded(context, number)
                         Log.d(TAG, "📵 Call ended, checking auto-reply conditions for: $number")
 
+                        /*
                         coroutineScope.launch {
                             val autoReplyManager = AutoReplyManager.getInstance(context)
 
@@ -54,6 +55,8 @@ class PhoneStateReceiver : BroadcastReceiver() {
                                 Log.d(TAG, "⏭️ Not in meeting mode, skipping auto-reply")
                             }
                         }
+
+                         */
                     }
                 }
 
