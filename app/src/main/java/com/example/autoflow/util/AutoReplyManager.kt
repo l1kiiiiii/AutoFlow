@@ -34,7 +34,7 @@ class AutoReplyManager private constructor(private val context: Context) {
         private const val KEY_AUTO_REPLY_MESSAGE = "auto_reply_message"
         private const val KEY_MEETING_MODE_ONLY = "meeting_mode_only"
         private const val KEY_LAST_REPLY_TIME = "last_reply_time"
-        private const val REPLY_COOLDOWN_MS = 300000 // 5 minutes
+        private const val REPLY_COOLDOWN_MS = 120000 // 2 minutes which is in milliseconds
         private const val KEY_MANUAL_MEETING_MODE = "manual_meeting_mode"
         @SuppressLint("StaticFieldLeak")
         @Volatile

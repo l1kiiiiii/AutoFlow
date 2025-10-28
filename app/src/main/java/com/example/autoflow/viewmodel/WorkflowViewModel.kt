@@ -15,6 +15,7 @@ import androidx.core.app.ActivityCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.viewModelScope
 import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.data.WorkflowRepository
@@ -41,6 +42,8 @@ import com.example.autoflow.util.TriggerParser
 import com.example.autoflow.model.TriggerHelpers
 import com.example.autoflow.util.ActionExecutor
 import com.example.autoflow.util.InAppNotificationManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * ✅ Fixed WorkflowViewModel using TriggerParser approach
@@ -481,182 +484,253 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
             Log.w(TAG, "⚠️ $error")
             return
         }
+        viewModelScope.launch(Dispatchers.IO) {
+            if (enabled) {
+                // ✅ ENABLING WORKFLOW
+                repository.getWorkflowById(
+                    workflowId,
+                    object : WorkflowRepository.WorkflowByIdCallback {
+                        override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
+                            workflow?.let { wf ->
+                                Log.d(TAG, "📋 Enabling workflow: ${wf.workflowName}")
 
-        if (enabled) {
-            // ✅ ENABLING WORKFLOW
-            repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
-                override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
-                    workflow?.let { wf ->
-                        Log.d(TAG, "📋 Enabling workflow: ${wf.workflowName}")
+                                val triggers = wf.toTriggers()
+                                val isManualWorkflow =
+                                    triggers.any { trigger -> trigger.type == "MANUAL" }
 
-                        val triggers = wf.toTriggers()
-                        val isManualWorkflow = triggers.any { trigger -> trigger.type == "MANUAL" }
+                                if (isManualWorkflow) {
+                                    Log.d(TAG, "🤝 Manual workflow detected - executing immediately")
 
-                        if (isManualWorkflow) {
-                            Log.d(TAG, "🤝 Manual workflow detected - executing immediately")
+                                    val context = getApplication<Application>().applicationContext
+                                    val audioManager =
+                                        context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                                    val notificationManager =
+                                        context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-                            val context = getApplication<Application>().applicationContext
-                            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-                            val currentRingerMode = audioManager.ringerMode
-                            var currentDndState = false
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                                currentDndState = notificationManager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
-                            }
-
-                            // Save state
-                            val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
-                            prefs.edit()
-                                .putInt("previous_ringer_mode", currentRingerMode)
-                                .putBoolean("previous_dnd_state", currentDndState)
-                                .apply()
-
-                            Log.d(TAG, "💾 Saved previous state: Ringer=$currentRingerMode, DND=$currentDndState")
-
-                            // ✅ MEETING MODE SPECIFIC: Set auto-reply flags after successful execution
-                            if (wf.workflowName.contains("Meeting Mode", ignoreCase = true)) {
-                                Log.d(TAG, "🤝 Meeting Mode workflow detected - setting auto-reply flags")
-
-                                prefs.edit()
-                                    .putBoolean(Constants.PREF_AUTO_REPLY_ENABLED, true) // Should set this to true
-                                    .putBoolean(Constants.PREF_MANUAL_MEETING_MODE, true) // Should set this to true
-                                    .apply()
-
-                                val phoneStateManager = PhoneStateManager.getInstance(context)
-                                phoneStateManager.startListening()
-
-                                Log.d(TAG, "🤖 Auto-reply started for Meeting Mode")
-                                Log.d(TAG, "🚩 CRITICAL: Set auto_reply_enabled = true")
-                                Log.d(TAG, "🚩 CRITICAL: Set manual_meeting_mode = true")
-                            }
-
-                            // ✅ EXECUTE WORKFLOW ACTIONS
-                            val executionSuccess = ActionExecutor.executeWorkflow(context, wf)
-
-                            if (executionSuccess) {
-                                Log.d(TAG, "✅ Manual workflow executed successfully")
-                            } else {
-                                Log.e(TAG, "❌ Manual workflow execution failed")
-                            }
-                        }
-
-                        // ✅ Schedule any time-based triggers (only if not manual)
-                        if (!isManualWorkflow) {
-                            AlarmScheduler.scheduleWorkflow(getApplication<Application>().applicationContext, wf)
-                        }
-                    }
-                }
-
-                override fun onWorkflowError(error: String) {
-                    Log.e(TAG, "❌ Error loading workflow: $error")
-                    callback?.onError(error)
-                }
-            })
-        } else {
-            // ✅ DISABLING WORKFLOW
-            repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
-                override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
-                    workflow?.let { wf ->
-                        val triggers = wf.toTriggers()
-                        val isManualWorkflow = triggers.any { trigger -> trigger.type == "MANUAL" }
-
-                        if (isManualWorkflow) {
-                            Log.d(TAG, "🤝 Manual workflow disabled - restoring previous state")
-
-                            val context = getApplication<Application>().applicationContext
-                            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                            val prefs = context.getSharedPreferences("autoflow_prefs", Context.MODE_PRIVATE)
-
-                            // ✅ RESTORE PREVIOUS RINGER MODE
-                            val previousRingerMode = prefs.getInt("previous_ringer_mode", AudioManager.RINGER_MODE_NORMAL)
-                            audioManager.ringerMode = previousRingerMode
-                            Log.d(TAG, "🔊 Restored previous ringer mode: $previousRingerMode")
-
-                            // ✅ RESTORE PREVIOUS DND STATE
-                            val previousDndState = prefs.getBoolean("previous_dnd_state", false)
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                                try {
-                                    if (notificationManager.isNotificationPolicyAccessGranted) {
-                                        val targetFilter = if (previousDndState) {
-                                            NotificationManager.INTERRUPTION_FILTER_PRIORITY
-                                        } else {
-                                            NotificationManager.INTERRUPTION_FILTER_ALL
-                                        }
-                                        notificationManager.setInterruptionFilter(targetFilter)
-                                        Log.d(TAG, "🔔 Restored previous DND state: $previousDndState")
+                                    val currentRingerMode = audioManager.ringerMode
+                                    var currentDndState = false
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                        currentDndState =
+                                            notificationManager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
                                     }
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "❌ Error restoring DND state: ${e.message}")
+
+                                    // Save state
+                                    val prefs = context.getSharedPreferences(
+                                        "autoflow_prefs",
+                                        Context.MODE_PRIVATE
+                                    )
+                                    prefs.edit()
+                                        .putInt("previous_ringer_mode", currentRingerMode)
+                                        .putBoolean("previous_dnd_state", currentDndState)
+                                        .apply()
+
+                                    Log.d(
+                                        TAG,
+                                        "💾 Saved previous state: Ringer=$currentRingerMode, DND=$currentDndState"
+                                    )
+
+                                    // ✅ MEETING MODE SPECIFIC: Set auto-reply flags after successful execution
+                                    if (wf.workflowName.contains(
+                                            "Meeting Mode",
+                                            ignoreCase = true
+                                        )
+                                    ) {
+                                        Log.d(
+                                            TAG,
+                                            "🤝 Meeting Mode workflow detected - setting auto-reply flags"
+                                        )
+
+                                        prefs.edit()
+                                            .putBoolean(
+                                                Constants.PREF_AUTO_REPLY_ENABLED,
+                                                true
+                                            ) // Should set this to true
+                                            .putBoolean(
+                                                Constants.PREF_MANUAL_MEETING_MODE,
+                                                true
+                                            ) // Should set this to true
+                                            .apply()
+
+                                        val phoneStateManager =
+                                            PhoneStateManager.getInstance(context)
+                                        phoneStateManager.startListening()
+
+                                        Log.d(TAG, "🤖 Auto-reply started for Meeting Mode")
+                                        Log.d(TAG, "🚩 CRITICAL: Set auto_reply_enabled = true")
+                                        Log.d(TAG, "🚩 CRITICAL: Set manual_meeting_mode = true")
+                                    }
+
+                                    // ✅ EXECUTE WORKFLOW ACTIONS
+                                    val executionSuccess =
+                                        ActionExecutor.executeWorkflow(context, wf)
+
+                                    if (executionSuccess) {
+                                        Log.d(TAG, "✅ Manual workflow executed successfully")
+                                    } else {
+                                        Log.e(TAG, "❌ Manual workflow execution failed")
+                                    }
+                                }
+
+                                // ✅ Schedule any time-based triggers (only if not manual)
+                                if (!isManualWorkflow) {
+                                    AlarmScheduler.scheduleWorkflow(
+                                        getApplication<Application>().applicationContext,
+                                        wf
+                                    )
                                 }
                             }
+                        }
 
-                            // ✅ MEETING MODE SPECIFIC: Clear auto-reply flags
-                            if (wf.workflowName.contains("Meeting Mode", ignoreCase = true)) {
-                                prefs.edit()
-                                    .putBoolean(Constants.PREF_AUTO_REPLY_ENABLED, false) // Should set this to false
-                                    .putBoolean(Constants.PREF_MANUAL_MEETING_MODE, false) // Should set this to false
-                                    .apply()
+                        override fun onWorkflowError(error: String) {
+                            Log.e(TAG, "❌ Error loading workflow: $error")
+                            callback?.onError(error)
+                        }
+                    })
+            } else {
+                // ✅ DISABLING WORKFLOW
+                repository.getWorkflowById(
+                    workflowId,
+                    object : WorkflowRepository.WorkflowByIdCallback {
+                        override fun onWorkflowLoaded(workflow: WorkflowEntity?) {
+                            workflow?.let { wf ->
+                                val triggers = wf.toTriggers()
+                                val isManualWorkflow =
+                                    triggers.any { trigger -> trigger.type == "MANUAL" }
 
-                                val phoneStateManager = PhoneStateManager.getInstance(context)
-                                phoneStateManager.stopListening()
+                                if (isManualWorkflow) {
+                                    Log.d(
+                                        TAG,
+                                        "🤝 Manual workflow disabled - restoring previous state"
+                                    )
 
-                                // ✅ ADD: Deactivation notification
-                                val inAppNotificationManager = InAppNotificationManager.getInstance(context)
-                                inAppNotificationManager.addNotification(
-                                    type = NotificationType.SUCCESS,
-                                    title = "🔔 Meeting Mode Deactivated",
-                                    message = "Sound mode restored. Auto-reply disabled.",
-                                    isClearable = true
-                                )
+                                    val context = getApplication<Application>().applicationContext
+                                    val audioManager =
+                                        context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                                    val notificationManager =
+                                        context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                                    val prefs = context.getSharedPreferences(
+                                        "autoflow_prefs",
+                                        Context.MODE_PRIVATE
+                                    )
 
-                                Log.d(TAG, "🤖 Auto-reply stopped for Meeting Mode")
-                                Log.d(TAG, "🚩 CRITICAL: Set auto_reply_enabled = false")
-                                Log.d(TAG, "🚩 CRITICAL: Set manual_meeting_mode = false")
+                                    // ✅ RESTORE PREVIOUS RINGER MODE
+                                    val previousRingerMode = prefs.getInt(
+                                        "previous_ringer_mode",
+                                        AudioManager.RINGER_MODE_NORMAL
+                                    )
+                                    audioManager.ringerMode = previousRingerMode
+                                    Log.d(
+                                        TAG,
+                                        "🔊 Restored previous ringer mode: $previousRingerMode"
+                                    )
+
+                                    // ✅ RESTORE PREVIOUS DND STATE
+                                    val previousDndState =
+                                        prefs.getBoolean("previous_dnd_state", false)
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                        try {
+                                            if (notificationManager.isNotificationPolicyAccessGranted) {
+                                                val targetFilter = if (previousDndState) {
+                                                    NotificationManager.INTERRUPTION_FILTER_PRIORITY
+                                                } else {
+                                                    NotificationManager.INTERRUPTION_FILTER_ALL
+                                                }
+                                                notificationManager.setInterruptionFilter(
+                                                    targetFilter
+                                                )
+                                                Log.d(
+                                                    TAG,
+                                                    "🔔 Restored previous DND state: $previousDndState"
+                                                )
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "❌ Error restoring DND state: ${e.message}")
+                                        }
+                                    }
+
+                                    // ✅ MEETING MODE SPECIFIC: Clear auto-reply flags
+                                    if (wf.workflowName.contains(
+                                            "Meeting Mode",
+                                            ignoreCase = true
+                                        )
+                                    ) {
+                                        prefs.edit()
+                                            .putBoolean(
+                                                Constants.PREF_AUTO_REPLY_ENABLED,
+                                                false
+                                            ) // Should set this to false
+                                            .putBoolean(
+                                                Constants.PREF_MANUAL_MEETING_MODE,
+                                                false
+                                            ) // Should set this to false
+                                            .apply()
+
+                                        val phoneStateManager =
+                                            PhoneStateManager.getInstance(context)
+                                        phoneStateManager.stopListening()
+
+                                        // ✅ ADD: Deactivation notification
+                                        val inAppNotificationManager =
+                                            InAppNotificationManager.getInstance(context)
+                                        inAppNotificationManager.addNotification(
+                                            type = NotificationType.SUCCESS,
+                                            title = "🔔 Meeting Mode Deactivated",
+                                            message = "Sound mode restored. Auto-reply disabled.",
+                                            isClearable = true
+                                        )
+
+                                        Log.d(TAG, "🤖 Auto-reply stopped for Meeting Mode")
+                                        Log.d(TAG, "🚩 CRITICAL: Set auto_reply_enabled = false")
+                                        Log.d(TAG, "🚩 CRITICAL: Set manual_meeting_mode = false")
+                                    }
+
+                                    Log.d(TAG, "✅ Previous state fully restored")
+                                }
                             }
+                        }
 
-                            Log.d(TAG, "✅ Previous state fully restored")
+                        override fun onWorkflowError(error: String) {
+                            Log.e(TAG, "❌ Error loading workflow for cleanup: $error")
+                        }
+                    })
+
+                // Cancel alarms
+                AlarmScheduler.cancelWorkflowAlarms(
+                    getApplication<Application>().applicationContext,
+                    workflowId
+                )
+                Log.d(TAG, "⏰ Cancelled alarms for disabled workflow $workflowId")
+            }
+
+            // ✅ Update database
+            repository.updateWorkflowEnabled(
+                workflowId,
+                enabled,
+                object : WorkflowRepository.UpdateCallback {
+                    override fun onUpdateComplete(success: Boolean) {
+                        if (success) {
+                            loadWorkflows()
+                            val msg =
+                                "Workflow ${if (enabled) "enabled" else "disabled"} successfully"
+                            _successMessage.postValue(msg)
+                            callback?.onSuccess(msg)
+                            Log.d(TAG, "✅ $msg")
+                        } else {
+                            val error = "Toggle failed"
+                            _errorMessage.postValue(error)
+                            callback?.onError(error)
+                            Log.e(TAG, "❌ $error")
                         }
                     }
-                }
 
-                override fun onWorkflowError(error: String) {
-                    Log.e(TAG, "❌ Error loading workflow for cleanup: $error")
+                    override fun onUpdateError(error: String) {
+                        _errorMessage.postValue(error)
+                        callback?.onError(error)
+                        Log.e(TAG, "❌ Update error: $error")
+                    }
                 }
-            })
-
-            // Cancel alarms
-            AlarmScheduler.cancelWorkflowAlarms(
-                getApplication<Application>().applicationContext,
-                workflowId
             )
-            Log.d(TAG, "⏰ Cancelled alarms for disabled workflow $workflowId")
         }
-
-        // ✅ Update database
-        repository.updateWorkflowEnabled(workflowId, enabled, object : WorkflowRepository.UpdateCallback {
-            override fun onUpdateComplete(success: Boolean) {
-                if (success) {
-                    loadWorkflows()
-                    val msg = "Workflow ${if (enabled) "enabled" else "disabled"} successfully"
-                    _successMessage.postValue(msg)
-                    callback?.onSuccess(msg)
-                    Log.d(TAG, "✅ $msg")
-                } else {
-                    val error = "Toggle failed"
-                    _errorMessage.postValue(error)
-                    callback?.onError(error)
-                    Log.e(TAG, "❌ $error")
-                }
-            }
-
-            override fun onUpdateError(error: String) {
-                _errorMessage.postValue(error)
-                callback?.onError(error)
-                Log.e(TAG, "❌ Update error: $error")
-            }
-        })
     }
 
 

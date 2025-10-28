@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
@@ -18,6 +19,7 @@ import androidx.core.app.NotificationCompat
 import com.example.autoflow.blocker.BlockActivity
 import com.example.autoflow.policy.BlockPolicy
 import android.content.pm.ServiceInfo
+import com.example.autoflow.receiver.EmergencyUnblockReceiver
 
 /**
  * Foreground service that monitors foreground apps and blocks them if in blocked list
@@ -73,26 +75,41 @@ class AppBlockService : Service() {
         })
     }
 
+    // ✅ IMPROVED: More efficient app checking with throttling
+    private val lastCheckTime = mutableMapOf<String, Long>()
+    private val CHECK_THROTTLE_MS = 2000L // Don't check same app for 2 seconds
+
     private fun checkCurrentApp() {
         try {
             val currentTime = System.currentTimeMillis()
-            val usageEvents = usageStatsManager.queryEvents(currentTime - 1000, currentTime)
+            val usageEvents = usageStatsManager.queryEvents(currentTime - 2000, currentTime)
             val event = UsageEvents.Event()
 
             var lastApp: String? = null
+            var mostRecentTime = 0L
+
+            // ✅ IMPROVED: Find the most recent app (more accurate)
             while (usageEvents.hasNextEvent()) {
                 usageEvents.getNextEvent(event)
-                if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND && event.timeStamp > mostRecentTime) {
                     lastApp = event.packageName
+                    mostRecentTime = event.timeStamp
                 }
             }
 
             // Check if current app is blocked (ignore our own package)
             if (lastApp != null && lastApp != packageName) {
+                // ✅ THROTTLING: Don't spam block screens for same app
+                val lastCheck = lastCheckTime[lastApp] ?: 0
+                if (currentTime - lastCheck < CHECK_THROTTLE_MS) {
+                    return
+                }
+
                 val blockedApps = BlockPolicy.getBlockedPackages(this)
 
                 if (blockedApps.contains(lastApp)) {
                     Log.d(TAG, "🚫 BLOCKING APP: $lastApp")
+                    lastCheckTime[lastApp] = currentTime
                     showBlockScreen(lastApp)
                 }
             }
@@ -100,6 +117,38 @@ class AppBlockService : Service() {
             Log.e(TAG, "❌ Error checking current app", e)
         }
     }
+
+    // ✅ IMPROVED: Better notification with real-time count
+    private fun createNotification(): Notification {
+        val blockedApps = BlockPolicy.getBlockedPackages(this)
+        val blockedCount = blockedApps.size
+        val isActive = BlockPolicy.isBlockingEnabled(this)
+
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(if (isActive) "🚫 App Blocking Active" else "⏸️ App Blocking Paused")
+            .setContentText("${blockedCount} ${if (blockedCount == 1) "app" else "apps"} blocked • Tap for emergency unblock")
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .addAction(
+                android.R.drawable.ic_delete,
+                "Emergency Unblock",
+                createEmergencyUnblockIntent()
+            )
+            .build()
+    }
+
+    // ✅ NEW: Emergency unblock from service notification
+    private fun createEmergencyUnblockIntent(): PendingIntent {
+        val intent = Intent(this, EmergencyUnblockReceiver::class.java)
+        return PendingIntent.getBroadcast(
+            this,
+            999,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
 
     private fun showBlockScreen(packageName: String) {
         val intent = Intent(this, BlockActivity::class.java).apply {
@@ -118,18 +167,6 @@ class AppBlockService : Service() {
         } catch (e: Exception) {
             packageName
         }
-    }
-
-    private fun createNotification(): Notification {
-        val blockedCount = BlockPolicy.getBlockedPackages(this).size
-
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("App Blocking Active")
-            .setContentText("$blockedCount ${if (blockedCount == 1) "app" else "apps"} blocked")
-            .setSmallIcon(android.R.drawable.ic_lock_lock)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setOngoing(true)
-            .build()
     }
 
     private fun createNotificationChannel() {

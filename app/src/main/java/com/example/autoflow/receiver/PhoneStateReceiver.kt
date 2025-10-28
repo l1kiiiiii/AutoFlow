@@ -143,7 +143,7 @@ class PhoneStateReceiver : BroadcastReceiver() {
     private fun handleCallEnded(context: Context, phoneNumber: String) {
         Log.d(TAG, "📵 Call ended, checking auto-reply conditions for: $phoneNumber")
 
-        GlobalScope.launch {
+        coroutineScope.launch {
             try {
                 val autoReplyManager = AutoReplyManager.getInstance(context)
 
