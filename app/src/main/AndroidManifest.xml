@@ -65,6 +65,7 @@
     <!-- = OTHER = -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"
         tools:ignore="FullScreenIntentPolicy" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <!--  PACKAGE VISIBILITY: Query all installed packages (Android 11+) -->
     <uses-permission
@@ -175,6 +176,10 @@
             android:name=".receiver.EmergencyUnblockReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".receiver.AutoUnblockReceiver"
+            android:enabled="true"
+            android:exported="false" />
 
         <!--  SERVICES  -->
         <service
