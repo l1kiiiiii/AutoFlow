@@ -6,8 +6,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-//noinspection UsingMaterialAndMaterial3Libraries
-import androidx.compose.material.ModalBottomSheetLayout
+import androidx.compose.material3.ModalBottomSheet // Correct M3 import
+import androidx.compose.material3.rememberModalBottomSheetState // State helpe
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -74,7 +74,7 @@ fun NotificationBell(
 
 /**
  * Notification panel/drawer
- */
+*/
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationPanel(
@@ -85,23 +85,28 @@ fun NotificationPanel(
     val notificationManager = remember { InAppNotificationManager.getInstance(context) }
     val notifications by notificationManager.notifications.collectAsStateWithLifecycle()
     val meetingModeActive by notificationManager.meetingModeActive.collectAsStateWithLifecycle()
-
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true // Often desired for simple sheets
+    )
     if (isVisible) {
-        ModalBottomSheetLayout(
-            sheetContent = {
-                NotificationContent(
-                    notifications = notifications,
-                    meetingModeActive = meetingModeActive,
-                    onMarkAllRead = { notificationManager.markAllAsRead() },
-                    onClearAll = { notificationManager.clearAllClearable() },
-                    onClearNotification = { notificationManager.clearNotification(it) },
-                    onDeactivateMeeting = { notificationManager.deactivateMeetingMode() },
-                    onMarkAsRead = { notificationManager.markAsRead(it) }
-                )
-            },
-            modifier = Modifier.fillMaxSize()
+        ModalBottomSheet(
+            onDismissRequest = onDismiss, // Call the provided lambda when dismissed
+            sheetState = sheetState,
+            modifier = Modifier.fillMaxHeight(0.9f) // Adjust height as needed
         ) {
-            // Background content - can be empty or your main content
+            // Content of the bottom sheet
+            NotificationContent(
+                notifications = notifications,
+                meetingModeActive = meetingModeActive,
+                onMarkAllRead = { notificationManager.markAllAsRead() },
+                onClearAll = { notificationManager.clearAllClearable() },
+                onClearNotification = { notificationManager.clearNotification(it) },
+                onDeactivateMeeting = {
+                    notificationManager.deactivateMeetingMode()
+                    onDismiss() // Optionally dismiss after deactivating
+                },
+                onMarkAsRead = { notificationManager.markAsRead(it) }
+            )
         }
     }
 }

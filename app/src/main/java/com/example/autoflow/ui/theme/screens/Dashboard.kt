@@ -46,7 +46,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.autoflow.util.InAppNotificationManager
 import com.example.autoflow.ui.theme.components.NotificationPanel
 
-
 /**
  * Enhanced Dashboard with smooth navigation and success feedback
  */

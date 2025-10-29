@@ -21,9 +21,12 @@ import com.example.autoflow.R
 import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.WorkflowRepository
 import com.example.autoflow.data.toActions
+import com.example.autoflow.data.toTriggers
 import com.example.autoflow.integrations.SoundModeManager
 import com.example.autoflow.model.Action
+import com.example.autoflow.model.Trigger
 import com.example.autoflow.util.ActionExecutor
+import com.example.autoflow.util.AlarmScheduler
 import com.example.autoflow.util.Constants
 import com.example.autoflow.util.Constants.EXTRA_WORKFLOW_ID
 import kotlinx.coroutines.CoroutineScope
@@ -36,6 +39,7 @@ class AlarmReceiver : BroadcastReceiver() {
         private const val TAG = "AlarmReceiver"
         private const val CHANNEL_ID = "autoflow_notifications"
         private const val CHANNEL_NAME = "AutoFlow Alerts"
+        const val EXTRA_WORKFLOW_ID = "WORKFLOW_ID"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -83,7 +87,24 @@ class AlarmReceiver : BroadcastReceiver() {
                                         Log.e(TAG, "❌ Action error: ${action.type}", e)
                                     }
                                 }
-
+                                //  Reschedule recurring workflow
+                                try {
+                                    val triggers = w.toTriggers() //
+                                    //
+                                    val timeTrigger = triggers.find { it.type == Constants.TRIGGER_TIME } as? Trigger.TimeTrigger
+                                    // Check if it's a recurring trigger (has days specified and is not empty)
+                                    //
+                                    if (timeTrigger != null && timeTrigger.days.isNotEmpty()) {
+                                        Log.d(TAG, "🔄 Rescheduling recurring workflow ID: $workflowId")
+                                        // Schedule the next occurrence
+                                        //
+                                        AlarmScheduler.scheduleWorkflow(context, w)
+                                    } else {
+                                        Log.d(TAG, "Workflow ID: $workflowId is not recurring or not a time trigger, not rescheduling.")
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "❌ Error trying to reschedule workflow ID: $workflowId", e)
+                                }
                                 Log.d(TAG, "🎉 Workflow completed: ${w.workflowName}")
                                 Log.d(TAG, "   ✅ Success: $successCount actions")
                                 Log.d(TAG, "   ❌ Failed: $failCount actions")
