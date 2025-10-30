@@ -46,6 +46,28 @@ object Constants {
     const val ACTION_SET_VOLUME = "SET_VOLUME"
     const val ACTION_TOGGLE_FLASHLIGHT = "TOGGLE_FLASHLIGHT"
 
+    // ✅ NEW: Brightness Control Actions
+    const val ACTION_SET_BRIGHTNESS = "SET_BRIGHTNESS"
+    const val ACTION_INCREASE_BRIGHTNESS = "INCREASE_BRIGHTNESS"
+    const val ACTION_DECREASE_BRIGHTNESS = "DECREASE_BRIGHTNESS"
+    const val ACTION_ADJUST_BRIGHTNESS_TIME = "ADJUST_BRIGHTNESS_TIME"
+    const val ACTION_BRIGHTNESS_ENVIRONMENT = "BRIGHTNESS_ENVIRONMENT"
+    const val ACTION_BRIGHTNESS_LEVEL = "BRIGHTNESS_LEVEL"
+    const val ACTION_RESTORE_BRIGHTNESS = "RESTORE_BRIGHTNESS"
+
+    // ✅ NEW: Volume Control Actions
+    const val ACTION_SET_MEDIA_VOLUME = "SET_MEDIA_VOLUME"
+    const val ACTION_SET_RING_VOLUME = "SET_RING_VOLUME"
+    const val ACTION_SET_NOTIFICATION_VOLUME = "SET_NOTIFICATION_VOLUME"
+    const val ACTION_SET_ALARM_VOLUME = "SET_ALARM_VOLUME"
+    const val ACTION_SET_CALL_VOLUME = "SET_CALL_VOLUME"
+    const val ACTION_INCREASE_VOLUME = "INCREASE_VOLUME"
+    const val ACTION_DECREASE_VOLUME = "DECREASE_VOLUME"
+    const val ACTION_MUTE_VOLUME = "MUTE_VOLUME"
+    const val ACTION_UNMUTE_VOLUME = "UNMUTE_VOLUME"
+    const val ACTION_SET_VOLUME_PROFILE = "SET_VOLUME_PROFILE"
+    const val ACTION_RESTORE_VOLUMES = "RESTORE_VOLUMES"
+
     //  WORKER INPUT KEYS 
     const val KEY_WORKFLOW_ID = "workflow_id"
     const val KEY_TRIGGER_TYPE = "trigger_type"
@@ -90,6 +112,21 @@ object Constants {
     const val JSON_KEY_LOCATION_COORDINATES = "locationCoordinates"
     const val JSON_KEY_LOCATION_RADIUS = "locationRadius"
     const val JSON_KEY_LOCATION_ENTRY_EXIT = "locationEntryExit"
+
+    // ✅ NEW: Brightness parameters
+    const val JSON_KEY_BRIGHTNESS_VALUE = "brightnessValue"
+    const val JSON_KEY_BRIGHTNESS_PERCENTAGE = "brightnessPercentage"
+    const val JSON_KEY_BRIGHTNESS_LEVEL = "brightnessLevel"
+    const val JSON_KEY_BRIGHTNESS_ENVIRONMENT = "brightnessEnvironment"
+    const val JSON_KEY_BRIGHTNESS_AMOUNT = "brightnessAmount"
+
+    // ✅ NEW: Volume parameters
+    const val JSON_KEY_VOLUME_STREAM = "volumeStream"
+    const val JSON_KEY_VOLUME_VALUE = "volumeValue"
+    const val JSON_KEY_VOLUME_PERCENTAGE = "volumePercentage"
+    const val JSON_KEY_VOLUME_PROFILE = "volumeProfile"
+    const val JSON_KEY_VOLUME_AMOUNT = "volumeAmount"
+    const val JSON_KEY_SHOW_VOLUME_UI = "showVolumeUI"
 
     //  NOTIFICATION CONSTANTS 
     const val NOTIFICATION_CHANNEL_ID_DEFAULT = "autoflow_default"
@@ -226,6 +263,41 @@ object Constants {
     const val VOLUME_MEDIUM = 50
     const val VOLUME_HIGH = 75
     const val VOLUME_MAXIMUM = 100
+
+    // ✅ NEW: Volume profiles
+    const val VOLUME_PROFILE_SILENT = "silent"
+    const val VOLUME_PROFILE_LOW = "low"
+    const val VOLUME_PROFILE_MEDIUM = "medium"
+    const val VOLUME_PROFILE_HIGH = "high"
+    const val VOLUME_PROFILE_MAX = "max"
+    const val VOLUME_PROFILE_MEETING = "meeting"
+    const val VOLUME_PROFILE_WORK = "work"
+    const val VOLUME_PROFILE_NIGHT = "night"
+
+    // ✅ NEW: Brightness constants
+    const val BRIGHTNESS_MIN = 0
+    const val BRIGHTNESS_MAX = 255
+    const val BRIGHTNESS_MIN_PERCENTAGE = 1
+    const val BRIGHTNESS_MAX_PERCENTAGE = 100
+    
+    // Brightness levels
+    const val BRIGHTNESS_LEVEL_MINIMUM = "minimum"
+    const val BRIGHTNESS_LEVEL_VERY_LOW = "very_low"
+    const val BRIGHTNESS_LEVEL_LOW = "low"
+    const val BRIGHTNESS_LEVEL_MEDIUM_LOW = "medium_low"
+    const val BRIGHTNESS_LEVEL_MEDIUM = "medium"
+    const val BRIGHTNESS_LEVEL_MEDIUM_HIGH = "medium_high"
+    const val BRIGHTNESS_LEVEL_HIGH = "high"
+    const val BRIGHTNESS_LEVEL_VERY_HIGH = "very_high"
+    const val BRIGHTNESS_LEVEL_MAXIMUM = "maximum"
+    
+    // Brightness environments
+    const val BRIGHTNESS_ENV_OUTDOOR = "outdoor"
+    const val BRIGHTNESS_ENV_OFFICE = "office"
+    const val BRIGHTNESS_ENV_HOME = "home"
+    const val BRIGHTNESS_ENV_EVENING = "evening"
+    const val BRIGHTNESS_ENV_NIGHT = "night"
+    const val BRIGHTNESS_ENV_CINEMA = "cinema"
 
     const val ACTION_AUTO_REPLY_SMS = "AUTO_REPLY_SMS"
     const val TRIGGER_INCOMING_CALL = "INCOMING_CALL"
