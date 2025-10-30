@@ -29,6 +29,8 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlin.math.max
+import kotlin.math.min
 
 //  meeting mode state tracking
 object MeetingModeTracker {
@@ -72,6 +74,13 @@ object ActionExecutor {
         Log.d(TAG, "Executing action: ${action.type}")
 
         return try {
+            // ✅ First try extended actions (brightness and volume)
+            val extendedResult = ActionExecutorExtensions.executeExtendedAction(context, action)
+            if (extendedResult || isExtendedAction(action.type)) {
+                return extendedResult
+            }
+            
+            // Continue with existing actions
             when (action.type) {
                 Constants.ACTION_SEND_NOTIFICATION -> {
                     val title = action.title ?: "AutoFlow"
@@ -90,6 +99,7 @@ object ActionExecutor {
                 }
 
                 Constants.ACTION_UNBLOCK_APPS -> {
+                    Log.d(TAG, "Executing UNBLOCK_APPS action")
                     unblockApps(context)
                 }
 
@@ -204,6 +214,32 @@ object ActionExecutor {
             false
         }
     }
+    
+    /**
+     * Check if action type is handled by extensions
+     */
+    private fun isExtendedAction(actionType: String): Boolean {
+        return actionType in listOf(
+            Constants.ACTION_SET_BRIGHTNESS,
+            Constants.ACTION_INCREASE_BRIGHTNESS,
+            Constants.ACTION_DECREASE_BRIGHTNESS,
+            Constants.ACTION_ADJUST_BRIGHTNESS_TIME,
+            Constants.ACTION_BRIGHTNESS_ENVIRONMENT,
+            Constants.ACTION_BRIGHTNESS_LEVEL,
+            Constants.ACTION_RESTORE_BRIGHTNESS,
+            Constants.ACTION_SET_MEDIA_VOLUME,
+            Constants.ACTION_SET_RING_VOLUME,
+            Constants.ACTION_SET_NOTIFICATION_VOLUME,
+            Constants.ACTION_SET_ALARM_VOLUME,
+            Constants.ACTION_SET_CALL_VOLUME,
+            Constants.ACTION_INCREASE_VOLUME,
+            Constants.ACTION_DECREASE_VOLUME,
+            Constants.ACTION_MUTE_VOLUME,
+            Constants.ACTION_UNMUTE_VOLUME,
+            Constants.ACTION_SET_VOLUME_PROFILE,
+            Constants.ACTION_RESTORE_VOLUMES
+        )
+    }
 
     /**
      * ✅ Execute multiple actions from a workflow
@@ -296,13 +332,13 @@ object ActionExecutor {
         }
 
         // 2. Lower brightness
-        if (executeAction(context, Action("SET_BRIGHTNESS", "10"))) {
+        if (executeAction(context, Action(Constants.ACTION_SET_BRIGHTNESS, "10"))) {
             successCount++
         }
 
         // 3. Block social apps
         val socialApps = "com.instagram.android,com.tiktok,com.facebook.katana,com.twitter.android"
-        if (executeAction(context, Action("BLOCK_APPS", socialApps, 32400000L))) { // 9 hours
+        if (executeAction(context, Action(Constants.ACTION_BLOCK_APPS, socialApps, 32400000L))) { // 9 hours
             successCount++
         }
 
@@ -340,7 +376,7 @@ object ActionExecutor {
         }
 
         // 2. Restore brightness
-        if (executeAction(context, Action("SET_BRIGHTNESS", "80"))) {
+        if (executeAction(context, Action(Constants.ACTION_SET_BRIGHTNESS, "80"))) {
             successCount++
         }
 
