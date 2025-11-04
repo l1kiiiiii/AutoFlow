@@ -12,9 +12,14 @@ import androidx.core.app.ActivityCompat
 import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.toTriggers
 import com.example.autoflow.util.ActionExecutor
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
+/**
+ * ✅ COMPLETELY FIXED BluetoothReceiver
+ */
 class BluetoothReceiver : BroadcastReceiver() {
 
     companion object {
@@ -22,7 +27,7 @@ class BluetoothReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        Log.d(TAG, "📱 Bluetooth event: ${intent.action}")
+        Log.d(TAG, "📡 Bluetooth event: ${intent.action}")
 
         when (intent.action) {
             BluetoothAdapter.ACTION_STATE_CHANGED -> {
@@ -46,124 +51,111 @@ class BluetoothReceiver : BroadcastReceiver() {
             BluetoothAdapter.STATE_OFF -> "OFF"
             BluetoothAdapter.STATE_TURNING_ON -> "TURNING_ON"
             BluetoothAdapter.STATE_TURNING_OFF -> "TURNING_OFF"
-            else -> return
+            else -> "UNKNOWN"
         }
 
-        Log.d(TAG, "📱 Bluetooth state: $stateString")
-        checkBluetoothTriggers(context, stateString, null, null)
+        Log.d(TAG, "Bluetooth state changed to: $stateString")
+        checkBluetoothWorkflows(context, "STATE_CHANGE", stateString, null)
     }
 
     private fun handleDeviceConnected(context: Context, device: BluetoothDevice) {
-        // ✅ FIXED: Check permission before accessing device name
-        if (hasBluetoothPermission(context)) {
-            try {
-                val deviceName = device.name ?: "Unknown Device"
-                val deviceAddress = device.address
-
-                Log.d(TAG, "📱 Device connected: $deviceName ($deviceAddress)")
-                checkBluetoothTriggers(context, "CONNECTED", deviceAddress, deviceName)
-            } catch (e: SecurityException) {
-                Log.e(TAG, "❌ Bluetooth permission denied for device name", e)
-                // Use address only if name is not accessible
-                checkBluetoothTriggers(context, "CONNECTED", device.address, "Unknown Device")
-            }
-        } else {
-            Log.w(TAG, "⚠️ Missing Bluetooth permission, using limited info")
-            checkBluetoothTriggers(context, "CONNECTED", device.address, "Unknown Device")
+        if (ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
         }
+
+        val deviceName = device.name ?: "Unknown"
+        val deviceAddress = device.address
+
+        Log.d(TAG, "Device connected: $deviceName ($deviceAddress)")
+        checkBluetoothWorkflows(context, "CONNECTED", deviceName, deviceAddress)
     }
 
     private fun handleDeviceDisconnected(context: Context, device: BluetoothDevice) {
-        // ✅ FIXED: Check permission before accessing device name
-        if (hasBluetoothPermission(context)) {
-            try {
-                val deviceName = device.name ?: "Unknown Device"
-                val deviceAddress = device.address
-
-                Log.d(TAG, "📱 Device disconnected: $deviceName ($deviceAddress)")
-                checkBluetoothTriggers(context, "DISCONNECTED", deviceAddress, deviceName)
-            } catch (e: SecurityException) {
-                Log.e(TAG, "❌ Bluetooth permission denied for device name", e)
-                checkBluetoothTriggers(context, "DISCONNECTED", device.address, "Unknown Device")
-            }
-        } else {
-            Log.w(TAG, "⚠️ Missing Bluetooth permission, using limited info")
-            checkBluetoothTriggers(context, "DISCONNECTED", device.address, "Unknown Device")
+        if (ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
         }
+
+        val deviceName = device.name ?: "Unknown"
+        val deviceAddress = device.address
+
+        Log.d(TAG, "Device disconnected: $deviceName ($deviceAddress)")
+        checkBluetoothWorkflows(context, "DISCONNECTED", deviceName, deviceAddress)
     }
 
-    // ✅ ADD: Permission check helper
-    private fun hasBluetoothPermission(context: Context): Boolean {
-        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            // Android 12+ requires BLUETOOTH_CONNECT permission
-            ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
-                    PackageManager.PERMISSION_GRANTED
-        } else {
-            // Android 11 and below use legacy BLUETOOTH permission
-            ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH) ==
-                    PackageManager.PERMISSION_GRANTED
-        }
-    }
-
-    private fun checkBluetoothTriggers(context: Context, state: String, deviceAddress: String?, deviceName: String?) {
+    private fun checkBluetoothWorkflows(
+        context: Context,
+        eventType: String,
+        deviceName: String?,
+        deviceAddress: String?
+    ) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val database = AppDatabase.getDatabase(context)
-                val workflows = database.workflowDao().getActiveWorkflows()
+                val workflows = database.workflowDao().getAllSync()
 
-                workflows.forEach { workflow ->
+                workflows.filter { it.isEnabled }.forEach { workflow ->
                     val triggers = workflow.toTriggers()
+                    val matchingTrigger = triggers.find { trigger ->
+                        trigger.type == "BLUETOOTH" && matchesBluetoothTrigger(
+                            trigger.value,
+                            eventType,
+                            deviceName,
+                            deviceAddress
+                        )
+                    }
 
-                    triggers.forEach { trigger ->
-                        if (trigger.type == "BLUETOOTH" && matchesBluetoothTrigger(trigger.value, state, deviceAddress, deviceName)) {
-                            Log.d(TAG, "✅ Bluetooth trigger matched for workflow: ${workflow.workflowName}")
+                    if (matchingTrigger != null) {
+                        Log.d(TAG, "Bluetooth trigger matched for workflow: ${workflow.workflowName}")
 
-                            withContext(Dispatchers.Main) {
-                                ActionExecutor.executeWorkflow(context, workflow)
-                            }
-                        }
+                        // ✅ FIXED: Use ActionExecutor.executeWorkflow
+                        val actionExecutor = ActionExecutor.getInstance()
+                        actionExecutor.executeWorkflow(context, workflow)
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Error checking Bluetooth triggers", e)
+                Log.e(TAG, "Error checking Bluetooth workflows", e)
             }
         }
     }
 
-    /**
-     * ✅ Check if trigger value matches current Bluetooth state/device
-     */
     private fun matchesBluetoothTrigger(
-        triggerValue: String,
-        currentState: String,
-        currentDeviceAddress: String?,
-        currentDeviceName: String?
+        triggerValue: String?,
+        eventType: String,
+        deviceName: String?,
+        deviceAddress: String?
     ): Boolean {
         return try {
-            val json = JSONObject(triggerValue)
-            val targetState = json.optString("state", "")
-            val targetDeviceAddress = json.optString("deviceAddress", null)
-            val targetDeviceName = json.optString("deviceName", null)
+            val json = JSONObject(triggerValue ?: "{}")
 
-            // Check state match (if specified)
-            if (targetState.isNotEmpty() && targetState != currentState) {
-                return false
+            // Check device address/name match
+            val targetAddress = json.optString("deviceAddress", "")
+            val targetName = json.optString("deviceName", "")
+            val triggerType = json.optString("triggerType", "CONNECTED")
+
+            val deviceMatches = when {
+                targetAddress.isNotEmpty() -> targetAddress == deviceAddress
+                targetName.isNotEmpty() -> targetName == deviceName
+                else -> true // Match any device
             }
 
-            // Check device address match (if specified)
-            if (targetDeviceAddress != null && targetDeviceAddress != currentDeviceAddress) {
-                return false
+            val eventMatches = when (triggerType.uppercase()) {
+                "CONNECTED" -> eventType == "CONNECTED"
+                "DISCONNECTED" -> eventType == "DISCONNECTED"
+                "STATE_CHANGE" -> eventType == "STATE_CHANGE"
+                else -> true
             }
 
-            // Check device name match (if specified)
-            if (targetDeviceName != null && targetDeviceName != currentDeviceName) {
-                return false
-            }
-
-            true
-
+            deviceMatches && eventMatches
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error parsing Bluetooth trigger value: $triggerValue", e)
+            Log.e(TAG, "Error parsing Bluetooth trigger value: $triggerValue", e)
             false
         }
     }

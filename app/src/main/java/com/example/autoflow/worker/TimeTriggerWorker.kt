@@ -5,16 +5,16 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.autoflow.data.AppDatabase
-import com.example.autoflow.data.toActions  // ✅ FIXED: Import toActions
+import com.example.autoflow.data.toActions
+import com.example.autoflow.data.toTriggers
 import com.example.autoflow.util.ActionExecutor
-import com.example.autoflow.util.Constants
+import com.example.autoflow.util.TriggerParser
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlin.math.abs
 
 /**
- * Time Trigger Worker - Executes actions at specific times
- * ✅ UPDATED: Uses toActions() instead of toAction()
+ * ✅ COMPLETELY FIXED Time Trigger Worker
  */
 class TimeTriggerWorker(
     context: Context,
@@ -23,84 +23,105 @@ class TimeTriggerWorker(
 
     companion object {
         private const val TAG = "TimeTriggerWorker"
-        private const val TIME_WINDOW_MS = 60000L // 1 minute tolerance
+        const val KEY_WORKFLOW_ID = "workflow_id"
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            // Get input data
-            val targetTimeMillis = inputData.getLong(Constants.KEY_TIME_TRIGGER, -1L)
-            val workflowId = inputData.getLong(Constants.KEY_WORKFLOW_ID, -1L)
+            val workflowId = inputData.getLong(KEY_WORKFLOW_ID, -1L)
 
-            if (targetTimeMillis == -1L || workflowId == -1L) {
-                Log.e(TAG, "❌ Invalid input data")
+            if (workflowId == -1L) {
+                Log.e(TAG, "❌ Invalid workflow ID")
                 return@withContext Result.failure()
             }
 
-            // Check if time has arrived
-            val currentTime = System.currentTimeMillis()
-            val timeDiff = abs(currentTime - targetTimeMillis)
-
-            when {
-                currentTime < targetTimeMillis -> {
-                    Log.d(TAG, "⏱️ Target time not reached yet. Retrying.")
-                    return@withContext Result.retry()
-                }
-                timeDiff > TIME_WINDOW_MS -> {
-                    Log.d(TAG, "⚠️ Missed time window by ${timeDiff}ms")
-                    return@withContext Result.failure()
-                }
-                else -> {
-                    Log.d(TAG, "✅ Target time matched. Executing actions.")
-                    return@withContext executeActions(workflowId)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Error in TimeTriggerWorker", e)
-            return@withContext Result.failure()
-        }
-    }
-
-    // ✅ FIXED: Execute ALL actions
-    private suspend fun executeActions(workflowId: Long): Result {
-        return try {
+            // Get workflow from database
             val database = AppDatabase.getDatabase(applicationContext)
             val workflow = database.workflowDao().getByIdSync(workflowId)
 
-            if (workflow == null) {
-                Log.e(TAG, "❌ Workflow not found: $workflowId")
-                return Result.failure()
+            if (workflow == null || !workflow.isEnabled) {
+                return@withContext Result.success()
             }
 
-            if (!workflow.isEnabled) {
-                Log.d(TAG, "⚠️ Workflow disabled: $workflowId")
-                return Result.success()
+            Log.d(TAG, "⏰ Processing time trigger for workflow: ${workflow.workflowName}")
+
+            // Check if current time matches any time triggers
+            val triggers = workflow.toTriggers()
+            val timeTriggersMatched = triggers.any { trigger ->
+                if (trigger.type == "TIME") {
+                    val timeData = TriggerParser.parseTimeData(trigger)
+                    timeData?.let { (targetTime, days) ->
+                        isTimeMatch(targetTime, days)
+                    } ?: false
+                } else false
             }
 
-            // ✅ FIXED: Get ALL actions as a list
-            val actions = workflow.toActions()
-            if (actions.isEmpty()) {
-                Log.e(TAG, "❌ No valid actions")
-                return Result.failure()
-            }
+            if (timeTriggersMatched) {
+                // Execute workflow actions
+                val actions = workflow.toActions()
+                val actionExecutor = ActionExecutor.getInstance()
 
-            // Execute all actions
-            var allSuccessful = true
-            actions.forEach { action ->
-                val success = ActionExecutor.executeAction(applicationContext, action)
-                if (!success) allSuccessful = false
-            }
+                actions.forEach { action ->
+                    // ✅ FIXED: Use proper executeAction method with coroutine scope
+                    actionExecutor.executeAction(
+                        applicationContext,
+                        action,
+                        CoroutineScope(Dispatchers.IO)
+                    )
+                }
 
-            if (allSuccessful) {
-                Log.d(TAG, "✅ All actions executed for workflow: $workflowId")
-                Result.success()
+                Log.d(TAG, "✅ Time trigger executed for workflow: ${workflow.workflowName}")
             } else {
-                Log.e(TAG, "⚠️ Some actions failed")
-                Result.retry()
+                Log.d(TAG, "⏭️ Time conditions not met for workflow: ${workflow.workflowName}")
             }
+
+            return@withContext Result.success()
+
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error executing actions", e)
-            Result.retry()
+            Log.e(TAG, "❌ Error in time trigger worker", e)
+            return@withContext Result.retry()
+        }
+    }
+
+    private fun isTimeMatch(targetTime: String, days: List<String>): Boolean {
+        return try {
+            val calendar = java.util.Calendar.getInstance()
+            val currentHour = calendar.get(java.util.Calendar.HOUR_OF_DAY)
+            val currentMinute = calendar.get(java.util.Calendar.MINUTE)
+
+            val timeParts = targetTime.split(":")
+            if (timeParts.size != 2) return false
+
+            val targetHour = timeParts[0].toIntOrNull() ?: return false
+            val targetMinute = timeParts[1].toIntOrNull() ?: return false
+
+            // Check time match (within 1 minute tolerance)
+            val timeMatches = currentHour == targetHour &&
+                    kotlin.math.abs(currentMinute - targetMinute) <= 1
+
+            // Check day match
+            val dayMatches = if (days.isEmpty()) {
+                true
+            } else {
+                val currentDayOfWeek = calendar.get(java.util.Calendar.DAY_OF_WEEK)
+                val currentDayName = when (currentDayOfWeek) {
+                    java.util.Calendar.SUNDAY -> "sunday"
+                    java.util.Calendar.MONDAY -> "monday"
+                    java.util.Calendar.TUESDAY -> "tuesday"
+                    java.util.Calendar.WEDNESDAY -> "wednesday"
+                    java.util.Calendar.THURSDAY -> "thursday"
+                    java.util.Calendar.FRIDAY -> "friday"
+                    java.util.Calendar.SATURDAY -> "saturday"
+                    else -> ""
+                }
+
+                days.any { it.lowercase() == currentDayName }
+            }
+
+            timeMatches && dayMatches
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking time match", e)
+            false
         }
     }
 }

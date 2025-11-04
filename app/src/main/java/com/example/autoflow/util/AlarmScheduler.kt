@@ -94,10 +94,10 @@ object AlarmScheduler {
 
     /**
      * Cancel all alarms for a workflow
-     * ✅ FIXED: Proper error handling
+     *  FIXED: Proper error handling
      */
     fun cancelWorkflowAlarms(context: Context, workflowId: Long) {
-        // ✅ FIXED: Validate workflow ID
+        //  FIXED: Validate workflow ID
         if (workflowId <= 0) {
             Log.d(TAG, "🚫 Cancelling alarms for workflow ID: $workflowId (skipping - invalid ID)")
             return
@@ -125,7 +125,7 @@ object AlarmScheduler {
                     )
                     alarmManager.cancel(pendingIntent)
                     pendingIntent.cancel()
-                    Log.d(TAG, "✅ Cancelled alarm with requestCode: $requestCode")
+                    Log.d(TAG, " Cancelled alarm with requestCode: $requestCode")
                 } catch (e: Exception) {
                     Log.e(TAG, "❌ Error cancelling alarm $requestCode", e)
                 }
@@ -133,7 +133,7 @@ object AlarmScheduler {
 
             // Clear saved IDs
             clearAlarmIds(context, workflowId)
-            Log.d(TAG, "✅ Cancelled ${alarmIds.size} alarms for workflow $workflowId")
+            Log.d(TAG, " Cancelled ${alarmIds.size} alarms for workflow $workflowId")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error cancelling workflow alarms", e)
         }
@@ -141,7 +141,7 @@ object AlarmScheduler {
 
     /**
      * Generate unique request code for alarm
-     * ✅ FIXED: Better hash generation
+     *  FIXED: Better hash generation
      */
     private fun generateRequestCode(workflowId: Long, time: String): Int {
         return "$workflowId-$time".hashCode()
@@ -182,7 +182,7 @@ object AlarmScheduler {
 
     /**
      * Get saved alarm IDs for a workflow
-     * ✅ FIXED: Proper error handling for parsing
+     *  FIXED: Proper error handling for parsing
      */
     private fun getAlarmIds(context: Context, workflowId: Long): List<Int> {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

@@ -35,19 +35,19 @@ fun ModesScreen(
     onModeSelected: (ModeTemplate) -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    // ✅ Observe workflows to check running status
+    //  Observe workflows to check running status
     val workflows by viewModel.workflows.observeAsState(emptyList())
 
-    // ✅ Find active Meeting Mode specifically
+    //  Find active Meeting Mode specifically
     val activeMeetingMode = workflows.find {
         it.workflowName.contains("Meeting Mode", ignoreCase = true) && it.isEnabled
     }
 
-    // ✅ State for dialog
+    //  State for dialog
     var showDialog by remember { mutableStateOf(false) }
     var selectedMode by remember { mutableStateOf<ModeTemplate?>(null) }
 
-    // ✅ Count running modes
+    //  Count running modes
     val runningModesCount = workflows.count { it.isEnabled }
 
     Scaffold(
@@ -73,7 +73,7 @@ fun ModesScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // ✅ FIX ISSUE #1: Show Active Meeting Mode with DEACTIVATE button
+            //  FIX ISSUE #1: Show Active Meeting Mode with DEACTIVATE button
             if (activeMeetingMode != null) {
                 Card(
                     modifier = Modifier
@@ -105,14 +105,14 @@ fun ModesScreen(
 
                         Button(
                             onClick = {
-                                // ✅ SOLUTION #1: Disable Meeting Mode from ModesScreen
+                                //  SOLUTION #1: Disable Meeting Mode from ModesScreen
                                 Log.d("ModesScreen", "🔴 Deactivating Meeting Mode from UI")
                                 viewModel.updateWorkflowEnabled(
                                     workflowId = activeMeetingMode.id,
                                     enabled = false,
                                     callback = object : WorkflowViewModel.WorkflowOperationCallback {
                                         override fun onSuccess(message: String) {
-                                            Log.d("ModesScreen", "✅ Meeting Mode deactivated: $message")
+                                            Log.d("ModesScreen", " Meeting Mode deactivated: $message")
                                         }
                                         override fun onError(error: String) {
                                             Log.e("ModesScreen", "❌ Error deactivating: $error")
@@ -130,7 +130,7 @@ fun ModesScreen(
                 }
             }
 
-            // ✅ Show other running modes if any (except Meeting Mode)
+            //  Show other running modes if any (except Meeting Mode)
             if (runningModesCount > 0) {
                 ActiveModesSection(
                     workflows = workflows.filter { !it.workflowName.contains("Meeting Mode", ignoreCase = true) },
@@ -147,7 +147,7 @@ fun ModesScreen(
                 )
             }
 
-            // ✅ EXISTING: Rest of your modes grid
+            //  EXISTING: Rest of your modes grid
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 contentPadding = PaddingValues(16.dp),
@@ -156,14 +156,14 @@ fun ModesScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(PredefinedModes.getAllModes()) { mode ->
-                    // ✅ Only show modes that aren't currently active
+                    //  Only show modes that aren't currently active
                     val runningWorkflow = workflows.find { workflow ->
                         workflow.workflowName.contains(mode.name, ignoreCase = true) &&
                                 workflow.isEnabled
                     }
                     val isRunning = runningWorkflow != null
 
-                    if (!isRunning) {  // ✅ Hide active modes from grid
+                    if (!isRunning) {  //  Hide active modes from grid
                         ModeCard(
                             mode = mode,
                             isRunning = false,
@@ -180,7 +180,7 @@ fun ModesScreen(
         }
     }
 
-    // ✅ Show configuration dialog popup for ALL modes
+    //  Show configuration dialog popup for ALL modes
     selectedMode?.let { mode ->
         ModeConfigurationDialog(
             mode = mode,
@@ -200,7 +200,7 @@ fun ModesScreen(
                             ),
                             callback = object : WorkflowViewModel.WorkflowOperationCallback {
                                 override fun onSuccess(message: String) {
-                                    Log.d("ModesScreen", "✅ Mode activated: $message")
+                                    Log.d("ModesScreen", " Mode activated: $message")
                                 }
                                 override fun onError(error: String) {
                                     Log.e("ModesScreen", "❌ Mode activation failed: $error")
@@ -288,7 +288,7 @@ fun ActiveModesSection(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // ✅ List of running modes with individual stop buttons
+                //  List of running modes with individual stop buttons
                 runningWorkflows.forEach { workflow ->
                     Row(
                         modifier = Modifier
@@ -301,7 +301,7 @@ fun ActiveModesSection(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.weight(1f)
                         ) {
-                            // ✅ Running indicator dot
+                            //  Running indicator dot
                             Box(
                                 modifier = Modifier
                                     .size(8.dp)
@@ -319,7 +319,7 @@ fun ActiveModesSection(
                             )
                         }
 
-                        // ✅ Individual stop button
+                        //  Individual stop button
                         OutlinedButton(
                             onClick = { onStopMode(workflow.id) },
                             modifier = Modifier.size(width = 70.dp, height = 32.dp),
@@ -375,7 +375,7 @@ fun ModeCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // ✅ Top row with icon and status
+            //  Top row with icon and status
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -386,7 +386,7 @@ fun ModeCard(
                     style = MaterialTheme.typography.displayMedium
                 )
 
-                // ✅ Status indicator
+                //  Status indicator
                 if (isRunning) {
                     Surface(
                         shape = CircleShape,
@@ -396,7 +396,7 @@ fun ModeCard(
                 }
             }
 
-            // ✅ Middle - Mode info
+            //  Middle - Mode info
             Column {
                 Text(
                     text = mode.name,
@@ -413,7 +413,7 @@ fun ModeCard(
                 )
             }
 
-            // ✅ Bottom - Status and action button
+            //  Bottom - Status and action button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -427,7 +427,7 @@ fun ModeCard(
                         fontWeight = FontWeight.Bold,
                     )
 
-                    // ✅ STOP button on card
+                    //  STOP button on card
                     Button(
                         onClick = onStopClick,
                         modifier = Modifier.size(width = 70.dp, height = 28.dp),
@@ -451,14 +451,14 @@ fun ModeCard(
                         )
                     }
                 } else {
-                    // ✅ Different text for Meeting Mode vs other modes
+                    //  Different text for Meeting Mode vs other modes
                     Text(
                         text = if (isMeetingMode) "Tap to enable" else "Tap to configure",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     )
 
-                    // ✅ Quick action button for Meeting Mode
+                    //  Quick action button for Meeting Mode
                     if (isMeetingMode) {
                         Button(
                             onClick = onModeClick,
@@ -498,7 +498,7 @@ fun ModeConfigurationDialog(
         Dialog(onDismissRequest = onDismiss) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface // ✅ Fixed
+                color = MaterialTheme.colorScheme.surface //  Fixed
             ) {
                 Column(
                     modifier = Modifier
@@ -508,7 +508,7 @@ fun ModeConfigurationDialog(
                     // Header
                     Text(
                         text = "Configure ${mode.name}",
-                        style = MaterialTheme.typography.headlineSmall, // ✅ Fixed
+                        style = MaterialTheme.typography.headlineSmall, //  Fixed
                         fontWeight = FontWeight.Bold
                     )
 
@@ -517,7 +517,7 @@ fun ModeConfigurationDialog(
                     // Mode Type Selection
                     var selectedMode by remember { mutableStateOf("manual") }
 
-                    // ✅ MOVE TIME VARIABLES HERE (outside if block)
+                    //  MOVE TIME VARIABLES HERE (outside if block)
                     var startTime by remember { mutableStateOf("09:00") }
                     var endTime by remember { mutableStateOf("17:00") }
 
@@ -537,7 +537,7 @@ fun ModeConfigurationDialog(
                         )
                         Column(modifier = Modifier.padding(start = 8.dp)) {
                             Text("Manual Control", fontWeight = FontWeight.Medium)
-                            Text("Turn on/off manually", style = MaterialTheme.typography.labelSmall) // ✅ Fixed
+                            Text("Turn on/off manually", style = MaterialTheme.typography.labelSmall) //  Fixed
                         }
                     }
                     */
@@ -555,7 +555,7 @@ fun ModeConfigurationDialog(
                         )
                         Column(modifier = Modifier.padding(start = 8.dp)) {
                             Text("Scheduled Mode", fontWeight = FontWeight.Medium)
-                            Text("Set start and end times", style = MaterialTheme.typography.labelSmall) // ✅ Fixed
+                            Text("Set start and end times", style = MaterialTheme.typography.labelSmall) //  Fixed
                         }
                     }
 
@@ -575,7 +575,7 @@ fun ModeConfigurationDialog(
                         )
                         Column(modifier = Modifier.padding(start = 8.dp)) {
                             Text("Endless Mode", fontWeight = FontWeight.Medium)
-                            Text("Runs until manually stopped", style = MaterialTheme.typography.labelSmall) // ✅ Fixed
+                            Text("Runs until manually stopped", style = MaterialTheme.typography.labelSmall) //  Fixed
                         }
                     }
 

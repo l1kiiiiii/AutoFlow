@@ -1,232 +1,261 @@
 package com.example.autoflow.policy
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import android.content.SharedPreferences
-import android.os.Build
 import android.util.Log
-import androidx.core.app.NotificationCompat
-import com.example.autoflow.receiver.EmergencyUnblockReceiver
-import com.example.autoflow.service.AppBlockService
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
- * BlockPolicy manages app blocking state and emergency unblock notifications
+ * ✅ COMPLETE BlockPolicy - Manages app blocking state with workflow tracking
  */
-object  BlockPolicy {
+object BlockPolicy {
     private const val TAG = "BlockPolicy"
-    private const val PREFS = "block_policy_prefs"
-    private const val KEY_ENABLED = "blocking_enabled"
-    private const val KEY_PACKAGES = "blocked_packages_csv"
-    private const val CHANNEL_ID = "emergency_unblock_channel"
-    private const val NOTIFICATION_ID = 999
+    private const val PREFS_NAME = "block_policy"
+    private const val KEY_BLOCKING_ENABLED = "blocking_enabled"
+    private const val KEY_BLOCKED_PACKAGES = "blocked_packages"
+    private const val KEY_WORKFLOW_BLOCKS = "workflow_blocks"
+    private const val KEY_LOCATION_BLOCKS = "location_blocks"
+    private const val KEY_BLOCKING_REASONS = "blocking_reasons"
 
-    private fun prefs(ctx: Context): SharedPreferences =
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
-    fun setBlockingEnabled(ctx: Context, enabled: Boolean) {
-        prefs(ctx).edit().putBoolean(KEY_ENABLED, enabled).apply()
-        Log.d(TAG, "Blocking ${if (enabled) "enabled" else "disabled"}")
+    private fun getPrefs(context: Context): SharedPreferences {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
-    fun isBlockingEnabled(ctx: Context): Boolean =
-        prefs(ctx).getBoolean(KEY_ENABLED, false)
+    fun setBlockingEnabled(context: Context, enabled: Boolean) {
+        val prefs = getPrefs(context)
+        prefs.edit().putBoolean(KEY_BLOCKING_ENABLED, enabled).apply()
+        Log.d(TAG, "🚫 Blocking ${if (enabled) "enabled" else "disabled"}")
 
-    fun setBlockedPackages(ctx: Context, pkgs: Set<String>) {
-        prefs(ctx).edit().putString(KEY_PACKAGES, pkgs.joinToString(",")).apply()
-        Log.d(TAG, "🚫 Updated blocked packages: ${pkgs.size} apps")
-
-        // Show emergency notification when apps are blocked
-        if (pkgs.isNotEmpty()) {
-            showEmergencyUnblockNotification(ctx)
+        if (!enabled) {
+            clearAllBlocks(context)
         }
     }
 
-    fun getBlockedPackages(ctx: Context): Set<String> =
-        prefs(ctx).getString(KEY_PACKAGES, "")
-            ?.split(",")
-            ?.filter { it.isNotBlank() }
-            ?.toSet()
-            ?: emptySet()
-
-    fun clearBlockedPackages(ctx: Context) {
-        prefs(ctx).edit().remove(KEY_PACKAGES).apply()
-        Log.d(TAG, "🗑️ Cleared all blocked packages")
-
-        // Cancel emergency notification when unblocked
-        cancelEmergencyNotification(ctx)
+    fun isBlockingEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_BLOCKING_ENABLED, false)
     }
 
-    fun addBlockedPackages(ctx: Context, packages: List<String>) {
-        val current = getBlockedPackages(ctx).toMutableSet()
-        current.addAll(packages)
-        setBlockedPackages(ctx, current)
-        Log.d(TAG, "➕ Added ${packages.size} apps to block list")
+    fun setBlockedPackages(context: Context, packages: Set<String>) {
+        val prefs = getPrefs(context)
+        val jsonArray = JSONArray()
+        packages.forEach { jsonArray.put(it) }
+        prefs.edit().putString(KEY_BLOCKED_PACKAGES, jsonArray.toString()).apply()
+        Log.d(TAG, "📦 Set blocked packages: ${packages.size} apps")
     }
 
-    fun removeBlockedPackages(ctx: Context, packages: List<String>) {
-        val current = getBlockedPackages(ctx).toMutableSet()
-        current.removeAll(packages.toSet())
-        setBlockedPackages(ctx, current)
-        Log.d(TAG, "➖ Removed ${packages.size} apps from block list")
-    }
-
-    /**
-     * Show emergency unblock notification with action button
-     */
-    fun showEmergencyUnblockNotification(context: Context) {
-        createNotificationChannel(context)
-
-        val unblockIntent = Intent(context, EmergencyUnblockReceiver::class.java)
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            NOTIFICATION_ID,
-            unblockIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_alert) // ✅ Built-in Android icon
-            .setContentTitle("🚨 Emergency Unblock Available") // ✅ Fixed - this is correct
-            .setContentText("Tap to unblock all apps immediately")
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setOngoing(false)
-            .setAutoCancel(true)
-            .addAction(
-                android.R.drawable.ic_delete, // ✅ Built-in Android icon
-                "UNBLOCK ALL",
-                pendingIntent
-            )
-            .build()
-
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(NOTIFICATION_ID, notification)
-
-        Log.d(TAG, "🚨 Emergency unblock notification shown")
-    }
-
-    /**
-     * Cancel emergency unblock notification
-     */
-    fun cancelEmergencyNotification(context: Context) {
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.cancel(NOTIFICATION_ID)
-        Log.d(TAG, "❌ Emergency notification cancelled")
-    }
-    // ✅ ADD: Enhanced emergency unblock with context awareness
-    fun emergencyUnblockWithContext(context: Context, reason: String = "Emergency") {
-        val blockedApps = getBlockedPackages(context)
-        val blockedCount = blockedApps.size
-
-        if (blockedCount == 0) {
-            Log.d(TAG, "⚠️ No apps currently blocked")
-            return
+    fun getBlockedPackages(context: Context): Set<String> {
+        val prefs = getPrefs(context)
+        val jsonString = prefs.getString(KEY_BLOCKED_PACKAGES, "[]") ?: "[]"
+        val jsonArray = JSONArray(jsonString)
+        val packages = mutableSetOf<String>()
+        for (i in 0 until jsonArray.length()) {
+            packages.add(jsonArray.getString(i))
         }
-
-        Log.d(TAG, "🚨 EMERGENCY UNBLOCK: $reason")
-        Log.d(TAG, "🚨 Unblocking $blockedCount apps immediately")
-
-        // Clear everything immediately
-        clearBlockedPackages(context)
-        setBlockingEnabled(context, false)
-
-        // Cancel emergency notification
-        cancelEmergencyNotification(context)
-
-        // Stop AppBlockService
-        val serviceIntent = Intent(context, AppBlockService::class.java)
-        context.stopService(serviceIntent)
-
-        // Show success notification
-        showEmergencyUnblockSuccess(context, blockedCount, reason)
+        return packages
     }
 
-    // ✅ ADD: Success notification for emergency unblock
-    private fun showEmergencyUnblockSuccess(context: Context, unlockedCount: Int, reason: String) {
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
-            .setContentTitle("✅ Emergency Unblock Complete")
-            .setContentText("$unlockedCount apps unblocked. Full access restored. Reason: $reason")
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setAutoCancel(true)
-            .build()
-
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(NOTIFICATION_ID + 1, notification)
-
-        Log.d(TAG, "✅ Emergency unblock success notification shown")
+    fun addBlockedPackages(context: Context, packages: List<String>) {
+        val currentPackages = getBlockedPackages(context).toMutableSet()
+        currentPackages.addAll(packages)
+        setBlockedPackages(context, currentPackages)
     }
 
-    // ✅ IMPROVED: Smart blocking with app categorization
-    fun setSmartBlockedPackages(context: Context, categories: List<String>) {
-        val allApps = when {
-            categories.contains("social") -> getSocialApps()
-            categories.contains("games") -> getGameApps()
-            categories.contains("entertainment") -> getEntertainmentApps()
-            categories.contains("shopping") -> getShoppingApps()
-            categories.contains("all_distracting") -> getAllDistractingApps()
-            else -> emptySet()
-        }
-
-        setBlockedPackages(context, allApps)
-        Log.d(TAG, "🎯 Smart blocking activated for categories: $categories")
+    fun removeBlockedPackages(context: Context, packages: List<String>) {
+        val currentPackages = getBlockedPackages(context).toMutableSet()
+        currentPackages.removeAll(packages.toSet())
+        setBlockedPackages(context, currentPackages)
     }
 
-    // ✅ ADD: Predefined app categories
-    private fun getSocialApps() = setOf(
-        "com.instagram.android",
-        "com.facebook.katana",
-        "com.twitter.android",
-        "com.snapchat.android",
-        "com.tiktok.android",
-        "com.whatsapp"
-    )
+    fun clearBlockedPackages(context: Context) {
+        setBlockedPackages(context, emptySet())
+    }
 
-    private fun getGameApps() = setOf(
-        "com.supercell.clashofclans",
-        "com.king.candycrushsaga",
-        "com.mojang.minecraftpe",
-        "com.activision.callofduty.shooter"
-    )
-
-    private fun getEntertainmentApps() = setOf(
-        "com.netflix.mediaclient",
-        "com.amazon.avod.thirdpartyclient",
-        "com.disney.disneyplus",
-        "com.spotify.music",
-        "com.google.android.youtube"
-    )
-
-    private fun getShoppingApps() = setOf(
-        "com.amazon.mshop.android.shopping",
-        "in.amazon.mShop.android.shopping",
-        "com.flipkart.android",
-        "com.myntra.android"
-    )
-
-    private fun getAllDistractingApps() =
-        getSocialApps() + getGameApps() + getEntertainmentApps() + getShoppingApps()
-
+    fun isPackageBlocked(context: Context, packageName: String): Boolean {
+        return isBlockingEnabled(context) && getBlockedPackages(context).contains(packageName)
+    }
 
     /**
-     * Create notification channel (required for Android O+)
+     * Block apps for a specific workflow with tracking
      */
-    private fun createNotificationChannel(context: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Emergency Unblock",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Emergency unblock notification for blocked apps"
-                enableVibration(true)
-                enableLights(true)
+    fun blockAppsForWorkflow(
+        context: Context,
+        workflowId: Long,
+        packages: List<String>,
+        reason: String = "workflow_triggered"
+    ) {
+        addBlockedPackages(context, packages)
+
+        val workflowBlocks = getWorkflowBlocks(context).toMutableMap()
+        workflowBlocks[workflowId] = packages
+        saveWorkflowBlocks(context, workflowBlocks)
+
+        Log.d(TAG, "🚫 Blocked ${packages.size} apps for workflow $workflowId (reason: $reason)")
+    }
+
+    /**
+     * Unblock apps for a specific workflow
+     */
+    fun unblockAppsForWorkflow(context: Context, workflowId: Long): List<String> {
+        val workflowBlocks = getWorkflowBlocks(context).toMutableMap()
+        val packagesToUnblock = workflowBlocks[workflowId] ?: emptyList()
+
+        if (packagesToUnblock.isNotEmpty()) {
+            removeBlockedPackages(context, packagesToUnblock)
+            workflowBlocks.remove(workflowId)
+            saveWorkflowBlocks(context, workflowBlocks)
+
+            Log.d(TAG, "✅ Unblocked ${packagesToUnblock.size} apps for workflow $workflowId")
+
+            if (getBlockedPackages(context).isEmpty()) {
+                setBlockingEnabled(context, false)
+                Log.d(TAG, "🔓 All apps unblocked - disabling blocking system")
             }
+        }
 
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
+        return packagesToUnblock
+    }
+
+    /**
+     * Block apps for location-based trigger
+     */
+    fun blockAppsForLocation(
+        context: Context,
+        locationId: String,
+        packages: List<String>,
+        workflowId: Long
+    ) {
+        blockAppsForWorkflow(context, workflowId, packages, "location_$locationId")
+
+        val locationBlocks = getLocationBlocks(context).toMutableMap()
+        locationBlocks[locationId] = LocationBlock(
+            workflowId = workflowId,
+            packages = packages,
+            timestamp = System.currentTimeMillis()
+        )
+        saveLocationBlocks(context, locationBlocks)
+
+        Log.d(TAG, "📍 Blocked ${packages.size} apps for location $locationId")
+    }
+
+    /**
+     * Unblock apps when exiting location
+     */
+    fun unblockAppsForLocation(context: Context, locationId: String): List<String> {
+        val locationBlocks = getLocationBlocks(context).toMutableMap()
+        val locationBlock = locationBlocks[locationId]
+
+        val packagesToUnblock = if (locationBlock != null) {
+            unblockAppsForWorkflow(context, locationBlock.workflowId)
+        } else {
+            emptyList()
+        }
+
+        locationBlocks.remove(locationId)
+        saveLocationBlocks(context, locationBlocks)
+
+        Log.d(TAG, "🚪 Unblocked ${packagesToUnblock.size} apps for location exit $locationId")
+        return packagesToUnblock
+    }
+
+    /**
+     * Force unblock all apps and clear all tracking
+     */
+    fun clearAllBlocks(context: Context) {
+        val prefs = getPrefs(context)
+        prefs.edit()
+            .remove(KEY_BLOCKED_PACKAGES)
+            .remove(KEY_WORKFLOW_BLOCKS)
+            .remove(KEY_LOCATION_BLOCKS)
+            .remove(KEY_BLOCKING_REASONS)
+            .putBoolean(KEY_BLOCKING_ENABLED, false)
+            .apply()
+
+        Log.d(TAG, "🧹 Cleared all app blocks and tracking data")
+    }
+
+    // PRIVATE HELPER METHODS
+    private fun getWorkflowBlocks(context: Context): Map<Long, List<String>> {
+        val prefs = getPrefs(context)
+        val jsonString = prefs.getString(KEY_WORKFLOW_BLOCKS, "{}") ?: "{}"
+        return try {
+            val jsonObject = JSONObject(jsonString)
+            val map = mutableMapOf<Long, List<String>>()
+            jsonObject.keys().forEach { key ->
+                val workflowId = key.toLongOrNull()
+                if (workflowId != null) {
+                    val packagesArray = jsonObject.getJSONArray(key)
+                    val packages = mutableListOf<String>()
+                    for (i in 0 until packagesArray.length()) {
+                        packages.add(packagesArray.getString(i))
+                    }
+                    map[workflowId] = packages
+                }
+            }
+            map
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing workflow blocks", e)
+            emptyMap()
         }
     }
+
+    private fun saveWorkflowBlocks(context: Context, workflowBlocks: Map<Long, List<String>>) {
+        val prefs = getPrefs(context)
+        val jsonObject = JSONObject()
+        workflowBlocks.forEach { (workflowId, packages) ->
+            val packagesArray = JSONArray()
+            packages.forEach { packagesArray.put(it) }
+            jsonObject.put(workflowId.toString(), packagesArray)
+        }
+        prefs.edit().putString(KEY_WORKFLOW_BLOCKS, jsonObject.toString()).apply()
+    }
+
+    private fun getLocationBlocks(context: Context): Map<String, LocationBlock> {
+        val prefs = getPrefs(context)
+        val jsonString = prefs.getString(KEY_LOCATION_BLOCKS, "{}") ?: "{}"
+        return try {
+            val jsonObject = JSONObject(jsonString)
+            val map = mutableMapOf<String, LocationBlock>()
+            jsonObject.keys().forEach { locationId ->
+                val locationData = jsonObject.getJSONObject(locationId)
+                val workflowId = locationData.getLong("workflowId")
+                val packagesArray = locationData.getJSONArray("packages")
+                val packages = mutableListOf<String>()
+                for (i in 0 until packagesArray.length()) {
+                    packages.add(packagesArray.getString(i))
+                }
+                val timestamp = locationData.getLong("timestamp")
+
+                map[locationId] = LocationBlock(workflowId, packages, timestamp)
+            }
+            map
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing location blocks", e)
+            emptyMap()
+        }
+    }
+
+    private fun saveLocationBlocks(context: Context, locationBlocks: Map<String, LocationBlock>) {
+        val prefs = getPrefs(context)
+        val jsonObject = JSONObject()
+        locationBlocks.forEach { (locationId, locationBlock) ->
+            val locationData = JSONObject()
+            locationData.put("workflowId", locationBlock.workflowId)
+            locationData.put("timestamp", locationBlock.timestamp)
+
+            val packagesArray = JSONArray()
+            locationBlock.packages.forEach { packagesArray.put(it) }
+            locationData.put("packages", packagesArray)
+
+            jsonObject.put(locationId, locationData)
+        }
+        prefs.edit().putString(KEY_LOCATION_BLOCKS, jsonObject.toString()).apply()
+    }
+
+    // DATA CLASSES
+    data class LocationBlock(
+        val workflowId: Long,
+        val packages: List<String>,
+        val timestamp: Long
+    )
 }

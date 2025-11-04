@@ -215,7 +215,7 @@ private fun EmptyNotificationsView() {
  * Individual notification card
  */
 /**
- * ✅ PERSISTENT: Individual notification card (no auto-mark as read)
+ *  PERSISTENT: Individual notification card (no auto-mark as read)
  */
 @Composable
 private fun NotificationCard(
@@ -231,14 +231,14 @@ private fun NotificationCard(
                 notification.type == NotificationType.MEETING_MODE ->
                     MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
                 !notification.isRead ->
-                    MaterialTheme.colorScheme.surfaceVariant  // ✅ Highlight unread
+                    MaterialTheme.colorScheme.surfaceVariant  //  Highlight unread
                 else ->
                     MaterialTheme.colorScheme.surface
             }
         ),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(
-            defaultElevation = if (!notification.isRead) 6.dp else 2.dp  // ✅ Higher elevation for unread
+            defaultElevation = if (!notification.isRead) 6.dp else 2.dp  //  Higher elevation for unread
         )
     ) {
         Column(
@@ -272,7 +272,7 @@ private fun NotificationCard(
                             color = MaterialTheme.colorScheme.onSurface
                         )
 
-                        // ✅ PERSISTENT: Show unread badge prominently
+                        //  PERSISTENT: Show unread badge prominently
                         if (!notification.isRead) {
                             Text(
                                 text = "UNREAD",
@@ -312,7 +312,7 @@ private fun NotificationCard(
                         Spacer(modifier = Modifier.width(8.dp))
                     }
 
-                    // ✅ MANUAL: Mark as read button (only show for unread notifications)
+                    //  MANUAL: Mark as read button (only show for unread notifications)
                     if (!notification.isRead) {
                         IconButton(
                             onClick = onMarkAsRead,

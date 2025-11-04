@@ -59,7 +59,7 @@ object Constants {
     const val KEY_LOCATION_LNG = "location_longitude"
     const val KEY_LOCATION_RADIUS = "location_radius"
 
-    //  JSON PARAMETER KEYS 
+    //  JSON PARAMETER KEYS
     // Notification parameters
     const val JSON_KEY_NOTIFICATION_TITLE = "notificationTitle"
     const val JSON_KEY_NOTIFICATION_MESSAGE = "notificationMessage"
@@ -91,7 +91,7 @@ object Constants {
     const val JSON_KEY_LOCATION_RADIUS = "locationRadius"
     const val JSON_KEY_LOCATION_ENTRY_EXIT = "locationEntryExit"
 
-    //  NOTIFICATION CONSTANTS 
+    //  NOTIFICATION CONSTANTS
     const val NOTIFICATION_CHANNEL_ID_DEFAULT = "autoflow_default"
     const val NOTIFICATION_CHANNEL_ID_HIGH_PRIORITY = "autoflow_high_priority"
     const val NOTIFICATION_CHANNEL_ID_TRIGGERS = "autoflow_triggers"
@@ -111,13 +111,13 @@ object Constants {
     const val WIFI_STATE_CONNECTED = "CONNECTED"
     const val WIFI_STATE_DISCONNECTED = "DISCONNECTED"
 
-    //  BLUETOOTH CONSTANTS 
+    //  BLUETOOTH CONSTANTS
     const val BLUETOOTH_STATE_ON = "ON"
     const val BLUETOOTH_STATE_OFF = "OFF"
     const val BLUETOOTH_STATE_CONNECTED = "CONNECTED"
     const val BLUETOOTH_STATE_DISCONNECTED = "DISCONNECTED"
 
-    //  LOCATION CONSTANTS 
+    //  LOCATION CONSTANTS
     const val LOCATION_TRIGGER_ENTRY = "Entry"
     const val LOCATION_TRIGGER_EXIT = "Exit"
     const val LOCATION_TRIGGER_BOTH = "Both"
@@ -135,7 +135,7 @@ object Constants {
     // Maximum allowed future time for triggers (24 hours)
     const val MAX_FUTURE_TIME_MS = 24 * 60 * 60 * 1000L
 
-    //  SYSTEM SETTINGS CONSTANTS 
+    //  SYSTEM SETTINGS CONSTANTS
     const val SETTING_WIFI = "WiFi"
     const val SETTING_BLUETOOTH = "Bluetooth"
     const val SETTING_LOCATION = "Location"
@@ -145,12 +145,12 @@ object Constants {
     const val SETTING_FLASHLIGHT = "Flashlight"
     const val SETTING_MOBILE_DATA = "MobileData"
 
-    //  DATABASE CONSTANTS 
+    //  DATABASE CONSTANTS
     const val DATABASE_NAME = "autoflow_database"
     const val DATABASE_VERSION = 1
     const val TABLE_WORKFLOWS = "workflows"
 
-    //  SHARED PREFERENCES KEYS 
+    //  SHARED PREFERENCES KEYS
     const val PREF_FILE_NAME = "autoflow_preferences"
     const val PREF_FIRST_RUN = "pref_first_run"
     const val PREF_NOTIFICATIONS_ENABLED = "pref_notifications_enabled"
@@ -159,20 +159,20 @@ object Constants {
     const val PREF_TRIGGER_CHECK_INTERVAL = "pref_trigger_check_interval"
     const val PREF_DEBUG_MODE_ENABLED = "pref_debug_mode_enabled"
 
-    //  INTENT ACTION CONSTANTS 
+    //  INTENT ACTION CONSTANTS
     const val ACTION_TRIGGER_FIRED = "com.example.autoflow.TRIGGER_FIRED"
     const val ACTION_WORKFLOW_EXECUTED = "com.example.autoflow.WORKFLOW_EXECUTED"
     const val ACTION_PERMISSION_GRANTED = "com.example.autoflow.PERMISSION_GRANTED"
     const val ACTION_PERMISSION_DENIED = "com.example.autoflow.PERMISSION_DENIED"
 
-    //  INTENT EXTRA KEYS 
+    //  INTENT EXTRA KEYS
     const val EXTRA_WORKFLOW_ID = "extra_workflow_id"
     const val EXTRA_TRIGGER_TYPE = "extra_trigger_type"
     const val EXTRA_TRIGGER_VALUE = "extra_trigger_value"
     const val EXTRA_EXECUTION_SUCCESS = "extra_execution_success"
     const val EXTRA_ERROR_MESSAGE = "extra_error_message"
 
-    //  VALIDATION CONSTANTS 
+    //  VALIDATION CONSTANTS
     const val MAX_WORKFLOW_NAME_LENGTH = 100
     const val MAX_NOTIFICATION_TITLE_LENGTH = 50
     const val MAX_NOTIFICATION_MESSAGE_LENGTH = 200
@@ -180,7 +180,7 @@ object Constants {
     const val MIN_TRIGGER_CHECK_INTERVAL_SECONDS = 30
     const val MAX_CONCURRENT_WORKFLOWS = 50
 
-    //  ERROR CODES 
+    //  ERROR CODES
     const val ERROR_CODE_PERMISSION_DENIED = 1001
     const val ERROR_CODE_BLUETOOTH_NOT_AVAILABLE = 1002
     const val ERROR_CODE_LOCATION_NOT_AVAILABLE = 1003
@@ -190,13 +190,13 @@ object Constants {
     const val ERROR_CODE_WORKFLOW_EXECUTION_FAILED = 1007
     const val ERROR_CODE_DATABASE_ERROR = 1008
 
-    //  SUCCESS CODES 
+    //  SUCCESS CODES
     const val SUCCESS_CODE_WORKFLOW_CREATED = 2001
     const val SUCCESS_CODE_WORKFLOW_EXECUTED = 2002
     const val SUCCESS_CODE_TRIGGER_REGISTERED = 2003
     const val SUCCESS_CODE_PERMISSIONS_GRANTED = 2004
 
-    //  SCRIPT LANGUAGES 
+    //  SCRIPT LANGUAGES
     const val SCRIPT_LANGUAGE_JAVASCRIPT = "javascript"
     const val SCRIPT_LANGUAGE_SHELL = "shell"
     const val SCRIPT_LANGUAGE_PYTHON = "python"
@@ -206,12 +206,12 @@ object Constants {
     const val SCRIPT_TIMEOUT_MEDIUM = 30000L // 30 seconds
     const val SCRIPT_TIMEOUT_LONG = 60000L   // 1 minute
 
-    //  BATTERY CONSTANTS 
+    //  BATTERY CONSTANTS
     const val BATTERY_LEVEL_LOW = 20
     const val BATTERY_LEVEL_CRITICAL = 10
     const val BATTERY_LEVEL_FULL = 100
 
-    //  VOLUME CONSTANTS 
+    //  VOLUME CONSTANTS
     const val VOLUME_TYPE_MEDIA = "media"
     const val VOLUME_TYPE_RING = "ring"
     const val VOLUME_TYPE_ALARM = "alarm"
@@ -237,6 +237,21 @@ object Constants {
     const val PREF_MANUAL_MEETING_MODE = "manual_meeting_mode"
     const val PREF_AUTO_REPLY_MESSAGE = "auto_reply_message"
     const val PREF_AUTO_REPLY_ONLY_IN_DND = "auto_reply_only_in_dnd"
+
+
+    const val ACTION_SET_BRIGHTNESS = "SET_BRIGHTNESS"
+    const val ACTION_INCREASE_BRIGHTNESS = "INCREASE_BRIGHTNESS"
+    const val ACTION_DECREASE_BRIGHTNESS = "DECREASE_BRIGHTNESS"
+
+    const val ACTION_SET_MEDIA_VOLUME = "SET_MEDIA_VOLUME"
+    const val ACTION_SET_RING_VOLUME = "SET_RING_VOLUME"
+    const val ACTION_SET_NOTIFICATION_VOLUME = "SET_NOTIFICATION_VOLUME"
+    const val ACTION_SET_ALARM_VOLUME = "SET_ALARM_VOLUME"
+    const val ACTION_SET_CALL_VOLUME = "SET_CALL_VOLUME"
+
+
+    const val TRIGGER_BLUETOOTH = "BLUETOOTH"
+    const val TRIGGER_BATTERY = "BATTERY"
 
 
 

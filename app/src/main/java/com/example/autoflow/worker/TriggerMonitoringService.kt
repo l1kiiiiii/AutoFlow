@@ -9,11 +9,12 @@ import com.example.autoflow.data.toActions
 import com.example.autoflow.data.toTriggers
 import com.example.autoflow.util.ActionExecutor
 import com.example.autoflow.util.TriggerEvaluator
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Generic Trigger Monitoring Worker
+ * ✅ COMPLETELY FIXED Generic Trigger Monitoring Worker
  * Monitors and executes workflow actions
  */
 class TriggerMonitoringWorker(
@@ -30,6 +31,7 @@ class TriggerMonitoringWorker(
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
             val workflowId = inputData.getLong(KEY_WORKFLOW_ID, -1L)
+
             if (workflowId == -1L) {
                 Log.e(TAG, "❌ Invalid workflow ID")
                 return@withContext Result.failure()
@@ -43,35 +45,48 @@ class TriggerMonitoringWorker(
                 return@withContext Result.success()
             }
 
-            // ✅ NEW: Get all triggers and build current states
+            // ✅ FIXED: Get all triggers and build current states
             val triggers = workflow.toTriggers()
-            val currentStates = TriggerEvaluator.buildCurrentStates(
+            val triggerEvaluator = TriggerEvaluator.getInstance()
+
+            val currentStates = triggerEvaluator.buildCurrentStates(
                 applicationContext,
-                triggers
+                triggers,
+                CoroutineScope(Dispatchers.IO)
             )
 
-            // ✅ NEW: Evaluate with trigger logic
-            val shouldExecute = TriggerEvaluator.evaluateWorkflow(
-                workflow,
-                currentStates
+            // ✅ FIXED: Evaluate with trigger logic
+            val shouldExecute = triggerEvaluator.evaluateTriggers(
+                triggers,
+                workflow.triggerLogic,
+                currentStates,
+                CoroutineScope(Dispatchers.IO)
             )
 
             if (shouldExecute) {
                 // Execute all actions
                 val actions = workflow.toActions()
+                val actionExecutor = ActionExecutor.getInstance()
+
                 actions.forEach { action ->
-                    ActionExecutor.executeAction(applicationContext, action)
+                    // ✅ FIXED: Use proper executeAction method with scope
+                    actionExecutor.executeAction(
+                        applicationContext,
+                        action,
+                        CoroutineScope(Dispatchers.IO)
+                    )
                 }
+
                 Log.d(TAG, "✅ Workflow executed: $workflowId")
             } else {
-                Log.d(TAG, "⚠️ Trigger conditions not met for workflow: $workflowId")
+                Log.d(TAG, "⏭️ Trigger conditions not met for workflow: $workflowId")
             }
 
             return@withContext Result.success()
+
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error in worker", e)
             return@withContext Result.retry()
         }
     }
-
 }

@@ -44,9 +44,6 @@ data class WorkflowEntity(
     companion object {
         private const val TAG = "WorkflowEntity"
 
-        /**
-         * ✅ FIXED: Create WorkflowEntity from simple trigger and action data
-         */
         fun fromTriggersAndActions(
             workflowName: String,
             isEnabled: Boolean,
@@ -55,39 +52,17 @@ data class WorkflowEntity(
             triggerLogic: String = "AND"
         ): WorkflowEntity? {
             return try {
-                Log.d(
-                    TAG,
-                    "🔨 Creating WorkflowEntity with ${triggers.size} triggers and ${actions.size} actions"
-                )
+                Log.d(TAG, "🔨 Creating WorkflowEntity with ${triggers.size} triggers and ${actions.size} actions")
 
-                // Build triggers JSON using base Trigger properties
                 val triggersJson = JSONArray()
                 triggers.forEach { trigger ->
                     val triggerObj = JSONObject().apply {
                         put("type", trigger.type)
                         put("value", trigger.value)
-
-                        // Parse additional fields from value JSON if needed
-                        if (trigger.value.startsWith("{")) {
-                            try {
-                                val valueJson = JSONObject(trigger.value)
-                                val keys = valueJson.keys()
-                                while (keys.hasNext()) {
-                                    val key = keys.next()
-                                    put(key, valueJson.get(key))
-                                }
-                            } catch (e: Exception) {
-                                Log.w(
-                                    TAG,
-                                    "Could not parse trigger value as JSON: ${trigger.value}"
-                                )
-                            }
-                        }
                     }
                     triggersJson.put(triggerObj)
                 }
 
-                // Build actions JSON
                 val actionsJson = JSONArray()
                 actions.forEach { action ->
                     val actionObj = JSONObject().apply {
@@ -101,7 +76,7 @@ data class WorkflowEntity(
                     actionsJson.put(actionObj)
                 }
 
-                val entity = WorkflowEntity(
+                WorkflowEntity(
                     workflowName = workflowName,
                     triggerDetails = triggersJson.toString(),
                     actionDetails = actionsJson.toString(),
@@ -110,16 +85,136 @@ data class WorkflowEntity(
                     createdAt = System.currentTimeMillis(),
                     updatedAt = System.currentTimeMillis()
                 )
-
-                Log.d(TAG, "✅ WorkflowEntity created successfully")
-                Log.d(TAG, " Triggers JSON: ${entity.triggerDetails}")
-                Log.d(TAG, " Actions JSON: ${entity.actionDetails}")
-                entity  // ← ONLY ONE RETURN STATEMENT NEEDED HERE
-
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error creating WorkflowEntity", e)
-                return null  // ← AND ONE IN THE CATCH BLOCK
+                null
             }
         }
+    }
+}
+
+// ✅ EXTENSION FUNCTIONS - ONLY DEFINE THESE ONCE HERE
+
+/**
+ * Convert WorkflowEntity to list of Triggers
+ */
+fun WorkflowEntity.toTriggers(): List<Trigger> {
+    return try {
+        val triggersList = mutableListOf<Trigger>()
+        val jsonArray = JSONArray(this.triggerDetails)
+
+        for (i in 0 until jsonArray.length()) {
+            val triggerObj = jsonArray.getJSONObject(i)
+            val trigger = Trigger(
+                type = triggerObj.getString("type"),
+                value = triggerObj.optString("value", triggerObj.toString())
+            )
+            triggersList.add(trigger)
+        }
+
+        Log.d("WorkflowEntity", "✅ Converted to ${triggersList.size} triggers")
+        triggersList
+    } catch (e: Exception) {
+        Log.e("WorkflowEntity", "❌ Error parsing triggers from: $triggerDetails", e)
+        emptyList()
+    }
+}
+
+/**
+ * Convert WorkflowEntity to list of Actions
+ */
+fun WorkflowEntity.toActions(): List<Action> {
+    return try {
+        val actionsList = mutableListOf<Action>()
+        val jsonArray = JSONArray(this.actionDetails)
+
+        for (i in 0 until jsonArray.length()) {
+            val actionObj = jsonArray.getJSONObject(i)
+            val action = Action(
+                type = actionObj.getString("type"),
+                value = actionObj.optString("value", null),
+                title = actionObj.optString("title", null),
+                message = actionObj.optString("message", null),
+                priority = actionObj.optString("priority", null),
+                duration = actionObj.optLong("duration", 0).takeIf { it > 0 }
+            )
+            actionsList.add(action)
+        }
+
+        Log.d("WorkflowEntity", "✅ Converted to ${actionsList.size} actions")
+        actionsList
+    } catch (e: Exception) {
+        Log.e("WorkflowEntity", "❌ Error parsing actions from: $actionDetails", e)
+        emptyList()
+    }
+}
+
+/**
+ * Check if workflow has specific trigger type
+ */
+fun WorkflowEntity.hasTriggerType(triggerType: String): Boolean {
+    return try {
+        val jsonArray = JSONArray(this.triggerDetails)
+        for (i in 0 until jsonArray.length()) {
+            val triggerObj = jsonArray.getJSONObject(i)
+            if (triggerObj.getString("type") == triggerType) {
+                return true
+            }
+        }
+        false
+    } catch (e: Exception) {
+        Log.e("WorkflowEntity", "❌ Error checking trigger type", e)
+        false
+    }
+}
+
+/**
+ * Check if workflow has specific action type
+ */
+fun WorkflowEntity.hasActionType(actionType: String): Boolean {
+    return try {
+        val jsonArray = JSONArray(this.actionDetails)
+        for (i in 0 until jsonArray.length()) {
+            val actionObj = jsonArray.getJSONObject(i)
+            if (actionObj.getString("type") == actionType) {
+                return true
+            }
+        }
+        false
+    } catch (e: Exception) {
+        Log.e("WorkflowEntity", "❌ Error checking action type", e)
+        false
+    }
+}
+
+/**
+ * Get summary of triggers for display
+ */
+fun WorkflowEntity.getTriggerSummary(): String {
+    return try {
+        val triggersList = this.toTriggers()
+        when {
+            triggersList.isEmpty() -> "No triggers"
+            triggersList.size == 1 -> triggersList.first().type
+            else -> "${triggersList.first().type} + ${triggersList.size - 1} more"
+        }
+    } catch (e: Exception) {
+        "Unknown triggers"
+    }
+}
+
+/**
+ * Get summary of actions for display
+ */
+fun WorkflowEntity.getActionSummary(): String {
+    return try {
+        val actionsList = this.toActions()
+        when {
+            actionsList.isEmpty() -> "No actions"
+            actionsList.size == 1 -> actionsList.first().type
+            else -> "${actionsList.first().type} + ${actionsList.size - 1} more"
+        }
+    } catch (e: Exception) {
+        "Unknown actions"
     }
 }
