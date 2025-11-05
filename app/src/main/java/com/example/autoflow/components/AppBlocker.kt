@@ -1,353 +1,447 @@
-package com.example.autoflow.policy
+package com.example.autoflow.ui.components
 
 import android.content.Context
-import android.content.SharedPreferences
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
+import android.graphics.drawable.Drawable
+import android.os.Build
 import android.util.Log
-import org.json.JSONArray
-import org.json.JSONObject
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
- * ✅ COMPLETE BlockPolicy - Manages app blocking state with workflow tracking
+ * Data class representing an installed app
  */
-object BlockPolicy {
-    private const val TAG = "BlockPolicy"
-    private const val PREFS_NAME = "block_policy"
-    private const val KEY_BLOCKING_ENABLED = "blocking_enabled"
-    private const val KEY_BLOCKED_PACKAGES = "blocked_packages"
-    private const val KEY_WORKFLOW_BLOCKS = "workflow_blocks" // NEW: Track which workflow blocked which apps
-    private const val KEY_LOCATION_BLOCKS = "location_blocks" // NEW: Track location-based blocks
-    private const val KEY_BLOCKING_REASONS = "blocking_reasons" // NEW: Track why apps are blocked
+data class InstalledAppInfo(
+    val packageName: String,
+    val appName: String,
+    val icon: Drawable?,
+    val isSystemApp: Boolean = false
+)
 
-    private fun getPrefs(context: Context): SharedPreferences {
-        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+/**
+ * Composable function to fetch and display installed apps
+ * @param onAppsSelected Callback when apps are selected
+ * @param preSelectedApps List of already selected app package names
+ * @param showSystemApps Whether to show system apps (default: false)
+ */
+@Composable
+fun AppSelectorComposable(
+    onAppsSelected: (List<String>) -> Unit,
+    preSelectedApps: List<String> = emptyList(),
+    showSystemApps: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var installedApps by remember { mutableStateOf<List<InstalledAppInfo>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedApps by remember { mutableStateOf(preSelectedApps) }
+
+    LaunchedEffect(preSelectedApps) {
+        selectedApps = preSelectedApps
     }
 
-    // ✅ EXISTING METHODS (Enhanced)
-    fun setBlockingEnabled(context: Context, enabled: Boolean) {
-        val prefs = getPrefs(context)
-        prefs.edit().putBoolean(KEY_BLOCKING_ENABLED, enabled).apply()
-        Log.d(TAG, "🚫 Blocking ${if (enabled) "enabled" else "disabled"}")
+    LaunchedEffect(showSystemApps) {
+        isLoading = true
+        error = null
 
-        if (!enabled) {
-            // When blocking is disabled globally, clear all blocks
-            clearAllBlocks(context)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Log.d("AppSelector", "🤖 Running on Android ${Build.VERSION.SDK_INT}, using QUERY_ALL_PACKAGES")
+        }
+
+        scope.launch {
+            try {
+                val apps = fetchInstalledApps(context, showSystemApps)
+                installedApps = apps
+                Log.d("AppSelector", "✅ Successfully loaded ${apps.size} apps")
+            } catch (e: Exception) {
+                error = "Failed to load apps: ${e.message}"
+                Log.e("AppSelector", "❌ Error loading apps", e)
+            } finally {
+                isLoading = false
+            }
         }
     }
 
-    fun isBlockingEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(KEY_BLOCKING_ENABLED, false)
-    }
-
-    fun setBlockedPackages(context: Context, packages: Set<String>) {
-        val prefs = getPrefs(context)
-        val jsonArray = JSONArray()
-        packages.forEach { jsonArray.put(it) }
-        prefs.edit().putString(KEY_BLOCKED_PACKAGES, jsonArray.toString()).apply()
-        Log.d(TAG, "📦 Set blocked packages: ${packages.size} apps")
-    }
-
-    fun getBlockedPackages(context: Context): Set<String> {
-        val prefs = getPrefs(context)
-        val jsonString = prefs.getString(KEY_BLOCKED_PACKAGES, "[]") ?: "[]"
-        val jsonArray = JSONArray(jsonString)
-        val packages = mutableSetOf<String>()
-        for (i in 0 until jsonArray.length()) {
-            packages.add(jsonArray.getString(i))
+    val filteredApps = remember(installedApps, searchQuery) {
+        if (searchQuery.isEmpty()) {
+            installedApps
+        } else {
+            installedApps.filter { app ->
+                app.appName.contains(searchQuery, ignoreCase = true) ||
+                        app.packageName.contains(searchQuery, ignoreCase = true)
+            }
         }
-        return packages
     }
 
-    fun addBlockedPackages(context: Context, packages: List<String>) {
-        val currentPackages = getBlockedPackages(context).toMutableSet()
-        currentPackages.addAll(packages)
-        setBlockedPackages(context, currentPackages)
-    }
-
-    fun removeBlockedPackages(context: Context, packages: List<String>) {
-        val currentPackages = getBlockedPackages(context).toMutableSet()
-        currentPackages.removeAll(packages.toSet())
-        setBlockedPackages(context, currentPackages)
-    }
-
-    fun clearBlockedPackages(context: Context) {
-        setBlockedPackages(context, emptySet())
-    }
-
-    fun isPackageBlocked(context: Context, packageName: String): Boolean {
-        return isBlockingEnabled(context) && getBlockedPackages(context).contains(packageName)
-    }
-
-    // ✅ NEW METHODS: Workflow-based blocking with tracking
-
-    /**
-     * Block apps for a specific workflow with tracking
-     */
-    fun blockAppsForWorkflow(
-        context: Context,
-        workflowId: Long,
-        packages: List<String>,
-        reason: String = "workflow_triggered"
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        val prefs = getPrefs(context)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Select Apps",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
 
-        // Add to general blocked packages
-        addBlockedPackages(context, packages)
-
-        // Track which workflow blocked which packages
-        val workflowBlocks = getWorkflowBlocks(context).toMutableMap()
-        workflowBlocks[workflowId] = packages
-        saveWorkflowBlocks(context, workflowBlocks)
-
-        // Track blocking reasons
-        val reasons = getBlockingReasons(context).toMutableMap()
-        packages.forEach { pkg ->
-            reasons[pkg] = BlockReason(
-                workflowId = workflowId,
-                reason = reason,
-                timestamp = System.currentTimeMillis()
+            Text(
+                text = "${selectedApps.size} of ${installedApps.size} selected",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary
             )
         }
-        saveBlockingReasons(context, reasons)
 
-        Log.d(TAG, "🚫 Blocked ${packages.size} apps for workflow $workflowId (reason: $reason)")
-    }
-
-    /**
-     * Unblock apps for a specific workflow
-     */
-    fun unblockAppsForWorkflow(context: Context, workflowId: Long): List<String> {
-        val workflowBlocks = getWorkflowBlocks(context).toMutableMap()
-        val packagesToUnblock = workflowBlocks[workflowId] ?: emptyList()
-
-        if (packagesToUnblock.isNotEmpty()) {
-            // Remove from general blocked packages
-            removeBlockedPackages(context, packagesToUnblock)
-
-            // Remove workflow tracking
-            workflowBlocks.remove(workflowId)
-            saveWorkflowBlocks(context, workflowBlocks)
-
-            // Remove blocking reasons
-            val reasons = getBlockingReasons(context).toMutableMap()
-            packagesToUnblock.forEach { pkg ->
-                if (reasons[pkg]?.workflowId == workflowId) {
-                    reasons.remove(pkg)
-                }
-            }
-            saveBlockingReasons(context, reasons)
-
-            Log.d(TAG, "✅ Unblocked ${packagesToUnblock.size} apps for workflow $workflowId")
-
-            // If no more blocked packages, disable blocking
-            if (getBlockedPackages(context).isEmpty()) {
-                setBlockingEnabled(context, false)
-                Log.d(TAG, "🔓 All apps unblocked - disabling blocking system")
-            }
-        }
-
-        return packagesToUnblock
-    }
-
-    /**
-     * Block apps for location-based trigger
-     */
-    fun blockAppsForLocation(
-        context: Context,
-        locationId: String,
-        packages: List<String>,
-        workflowId: Long
-    ) {
-        blockAppsForWorkflow(context, workflowId, packages, "location_$locationId")
-
-        // Track location-specific blocks
-        val locationBlocks = getLocationBlocks(context).toMutableMap()
-        locationBlocks[locationId] = LocationBlock(
-            workflowId = workflowId,
-            packages = packages,
-            timestamp = System.currentTimeMillis()
-        )
-        saveLocationBlocks(context, locationBlocks)
-
-        Log.d(TAG, "📍 Blocked ${packages.size} apps for location $locationId")
-    }
-
-    /**
-     * Unblock apps when exiting location
-     */
-    fun unblockAppsForLocation(context: Context, locationId: String): List<String> {
-        val locationBlocks = getLocationBlocks(context).toMutableMap()
-        val locationBlock = locationBlocks[locationId]
-
-        val packagesToUnblock = if (locationBlock != null) {
-            // Unblock the workflow associated with this location
-            unblockAppsForWorkflow(context, locationBlock.workflowId)
-        } else {
-            emptyList()
-        }
-
-        // Remove location tracking
-        locationBlocks.remove(locationId)
-        saveLocationBlocks(context, locationBlocks)
-
-        Log.d(TAG, "🚪 Unblocked ${packagesToUnblock.size} apps for location exit $locationId")
-        return packagesToUnblock
-    }
-
-    /**
-     * Force unblock all apps and clear all tracking
-     */
-    fun clearAllBlocks(context: Context) {
-        val prefs = getPrefs(context)
-        prefs.edit()
-            .remove(KEY_BLOCKED_PACKAGES)
-            .remove(KEY_WORKFLOW_BLOCKS)
-            .remove(KEY_LOCATION_BLOCKS)
-            .remove(KEY_BLOCKING_REASONS)
-            .putBoolean(KEY_BLOCKING_ENABLED, false)
-            .apply()
-
-        Log.d(TAG, "🧹 Cleared all app blocks and tracking data")
-    }
-
-    /**
-     * Get which workflow blocked a specific package
-     */
-    fun getWorkflowForBlockedPackage(context: Context, packageName: String): Long? {
-        val reasons = getBlockingReasons(context)
-        return reasons[packageName]?.workflowId
-    }
-
-    /**
-     * Get all apps blocked by a specific workflow
-     */
-    fun getAppsBlockedByWorkflow(context: Context, workflowId: Long): List<String> {
-        val workflowBlocks = getWorkflowBlocks(context)
-        return workflowBlocks[workflowId] ?: emptyList()
-    }
-
-    // ✅ PRIVATE HELPER METHODS
-
-    private fun getWorkflowBlocks(context: Context): Map<Long, List<String>> {
-        val prefs = getPrefs(context)
-        val jsonString = prefs.getString(KEY_WORKFLOW_BLOCKS, "{}") ?: "{}"
-        return try {
-            val jsonObject = JSONObject(jsonString)
-            val map = mutableMapOf<Long, List<String>>()
-            jsonObject.keys().forEach { key ->
-                val workflowId = key.toLongOrNull()
-                if (workflowId != null) {
-                    val packagesArray = jsonObject.getJSONArray(key)
-                    val packages = mutableListOf<String>()
-                    for (i in 0 until packagesArray.length()) {
-                        packages.add(packagesArray.getString(i))
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            label = { Text("Search apps") },
+            leadingIcon = { Icon(Icons.Default.Search, null) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Close, "Clear")
                     }
-                    map[workflowId] = packages
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+
+        if (isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CircularProgressIndicator()
+                    Text("Loading apps...", style = MaterialTheme.typography.bodySmall)
                 }
             }
-            map
-        } catch (e: Exception) {
-            Log.e(TAG, "Error parsing workflow blocks", e)
-            emptyMap()
         }
-    }
 
-    private fun saveWorkflowBlocks(context: Context, workflowBlocks: Map<Long, List<String>>) {
-        val prefs = getPrefs(context)
-        val jsonObject = JSONObject()
-        workflowBlocks.forEach { (workflowId, packages) ->
-            val packagesArray = JSONArray()
-            packages.forEach { packagesArray.put(it) }
-            jsonObject.put(workflowId.toString(), packagesArray)
-        }
-        prefs.edit().putString(KEY_WORKFLOW_BLOCKS, jsonObject.toString()).apply()
-    }
+        error?.let { errorMsg ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Error Loading Apps",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = errorMsg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
 
-    private fun getLocationBlocks(context: Context): Map<String, LocationBlock> {
-        val prefs = getPrefs(context)
-        val jsonString = prefs.getString(KEY_LOCATION_BLOCKS, "{}") ?: "{}"
-        return try {
-            val jsonObject = JSONObject(jsonString)
-            val map = mutableMapOf<String, LocationBlock>()
-            jsonObject.keys().forEach { locationId ->
-                val locationData = jsonObject.getJSONObject(locationId)
-                val workflowId = locationData.getLong("workflowId")
-                val packagesArray = locationData.getJSONArray("packages")
-                val packages = mutableListOf<String>()
-                for (i in 0 until packagesArray.length()) {
-                    packages.add(packagesArray.getString(i))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                isLoading = true
+                                error = null
+                                try {
+                                    val apps = fetchInstalledApps(context, showSystemApps)
+                                    installedApps = apps
+                                } catch (e: Exception) {
+                                    error = "Failed to load apps: ${e.message}"
+                                } finally {
+                                    isLoading = false
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Icon(Icons.Default.Refresh, "Retry", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Retry")
+                    }
                 }
-                val timestamp = locationData.getLong("timestamp")
-
-                map[locationId] = LocationBlock(workflowId, packages, timestamp)
             }
-            map
-        } catch (e: Exception) {
-            Log.e(TAG, "Error parsing location blocks", e)
-            emptyMap()
         }
-    }
 
-    private fun saveLocationBlocks(context: Context, locationBlocks: Map<String, LocationBlock>) {
-        val prefs = getPrefs(context)
-        val jsonObject = JSONObject()
-        locationBlocks.forEach { (locationId, locationBlock) ->
-            val locationData = JSONObject()
-            locationData.put("workflowId", locationBlock.workflowId)
-            locationData.put("timestamp", locationBlock.timestamp)
+        if (!isLoading && error == null) {
+            if (installedApps.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            selectedApps = filteredApps.map { it.packageName }
+                            onAppsSelected(selectedApps)
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Select All", style = MaterialTheme.typography.labelSmall)
+                    }
 
-            val packagesArray = JSONArray()
-            locationBlock.packages.forEach { packagesArray.put(it) }
-            locationData.put("packages", packagesArray)
-
-            jsonObject.put(locationId, locationData)
-        }
-        prefs.edit().putString(KEY_LOCATION_BLOCKS, jsonObject.toString()).apply()
-    }
-
-    private fun getBlockingReasons(context: Context): Map<String, BlockReason> {
-        val prefs = getPrefs(context)
-        val jsonString = prefs.getString(KEY_BLOCKING_REASONS, "{}") ?: "{}"
-        return try {
-            val jsonObject = JSONObject(jsonString)
-            val map = mutableMapOf<String, BlockReason>()
-            jsonObject.keys().forEach { packageName ->
-                val reasonData = jsonObject.getJSONObject(packageName)
-                val workflowId = reasonData.getLong("workflowId")
-                val reason = reasonData.getString("reason")
-                val timestamp = reasonData.getLong("timestamp")
-
-                map[packageName] = BlockReason(workflowId, reason, timestamp)
+                    OutlinedButton(
+                        onClick = {
+                            selectedApps = emptyList()
+                            onAppsSelected(selectedApps)
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = selectedApps.isNotEmpty()
+                    ) {
+                        Text("Clear", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
             }
-            map
-        } catch (e: Exception) {
-            Log.e(TAG, "Error parsing blocking reasons", e)
-            emptyMap()
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(400.dp)
+            ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(8.dp)
+                ) {
+                    item {
+                        Text(
+                            text = "Showing ${filteredApps.size} apps",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    items(
+                        items = filteredApps,
+                        key = { it.packageName }
+                    ) { app ->
+                        AppListItem(
+                            app = app,
+                            isSelected = app.packageName in selectedApps,
+                            onToggle = { isSelected ->
+                                selectedApps = if (isSelected) {
+                                    selectedApps + app.packageName
+                                } else {
+                                    selectedApps - app.packageName
+                                }
+                                onAppsSelected(selectedApps)
+                            }
+                        )
+
+                        if (app != filteredApps.last()) {
+                            HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp))
+                        }
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+            }
+
+            if (filteredApps.isEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SearchOff,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = if (searchQuery.isNotEmpty()) {
+                                "No apps found matching \"$searchQuery\""
+                            } else {
+                                "No apps available"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
         }
     }
+}
 
-    private fun saveBlockingReasons(context: Context, reasons: Map<String, BlockReason>) {
-        val prefs = getPrefs(context)
-        val jsonObject = JSONObject()
-        reasons.forEach { (packageName, blockReason) ->
-            val reasonData = JSONObject()
-            reasonData.put("workflowId", blockReason.workflowId)
-            reasonData.put("reason", blockReason.reason)
-            reasonData.put("timestamp", blockReason.timestamp)
-            jsonObject.put(packageName, reasonData)
+@Composable
+private fun AppListItem(
+    app: InstalledAppInfo,
+    isSelected: Boolean,
+    onToggle: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onToggle(!isSelected) }
+            .padding(12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Apps,
+                contentDescription = null,
+                modifier = Modifier.size(32.dp),
+                tint = if (app.isSystemApp)
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                else
+                    MaterialTheme.colorScheme.primary
+            )
+
+            Column {
+                Text(
+                    text = app.appName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = app.packageName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (app.isSystemApp) {
+                    Text(
+                        text = "System App",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+            }
         }
-        prefs.edit().putString(KEY_BLOCKING_REASONS, jsonObject.toString()).apply()
+
+        Checkbox(
+            checked = isSelected,
+            onCheckedChange = onToggle
+        )
     }
+}
+/**
+ * Suspend function to fetch installed apps
+ */
+private suspend fun fetchInstalledApps(
+    context: Context,
+    includeSystemApps: Boolean
+): List<InstalledAppInfo> = withContext(Dispatchers.IO) {
+    try {
+        val packageManager = context.packageManager
 
-    // ✅ DATA CLASSES
-    data class LocationBlock(
-        val workflowId: Long,
-        val packages: List<String>,
-        val timestamp: Long
-    )
+        //  Simple approach that works on all Android versions
+        val packages = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
 
-    data class BlockReason(
-        val workflowId: Long,
-        val reason: String,
-        val timestamp: Long
-    )
+        Log.d("AppSelector", "📱 Found ${packages.size} total packages")
+
+        packages
+            .asSequence()
+            .filter { appInfo ->
+                val isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+
+                if (!includeSystemApps && isSystemApp) {
+                    false
+                } else {
+                    // Only include apps with launch intent
+                    packageManager.getLaunchIntentForPackage(appInfo.packageName) != null
+                }
+            }
+            .map { appInfo ->
+                InstalledAppInfo(
+                    packageName = appInfo.packageName,
+                    appName = try {
+                        packageManager.getApplicationLabel(appInfo).toString()
+                    } catch (e: Exception) {
+                        appInfo.packageName
+                    },
+                    icon = try {
+                        packageManager.getApplicationIcon(appInfo)
+                    } catch (e: Exception) {
+                        null
+                    },
+                    isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                )
+            }
+            .sortedBy { it.appName.lowercase() }
+            .toList()
+            .also {
+                Log.d("AppSelector", "✅ Filtered to ${it.size} launchable apps")
+            }
+    } catch (e: Exception) {
+        Log.e("AppFetcher", "❌ Error fetching apps: ${e.message}", e)
+        emptyList()
+    }
+}
+
+
+/**
+ * Utility function to get app name from package name
+ */
+fun getAppNameFromPackage(context: Context, packageName: String): String {
+    return try {
+        val packageManager = context.packageManager
+        val appInfo = packageManager.getApplicationInfo(packageName, 0)
+        packageManager.getApplicationLabel(appInfo).toString()
+    } catch (e: Exception) {
+        packageName
+    }
+}
+/**
+ * Utility function to check if an app is installed
+ */
+fun isAppInstalled(context: Context, packageName: String): Boolean {
+    return try {
+        context.packageManager.getApplicationInfo(packageName, 0)
+        true
+    } catch (e: PackageManager.NameNotFoundException) {
+        false
+    }
 }

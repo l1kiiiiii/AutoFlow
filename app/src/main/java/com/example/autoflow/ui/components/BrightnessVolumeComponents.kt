@@ -155,6 +155,17 @@ fun BrightnessActionCard(
 }
 
 @Composable
+fun ExpandableActionSection(
+    title: String,
+    icon: ImageVector,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    content: @Composable () -> Unit
+) {
+    TODO("Not yet implemented")
+}
+
+@Composable
 fun BrightnessActionContent(
     actions: List<BrightnessActionOption>,
     selectedAction: String,
