@@ -116,8 +116,8 @@ class GeofenceReceiver : BroadcastReceiver() {
 
                                 Log.d(TAG, "✅ Location validated - executing workflow")
 
-                                // ✅ FIXED: Direct ActionExecutor access (it's an object, not a singleton class)
-                                val success = ActionExecutor.getInstance().executeWorkflow(context, workflow)
+                                val success = ActionExecutor.executeWorkflow(context, workflow)
+
 
 
                                 if (success) {
