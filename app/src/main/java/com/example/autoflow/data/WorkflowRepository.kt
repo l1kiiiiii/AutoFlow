@@ -347,7 +347,16 @@ class WorkflowRepository(private val workflowDao: WorkflowDao) {
             Log.d(TAG, "🧹 Repository cleaned up")
         }
     }
-
+    suspend fun getWorkflowByIdSync(workflowId: Long): WorkflowEntity? {
+        return withContext(Dispatchers.IO) {
+            try {
+                workflowDao.getByIdSync(workflowId)
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error getting workflow by ID sync: $workflowId", e)
+                null
+            }
+        }
+    }
     //  CALLBACK INTERFACES 
 
     interface WorkflowCallback {

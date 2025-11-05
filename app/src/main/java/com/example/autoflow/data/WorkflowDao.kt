@@ -57,4 +57,16 @@ interface WorkflowDao {
 
     @Query("SELECT * FROM workflows WHERE is_enabled = 1")
     suspend fun getActiveWorkflows(): List<WorkflowEntity>
+
+    @Query("SELECT * FROM workflows WHERE id = :id")
+    suspend fun getWorkflowByIdSync(id: Long): WorkflowEntity?
+
+    @Insert
+    suspend fun insertSync(workflow: WorkflowEntity): Long
+
+    @Update
+    suspend fun updateSync(workflow: WorkflowEntity)
+
+    @Delete
+    suspend fun deleteSync(workflow: WorkflowEntity)
 }

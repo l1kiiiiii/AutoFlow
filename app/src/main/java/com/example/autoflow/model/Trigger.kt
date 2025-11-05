@@ -214,14 +214,6 @@ sealed class Trigger(val type: String, val value: String) {
             }.toString()
         }
 
-        /**
-         * ✅ Build JSON for time range trigger
-         */
-        fun buildTimeRangeJson(startTime: String, endTime: String, days: List<String>): String {
-            val daysJson = days.joinToString(separator = "\",\"", prefix = "[\"", postfix = "\"]")
-            return """{"startTime":"$startTime","endTime":"$endTime","days":$daysJson}"""
-        }
-
         //  VALIDATION METHODS
 
         private fun validateTimeTrigger(value: String): Boolean {
@@ -410,24 +402,6 @@ class TimeRangeTrigger : Trigger {
         this.endTime = endTime
         this.recurringDays = days
     }
-
-    /**
-     * Check if current time is within the sleep period
-     */
-    fun isCurrentlyInSleepPeriod(): Boolean {
-        val currentTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-        val currentDay = SimpleDateFormat("EEEE", Locale.getDefault()).format(Date()).uppercase()
-
-        if (!recurringDays.contains(currentDay)) return false
-
-        // Handle overnight periods (22:00 to 07:00 next day)
-        return if (startTime > endTime) {
-            currentTime >= startTime || currentTime < endTime
-        } else {
-            currentTime >= startTime && currentTime < endTime
-        }
-    }
-
     companion object {
         private fun buildTimeRangeJson(startTime: String, endTime: String, days: List<String>): String {
             val daysJson = days.joinToString(separator = "\",\"", prefix = "[\"", postfix = "\"]")

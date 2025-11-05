@@ -2,7 +2,6 @@ package com.example.autoflow
 
 import android.Manifest
 import android.app.AlarmManager
-import android.app.AppOpsManager
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -26,12 +25,7 @@ import androidx.core.net.toUri
 import com.example.autoflow.ui.theme.AutoFlowTheme
 import com.example.autoflow.ui.theme.screens.Dashboard
 import com.example.autoflow.util.NotificationHelper
-import com.example.autoflow.data.AppDatabase
-import com.example.autoflow.data.WorkflowEntity
-import androidx.room.Room
 import com.example.autoflow.integrations.PhoneStateManager
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -54,11 +48,13 @@ class MainActivity : ComponentActivity() {
                 Log.e(TAG, "❌ Failed to create notification channels", e)
                 showError("Failed to initialize notifications: ${e.message}")
             }
+
             // ✅ ADD: Check auto-reply system on app start
             checkAllAutoReplyRequirements(this)
 
             // ✅ ADD: Set flags manually for testing (REMOVE after testing)
             testSetAutoReplyFlags(this)
+
             // ✅ Request permissions
             checkAndRequestAllPermissions()
 
@@ -86,65 +82,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // ✅ FIXED: Cleanup function with proper imports and database access
-    private fun cleanupDuplicateMeetingModes() {
-        GlobalScope.launch {
-            try {
-                // ✅ Create database instance with proper name
-                val db = Room.databaseBuilder(
-                    applicationContext,
-                    AppDatabase::class.java,
-                    "autoflow_database"  // Use your actual database name
-                ).build()
-
-                // ✅ FIXED: Use suspending function instead of LiveData
-                val dao = db.workflowDao()
-
-                // You need to add a suspending version to your DAO:
-                // @Query("SELECT * FROM workflows")
-                // suspend fun getAllWorkflowsSync(): List<WorkflowEntity>
-
-                // ✅ ALTERNATIVE: Use existing method if you have it
-                val allWorkflows = dao.getAllWorkflowsSync() // Suspending version
-
-                val meetingModes = allWorkflows.filter { workflow ->
-                    workflow.workflowName.contains("Meeting Mode", ignoreCase = true)
-                }
-
-                if (meetingModes.size > 1) {
-                    Log.d(TAG, "🧹 Found ${meetingModes.size} duplicate Meeting Modes to clean up")
-
-                    // Keep only the most recent one, delete the rest
-                    val latestMeetingMode = meetingModes.maxByOrNull { workflow -> workflow.id }
-                    val duplicatesToDelete = meetingModes.filter { workflow ->
-                        workflow.id != latestMeetingMode?.id
-                    }
-
-                    duplicatesToDelete.forEach { workflow ->
-                        dao.delete(workflow)
-                        Log.d(TAG, "🗑️ Deleted duplicate Meeting Mode: ID ${workflow.id}")
-                    }
-
-                    Log.d(TAG, "✅ Cleaned up ${duplicatesToDelete.size} duplicate Meeting Modes")
-
-                    runOnUiThread {
-                        Toast.makeText(
-                            this@MainActivity,
-                            "🧹 Cleaned up ${duplicatesToDelete.size} duplicate Meeting Modes",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
-
-                // Close database
-                db.close()
-
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Error cleaning up duplicates", e)
-            }
-        }
-    }
-
+    // Rest of your existing methods remain the same...
     private fun checkAndRequestAllPermissions() {
         val basicPermissions = mutableListOf<String>()
 
@@ -215,6 +153,7 @@ class MainActivity : ComponentActivity() {
             enableAutoReplyForTesting()
         }
     }
+
     // Add to MainActivity.kt or create a utility class
     fun checkAutoReplyPermissions(context: Context): Boolean {
         val permissions = arrayOf(
@@ -278,6 +217,7 @@ class MainActivity : ComponentActivity() {
         val allGood = hasPermissions && autoReplyEnabled && meetingMode && !message.isNullOrEmpty()
         Log.d("AutoReplyCheck", if (allGood) "✅ Auto-reply fully ready!" else "❌ Auto-reply has issues")
     }
+
     // Add to MainActivity.kt for testing
     fun testSetAutoReplyFlags(context: Context) {
         Log.d("TestAutoReply", "🧪 Manually setting auto-reply flags for testing...")
@@ -462,38 +402,6 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error in onResume", e)
             super.onResume()
-        }
-    }
-
-    fun hasUsageStatsPermission(): Boolean {
-        return try {
-            val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-            val mode = appOps.checkOpNoThrow(
-                AppOpsManager.OPSTR_GET_USAGE_STATS,
-                android.os.Process.myUid(),
-                packageName
-            )
-            val hasPermission = mode == AppOpsManager.MODE_ALLOWED
-            Log.d(TAG, "Usage stats permission: $hasPermission")
-            hasPermission
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Error checking usage stats permission", e)
-            false
-        }
-    }
-
-    fun requestUsageStatsPermission() {
-        try {
-            val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
-            startActivity(intent)
-            Toast.makeText(this, "Please enable 'Usage Access' for AutoFlow to block apps", Toast.LENGTH_LONG).show()
-            Log.d(TAG, "✅ Opened usage stats permission settings")
-        } catch (e: ActivityNotFoundException) {
-            Log.e(TAG, "❌ Usage stats settings not available", e)
-            showError("Usage stats settings not available on this device")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Error requesting usage stats permission", e)
-            showError("Failed to open usage stats settings")
         }
     }
 

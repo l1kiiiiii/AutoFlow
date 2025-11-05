@@ -9,7 +9,8 @@ import android.util.Log
 import com.example.autoflow.util.AutoReplyManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -22,7 +23,9 @@ class PhoneStateReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "PhoneStateReceiver"
     }
-    private val coroutineScope = CoroutineScope(Dispatchers.IO)
+
+    // ✅ FIXED: Use SupervisorJob for proper lifecycle management
+    private val receiverScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override fun onReceive(context: Context, intent: Intent) {
         try {
@@ -42,21 +45,6 @@ class PhoneStateReceiver : BroadcastReceiver() {
                     phoneNumber?.let { number ->
                         handleCallEnded(context, number)
                         Log.d(TAG, "📵 Call ended, checking auto-reply conditions for: $number")
-
-                        /*
-                        coroutineScope.launch {
-                            val autoReplyManager = AutoReplyManager.getInstance(context)
-
-                            // ✅ Only auto-reply if in meeting mode context
-                            if (autoReplyManager.shouldAutoReply()) {
-                                Log.d(TAG, "✅ Meeting mode active, sending auto-reply")
-                                autoReplyManager.handleMissedCall(number)
-                            } else {
-                                Log.d(TAG, "⏭️ Not in meeting mode, skipping auto-reply")
-                            }
-                        }
-
-                         */
                     }
                 }
 
@@ -70,6 +58,7 @@ class PhoneStateReceiver : BroadcastReceiver() {
             Log.e(TAG, "❌ Error in PhoneStateReceiver", e)
         }
     }
+
     private fun handleAnyIncomingCall(context: Context, phoneNumber: String?) {
         Log.d(TAG, "🔥 handleAnyIncomingCall called")
         Log.d(TAG, "   📱 Number: ${phoneNumber ?: "Unknown/Private/Company"}")
@@ -110,8 +99,7 @@ class PhoneStateReceiver : BroadcastReceiver() {
     }
 
     /**
-     * ✅ NEW: Handle calls when phone number is unknown/null
-     * This will trigger auto-reply even without knowing the caller's number
+     * ✅ FIXED: Handle calls when phone number is unknown/null with proper scope
      */
     private fun handleIncomingCallWithUnknownNumber(context: Context) {
         Log.d(TAG, "🔥 handleIncomingCallWithUnknownNumber called")
@@ -123,8 +111,8 @@ class PhoneStateReceiver : BroadcastReceiver() {
             // Use a placeholder number or "Unknown" caller
             val unknownNumber = "Unknown"
 
-            // First check if we should send auto-reply (DND mode, etc.)
-            CoroutineScope(Dispatchers.IO).launch {
+            // ✅ FIXED: Use receiverScope instead of GlobalScope
+            receiverScope.launch {
                 try {
                     // Add a small delay to see if number becomes available
                     delay(500) // Wait 500ms
@@ -140,10 +128,12 @@ class PhoneStateReceiver : BroadcastReceiver() {
             Log.e(TAG, "❌ Error handling unknown caller", e)
         }
     }
+
+    // ✅ FIXED: Use receiverScope instead of coroutineScope
     private fun handleCallEnded(context: Context, phoneNumber: String) {
         Log.d(TAG, "📵 Call ended, checking auto-reply conditions for: $phoneNumber")
 
-        coroutineScope.launch {
+        receiverScope.launch {
             try {
                 val autoReplyManager = AutoReplyManager.getInstance(context)
 
@@ -168,6 +158,7 @@ class PhoneStateReceiver : BroadcastReceiver() {
         Log.d(TAG, "🔍 Direct check - auto_reply_enabled: $autoReplyEnabled")
         Log.d(TAG, "🔍 Direct check - manual_meeting_mode: $meetingMode")
         Log.d(TAG, "🔍 Direct check - message: $message")
+
         if (autoReplyEnabled && meetingMode && phoneNumber.isNotEmpty()) {
             try {
                 val smsManager = SmsManager.getDefault()
@@ -179,4 +170,16 @@ class PhoneStateReceiver : BroadcastReceiver() {
         }
     }
 
+    /**
+     * ✅ NEW: Cleanup method to cancel coroutines when receiver is destroyed
+     * Call this in your app's cleanup logic if needed
+     */
+    fun cleanup() {
+        try {
+            receiverScope.cancel()
+            Log.d(TAG, "✅ PhoneStateReceiver scope cancelled")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error cleaning up receiver scope", e)
+        }
+    }
 }

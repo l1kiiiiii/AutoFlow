@@ -5,7 +5,6 @@ package com.example.autoflow.model
  * Represents different types of actions that can be executed
  */
 class Action {
-
     @JvmField
     var type: String? = null
 
