@@ -1,4 +1,4 @@
-package com.example.autoflow.model
+package com.example.autoflow.data
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity

@@ -5,7 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.viewModelScope
 import com.example.autoflow.data.AppDatabase
-import com.example.autoflow.model.SavedBluetoothDevice
+import com.example.autoflow.data.SavedBluetoothDevice
 import kotlinx.coroutines.launch
 
 class BluetoothViewModel(application: Application) : AndroidViewModel(application) {

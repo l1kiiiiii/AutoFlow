@@ -2,7 +2,7 @@ package com.example.autoflow.data
 
 import androidx.lifecycle.LiveData
 import androidx.room.*
-import com.example.autoflow.model.SavedLocation
+import com.example.autoflow.data.SavedLocation
 
 @Dao
 interface SavedLocationDao {

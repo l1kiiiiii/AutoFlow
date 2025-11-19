@@ -1,7 +1,7 @@
 package com.example.autoflow.util
 
 import android.util.Log
-import com.example.autoflow.model.Trigger
+import com.example.autoflow.domain.model.Trigger
 import org.json.JSONObject
 import org.json.JSONArray
 

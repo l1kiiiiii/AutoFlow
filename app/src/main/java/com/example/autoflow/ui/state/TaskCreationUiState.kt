@@ -1,7 +1,7 @@
 package com.example.autoflow.ui.state
 
-import com.example.autoflow.model.SavedBluetoothDevice
-import com.example.autoflow.model.SavedWiFiNetwork
+import com.example.autoflow.data.SavedBluetoothDevice
+import com.example.autoflow.data.SavedWiFiNetwork
 
 /**
  * Consolidated UI state for TaskCreationScreen

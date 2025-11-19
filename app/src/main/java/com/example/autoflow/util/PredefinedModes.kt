@@ -1,8 +1,8 @@
 package com.example.autoflow.util
 
-import com.example.autoflow.model.ActionTemplate
+import com.example.autoflow.domain.model.ActionTemplate
 import com.example.autoflow.model.ModeTemplate
-import com.example.autoflow.model.TriggerTemplate
+import com.example.autoflow.domain.model.TriggerTemplate
 
 object PredefinedModes {
 

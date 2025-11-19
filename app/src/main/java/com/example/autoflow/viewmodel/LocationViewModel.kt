@@ -14,7 +14,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.SavedLocationDao
 import com.example.autoflow.integrations.LocationManager
-import com.example.autoflow.model.SavedLocation
+import com.example.autoflow.data.SavedLocation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

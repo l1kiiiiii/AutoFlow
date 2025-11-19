@@ -109,8 +109,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.geofence.GeofenceManager
-import com.example.autoflow.model.Action
-import com.example.autoflow.model.Trigger
+import com.example.autoflow.domain.model.Action
+import com.example.autoflow.domain.model.Trigger
 import com.example.autoflow.ui.theme.AutoFlowTheme
 import com.example.autoflow.util.Constants
 import com.example.autoflow.viewmodel.WorkflowViewModel
@@ -145,9 +145,9 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import com.example.autoflow.model.SavedBluetoothDevice
-import com.example.autoflow.model.SavedLocation
-import com.example.autoflow.model.SavedWiFiNetwork
+import com.example.autoflow.data.SavedBluetoothDevice
+import com.example.autoflow.data.SavedLocation
+import com.example.autoflow.data.SavedWiFiNetwork
 import com.example.autoflow.viewmodel.WiFiViewModel
 import com.example.autoflow.viewmodel.BluetoothViewModel
 import android.net.wifi.WifiManager
@@ -157,7 +157,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.foundation.layout.PaddingValues
-import com.example.autoflow.model.TriggerHelpers
+import com.example.autoflow.domain.model.TriggerHelpers
 import com.example.autoflow.util.TriggerParser
 import kotlinx.coroutines.Dispatchers
 import androidx.compose.material3.*

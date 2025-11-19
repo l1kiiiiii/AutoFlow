@@ -17,7 +17,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.autoflow.model.SavedLocation
+import com.example.autoflow.data.SavedLocation
 import com.example.autoflow.viewmodel.LocationViewModel
 
 /**

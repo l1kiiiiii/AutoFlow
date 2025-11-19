@@ -23,8 +23,8 @@ import com.example.autoflow.geofence.GeofenceManager
 import com.example.autoflow.integrations.BLEManager
 import com.example.autoflow.integrations.LocationManager
 import com.example.autoflow.integrations.WiFiManager
-import com.example.autoflow.model.Action
-import com.example.autoflow.model.Trigger
+import com.example.autoflow.domain.model.Action
+import com.example.autoflow.domain.model.Trigger
 import com.example.autoflow.util.Constants
 import com.example.autoflow.util.PermissionUtils
 import org.json.JSONObject
@@ -32,12 +32,12 @@ import com.example.autoflow.util.AlarmScheduler
 import org.json.JSONArray
 import com.example.autoflow.data.toTriggers
 import com.example.autoflow.integrations.PhoneStateManager
-import com.example.autoflow.model.ActionTemplate
+import com.example.autoflow.domain.model.ActionTemplate
 import com.example.autoflow.model.ModeTemplate
-import com.example.autoflow.model.TriggerTemplate
+import com.example.autoflow.domain.model.TriggerTemplate
 import com.example.autoflow.util.AutoReplyManager
 import com.example.autoflow.util.TriggerParser
-import com.example.autoflow.model.TriggerHelpers
+import com.example.autoflow.domain.model.TriggerHelpers
 import com.example.autoflow.util.ActionExecutor
 
 /**

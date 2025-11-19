@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.data.toTriggers
-import com.example.autoflow.model.Trigger
+import com.example.autoflow.domain.model.Trigger
 
 /**
  * ✅ TriggerEvaluator - Evaluates multiple triggers with AND/OR logic
