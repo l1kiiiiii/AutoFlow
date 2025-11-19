@@ -22,7 +22,7 @@ import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.WorkflowRepository
 import com.example.autoflow.data.toActions
 import com.example.autoflow.integrations.SoundModeManager
-import com.example.autoflow.model.Action
+import com.example.autoflow.domain.model.Action
 import com.example.autoflow.util.ActionExecutor
 import com.example.autoflow.util.Constants
 import com.example.autoflow.util.Constants.EXTRA_WORKFLOW_ID

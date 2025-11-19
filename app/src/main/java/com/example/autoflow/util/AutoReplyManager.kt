@@ -15,7 +15,7 @@ import kotlinx.coroutines.*
 import android.provider.CallLog
 import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.data.toActions
-import com.example.autoflow.model.Action
+import com.example.autoflow.domain.model.Action
 import java.util.Calendar
 
 

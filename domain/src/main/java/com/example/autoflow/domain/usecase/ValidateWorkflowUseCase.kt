@@ -1,7 +1,7 @@
 package com.example.autoflow.domain.usecase
 
-import com.example.autoflow.model.Action
-import com.example.autoflow.model.Trigger
+import com.example.autoflow.domain.model.Action
+import com.example.autoflow.domain.model.Trigger
 
 /**
  * UseCase for validating workflow data before saving

@@ -2,7 +2,7 @@ package com.example.autoflow.data
 
 import androidx.lifecycle.LiveData
 import androidx.room.*
-import com.example.autoflow.model.SavedBluetoothDevice
+import com.example.autoflow.data.SavedBluetoothDevice
 
 @Dao
 interface SavedBluetoothDeviceDao {

@@ -4,11 +4,11 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.autoflow.data.AppDatabase
-import com.example.autoflow.data.WorkflowRepositoryCoroutines
+import com.example.autoflow.data.repository.WorkflowRepositoryImpl
+import com.example.autoflow.domain.model.Action
+import com.example.autoflow.domain.model.Trigger
 import com.example.autoflow.domain.usecase.SaveWorkflowUseCase
 import com.example.autoflow.domain.usecase.ValidateWorkflowUseCase
-import com.example.autoflow.model.Action
-import com.example.autoflow.model.Trigger
 import com.example.autoflow.ui.state.TaskCreationEvent
 import com.example.autoflow.ui.state.TaskCreationUiState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,7 +26,7 @@ import kotlinx.coroutines.launch
 class TaskCreationViewModel(application: Application) : AndroidViewModel(application) {
     
     // Dependencies
-    private val repository: WorkflowRepositoryCoroutines
+    private val repository: WorkflowRepositoryImpl
     private val saveWorkflowUseCase: SaveWorkflowUseCase
     private val validateWorkflowUseCase: ValidateWorkflowUseCase
     
@@ -37,10 +37,8 @@ class TaskCreationViewModel(application: Application) : AndroidViewModel(applica
     init {
         val database = AppDatabase.getDatabase(application)
         val workflowDao = database.workflowDao()
-        repository = WorkflowRepositoryCoroutines(workflowDao)
-        saveWorkflowUseCase = SaveWorkflowUseCase(
-            com.example.autoflow.data.WorkflowRepository(workflowDao)
-        )
+        repository = WorkflowRepositoryImpl(workflowDao)
+        saveWorkflowUseCase = SaveWorkflowUseCase(repository)
         validateWorkflowUseCase = ValidateWorkflowUseCase()
     }
     
@@ -266,7 +264,7 @@ class TaskCreationViewModel(application: Application) : AndroidViewModel(applica
                 val lng = parts[1].toDoubleOrNull()
                 if (lat != null && lng != null) {
                     triggers.add(
-                        com.example.autoflow.model.TriggerHelpers.createLocationTrigger(
+                        com.example.autoflow.domain.model.TriggerHelpers.createLocationTrigger(
                             locationName = state.locationName.ifEmpty { "Unnamed Location" },
                             latitude = lat,
                             longitude = lng,
@@ -282,7 +280,7 @@ class TaskCreationViewModel(application: Application) : AndroidViewModel(applica
         // Time trigger
         if (state.timeTriggerExpanded && state.timeValue.isNotBlank()) {
             triggers.add(
-                com.example.autoflow.model.TriggerHelpers.createTimeTrigger(
+                com.example.autoflow.domain.model.TriggerHelpers.createTimeTrigger(
                     state.timeValue,
                     emptyList()
                 )
@@ -292,7 +290,7 @@ class TaskCreationViewModel(application: Application) : AndroidViewModel(applica
         // WiFi trigger
         if (state.wifiTriggerExpanded) {
             triggers.add(
-                com.example.autoflow.model.TriggerHelpers.createWifiTrigger(
+                com.example.autoflow.domain.model.TriggerHelpers.createWifiTrigger(
                     null,
                     state.wifiState
                 )
@@ -302,7 +300,7 @@ class TaskCreationViewModel(application: Application) : AndroidViewModel(applica
         // Bluetooth trigger
         if (state.bluetoothDeviceTriggerExpanded && state.bluetoothDeviceAddress.isNotBlank()) {
             triggers.add(
-                com.example.autoflow.model.TriggerHelpers.createBluetoothTrigger(
+                com.example.autoflow.domain.model.TriggerHelpers.createBluetoothTrigger(
                     state.bluetoothDeviceAddress,
                     null
                 )

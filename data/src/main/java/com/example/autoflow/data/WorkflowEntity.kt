@@ -4,8 +4,8 @@ import android.util.Log
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import com.example.autoflow.model.Action
-import com.example.autoflow.model.Trigger
+import com.example.autoflow.domain.model.Action
+import com.example.autoflow.domain.model.Trigger
 import org.json.JSONArray
 import org.json.JSONObject
 

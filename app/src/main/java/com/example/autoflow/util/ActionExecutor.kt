@@ -19,7 +19,7 @@ import androidx.core.app.NotificationCompat
 import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.data.toActions
 import com.example.autoflow.integrations.PhoneStateManager
-import com.example.autoflow.model.Action
+import com.example.autoflow.domain.model.Action
 import com.example.autoflow.model.NotificationType
 import com.example.autoflow.policy.BlockPolicy
 import com.example.autoflow.receiver.AlarmReceiver

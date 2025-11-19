@@ -5,7 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.viewModelScope
 import com.example.autoflow.data.AppDatabase
-import com.example.autoflow.model.SavedWiFiNetwork
+import com.example.autoflow.data.SavedWiFiNetwork
 import kotlinx.coroutines.launch
 
 class WiFiViewModel(application: Application) : AndroidViewModel(application) {

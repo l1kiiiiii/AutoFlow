@@ -4,9 +4,9 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import com.example.autoflow.model.SavedBluetoothDevice
-import com.example.autoflow.model.SavedLocation
-import com.example.autoflow.model.SavedWiFiNetwork
+import com.example.autoflow.data.SavedBluetoothDevice
+import com.example.autoflow.data.SavedLocation
+import com.example.autoflow.data.SavedWiFiNetwork
 
 @Database(
     entities = [

@@ -1,4 +1,4 @@
-package com.example.autoflow.model
+package com.example.autoflow.domain.model
 
 import com.example.autoflow.util.*
 

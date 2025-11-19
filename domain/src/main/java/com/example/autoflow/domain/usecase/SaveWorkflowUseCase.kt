@@ -1,13 +1,11 @@
 package com.example.autoflow.domain.usecase
 
-import com.example.autoflow.data.WorkflowEntity
-import com.example.autoflow.data.WorkflowRepository
-import com.example.autoflow.model.Action
-import com.example.autoflow.model.Trigger
+import com.example.autoflow.domain.model.Action
+import com.example.autoflow.domain.model.Trigger
+import com.example.autoflow.domain.model.Workflow
+import com.example.autoflow.domain.repository.WorkflowRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
 
 /**
  * UseCase for saving workflows to the database
@@ -40,40 +38,17 @@ class SaveWorkflowUseCase(private val repository: WorkflowRepository) {
                 return@withContext Result.failure(IllegalArgumentException("At least one action is required"))
             }
             
-            // Build triggers JSON
-            val triggersJsonArray = JSONArray()
-            triggers.forEach { trigger ->
-                val triggerJson = JSONObject().apply {
-                    put("type", trigger.type)
-                    put("value", trigger.value)
-                }
-                triggersJsonArray.put(triggerJson)
-            }
-            
-            // Build actions JSON
-            val actionsJsonArray = JSONArray()
-            actions.forEach { action ->
-                val actionJson = JSONObject().apply {
-                    put("type", action.type)
-                    action.value?.let { put("value", it) }
-                    action.title?.let { put("title", it) }
-                    action.message?.let { put("message", it) }
-                    action.priority?.let { put("priority", it) }
-                }
-                actionsJsonArray.put(actionJson)
-            }
-            
-            // Create workflow entity
-            val workflow = WorkflowEntity(
+            // Create domain workflow model
+            val workflow = Workflow(
                 workflowName = workflowName.trim(),
-                triggerDetails = triggersJsonArray.toString(),
-                actionDetails = actionsJsonArray.toString(),
+                triggers = triggers,
+                actions = actions,
                 triggerLogic = triggerLogic,
                 isEnabled = true
             )
             
-            // Save to database
-            val workflowId = repository.insertSuspend(workflow)
+            // Save to database via repository
+            val workflowId = repository.insert(workflow)
             Result.success(workflowId)
             
         } catch (e: Exception) {

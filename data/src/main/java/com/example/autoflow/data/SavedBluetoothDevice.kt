@@ -1,19 +1,19 @@
-package com.example.autoflow.model
+package com.example.autoflow.data
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "saved_wifi_networks")
-data class SavedWiFiNetwork(
+@Entity(tableName = "saved_bluetooth_devices")
+data class SavedBluetoothDevice(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
 
-    @ColumnInfo(name = "ssid")
-    val ssid: String,
+    @ColumnInfo(name = "mac_address")
+    val macAddress: String,
 
-    @ColumnInfo(name = "bssid")
-    val bssid: String? = null,
+    @ColumnInfo(name = "device_name")
+    val deviceName: String,
 
     @ColumnInfo(name = "display_name")
     val displayName: String,

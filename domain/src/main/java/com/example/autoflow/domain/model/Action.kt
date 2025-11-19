@@ -1,4 +1,4 @@
-package com.example.autoflow.model
+package com.example.autoflow.domain.model
 
 /**
  *  Enhanced Action class for AutoFlow workflows

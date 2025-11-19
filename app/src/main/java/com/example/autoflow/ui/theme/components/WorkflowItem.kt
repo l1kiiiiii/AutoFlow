@@ -14,8 +14,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.autoflow.data.WorkflowEntity // Import WorkflowEntity
-import com.example.autoflow.model.Action // Keep for helper functions
-import com.example.autoflow.model.Trigger // Keep for helper functions
+import com.example.autoflow.domain.model.Action // Keep for helper functions
+import com.example.autoflow.domain.model.Trigger // Keep for helper functions
 import com.example.autoflow.util.Constants // Keep for helper functions
 import org.json.JSONException // Keep for helper functions
 import org.json.JSONObject // Keep for helper functions

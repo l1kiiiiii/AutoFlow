@@ -1,6 +1,6 @@
-package com.example.autoflow.model
+package com.example.autoflow.domain.model
 
-import com.example.autoflow.util.Constants
+import com.example.autoflow.domain.util.Constants
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
