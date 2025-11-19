@@ -21,3 +21,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "AutoFlow"
 include(":app")
+include(":domain")
+include(":data")
