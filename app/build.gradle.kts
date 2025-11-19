@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     id("com.google.devtools.ksp")
 }
 
@@ -93,6 +94,9 @@ dependencies {
     // Script engine and HTTP
     implementation(libs.rhino.android)
     implementation(libs.okhttp)
+
+    // Serialization
+    implementation(libs.kotlinx.serialization.json)
 
     // Testing dependencies
     testImplementation(libs.junit)
