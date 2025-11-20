@@ -1,6 +1,6 @@
 package com.example.autoflow.domain.trigger
 
-import com.example.autoflow.model.Trigger
+import com.example.autoflow.domain.model.Trigger
 
 /**
  * Registry for managing trigger handlers

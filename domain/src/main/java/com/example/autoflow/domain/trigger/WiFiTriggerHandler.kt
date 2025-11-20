@@ -3,18 +3,16 @@ package com.example.autoflow.domain.trigger
 import android.Manifest
 import android.content.Context
 import androidx.annotation.RequiresPermission
-import com.example.autoflow.integrations.WiFiManager
-import com.example.autoflow.model.Trigger
-import com.example.autoflow.util.Constants
-import com.example.autoflow.util.TriggerParser
+import com.example.autoflow.domain.model.Trigger
+import com.example.autoflow.domain.util.Constants
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
  * Handler for WiFi-based triggers
  * Follows Single Responsibility Principle
- */
-class WiFiTriggerHandler(private val context: Context) : TriggerHandler {
+
+abstract class WiFiTriggerHandler(private val context: Context) : TriggerHandler {
     
     private val wifiManager = WiFiManager(context)
     
@@ -59,3 +57,5 @@ class WiFiTriggerHandler(private val context: Context) : TriggerHandler {
         }
     }
 }
+
+*/

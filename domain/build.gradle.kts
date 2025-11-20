@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.example.autoflow.domain"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 31
@@ -23,26 +23,25 @@ android {
             )
         }
     }
-    
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlin {
-        compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
-        }
+    kotlinOptions {
+        jvmTarget = "17"
     }
 }
 
 dependencies {
     // Core AndroidX dependencies (minimal)
     implementation(libs.androidx.core.ktx)
-    
+
     // Kotlin coroutines
     implementation(libs.kotlinx.coroutines.play.services)
-    
+    implementation(libs.androidx.lifecycle.livedata.core.ktx)
+
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

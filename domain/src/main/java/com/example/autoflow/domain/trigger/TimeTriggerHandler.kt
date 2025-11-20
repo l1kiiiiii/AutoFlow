@@ -1,16 +1,14 @@
 package com.example.autoflow.domain.trigger
 
 import android.content.Context
-import com.example.autoflow.model.Trigger
-import com.example.autoflow.util.Constants
-import com.example.autoflow.util.TriggerParser
+import com.example.autoflow.domain.model.Trigger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
  * Handler for time-based triggers
  * Follows Single Responsibility Principle
- */
+
 class TimeTriggerHandler(private val context: Context) : TriggerHandler {
     
     override fun canHandle(trigger: Trigger): Boolean {
@@ -56,3 +54,4 @@ class TimeTriggerHandler(private val context: Context) : TriggerHandler {
         }
     }
 }
+ */

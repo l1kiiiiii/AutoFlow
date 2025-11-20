@@ -3,18 +3,13 @@ package com.example.autoflow.domain.trigger
 import android.Manifest
 import android.content.Context
 import androidx.annotation.RequiresPermission
-import com.example.autoflow.integrations.BLEManager
-import com.example.autoflow.model.Trigger
-import com.example.autoflow.util.Constants
-import com.example.autoflow.util.PermissionUtils
-import com.example.autoflow.util.TriggerParser
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
 /**
  * Handler for Bluetooth (BLE) triggers
  * Follows Single Responsibility Principle
- */
+
 class BluetoothTriggerHandler(private val context: Context) : TriggerHandler {
     
     private val bleManager = BLEManager(context)
@@ -80,3 +75,4 @@ class BluetoothTriggerHandler(private val context: Context) : TriggerHandler {
         }
     }
 }
+*/

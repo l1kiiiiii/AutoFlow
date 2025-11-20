@@ -4,18 +4,13 @@ import android.Manifest
 import android.content.Context
 import android.location.Location
 import androidx.annotation.RequiresPermission
-import com.example.autoflow.integrations.LocationManager
-import com.example.autoflow.model.Trigger
-import com.example.autoflow.util.Constants
-import com.example.autoflow.util.PermissionUtils
-import com.example.autoflow.util.TriggerParser
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
 /**
  * Handler for location-based triggers
  * Follows Single Responsibility Principle
- */
+
 class LocationTriggerHandler(private val context: Context) : TriggerHandler {
     
     private val locationManager = LocationManager(context)
@@ -79,3 +74,4 @@ class LocationTriggerHandler(private val context: Context) : TriggerHandler {
         }
     }
 }
+ */

@@ -7,10 +7,10 @@ plugins {
 
 android {
     namespace = "com.example.autoflow.data"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
-        minSdk = 3
+        minSdk = 31
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
@@ -25,41 +25,39 @@ android {
             )
         }
     }
-    
+
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlin {
-        compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
-        }
+    kotlinOptions {
+        jvmTarget = "17"
     }
 }
 
 dependencies {
     // Domain module dependency
     implementation(project(":domain"))
-    
+
     // Core AndroidX dependencies
     implementation(libs.androidx.core.ktx)
-    
+
     // Room database with KSP
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
-    
+
     // Kotlin coroutines
     implementation(libs.kotlinx.coroutines.play.services)
-    
+
     // Serialization
     implementation(libs.kotlinx.serialization.json)
-    
+
     // Lifecycle components
     implementation(libs.androidx.lifecycle.livedata)
     implementation(libs.androidx.lifecycle.livedata.ktx)
-    
+
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.mockito.core)

@@ -1,5 +1,5 @@
 [versions]
-agp = "8.5.2"
+agp = "8.13.1"
 androidxJunit = "1.1.5"
 kotlin = "2.0.21"
 coreKtx = "1.17.0"
@@ -37,6 +37,7 @@ espresso = "3.6.1"
 uiText = "1.9.2"
 workRuntimeKtx = "2.9.0"
 uiTest = "1.9.3"
+lifecycleLivedataCoreKtx = "2.10.0"
 
 [libraries]
 androidx-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
@@ -80,6 +81,7 @@ play-services-maps = { module = "com.google.android.gms:play-services-maps", ver
 rhino-android = { module = "io.apisense:rhino-android", version.ref = "rhinoAndroid" }
 androidx-compose-ui-text = { group = "androidx.compose.ui", name = "ui-text", version.ref = "uiText" }
 androidx-compose-ui-test = { group = "androidx.compose.ui", name = "ui-test", version.ref = "uiTest" }
+androidx-lifecycle-livedata-core-ktx = { group = "androidx.lifecycle", name = "lifecycle-livedata-core-ktx", version.ref = "lifecycleLivedataCoreKtx" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

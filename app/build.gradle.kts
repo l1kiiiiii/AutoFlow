@@ -8,12 +8,12 @@ plugins {
 
 android {
     namespace = "com.example.autoflow"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.autoflow"
         minSdk = 31
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -31,16 +31,13 @@ android {
         }
     }
 
-    //  Add missing Java compatibility settings
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlin {
-        compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
-        }
+    kotlinOptions {
+        jvmTarget = "17"
     }
 
     buildFeatures {
@@ -52,7 +49,7 @@ dependencies {
     // Module dependencies
     implementation(project(":domain"))
     implementation(project(":data"))
-    
+
     // Core AndroidX dependencies
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -72,7 +69,7 @@ dependencies {
     // Navigation
     implementation(libs.androidx.navigation.compose)
 
-    //  Room database with KSP only
+    // Room database with KSP only
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
