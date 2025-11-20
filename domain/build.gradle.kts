@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.example.autoflow.domain"
-    compileSdk = 36
+    compileSdk = 34
 
     defaultConfig {
         minSdk = 31
@@ -25,8 +25,8 @@ android {
     }
     
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlin {

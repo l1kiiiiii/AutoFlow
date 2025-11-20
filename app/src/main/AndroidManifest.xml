@@ -3,68 +3,94 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.autoflow">
 
-    <!-- = APP USAGE & MONITORING = -->
+    
+    <!-- APP USAGE & MONITORING -->
+    
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
-
-    <!-- = LOCATION = -->
+    
+    <!-- LOCATION -->
+    
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
-    <!-- = BLUETOOTH = -->
+    
+    <!-- BLUETOOTH -->
+    
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
-    <!-- = TELEPHONY & SMS = -->
+    
+    <!-- TELEPHONY & SMS -->
+    
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
-    <uses-permission android:name="android.permission.READ_PHONE_STATE"/>
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
-    <!-- = NOTIFICATIONS & DND = -->
+    
+    <!-- NOTIFICATIONS & DND -->
+    
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
 
-    <!-- = ALARMS & BOOT = -->
+    
+    <!-- ALARMS & BOOT -->
+    
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- = AUDIO CONTROL = -->
+    
+    <!-- AUDIO CONTROL -->
+    
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
-    <!-- = CONNECTIVITY = -->
+    
+    <!-- CONNECTIVITY -->
+    
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-feature android:name="android.hardware.wifi" android:required="false" />
 
-    <!-- = DEVICE ADMIN (DPC builds only) = -->
+    
+    <!-- DEVICE ADMIN (DPC builds only) -->
+    
     <uses-permission
         android:name="android.permission.BIND_DEVICE_ADMIN"
         tools:ignore="ProtectedPermissions" />
 
-    <!-- = VIBRATION = -->
+    
+    <!-- VIBRATION -->
+    
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- = OTHER = -->
+    
+    <!-- OTHER -->
+    
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
-    <!--  PACKAGE VISIBILITY: Query all installed packages (Android 11+) -->
+    
+    <!-- PACKAGE VISIBILITY: Query all installed packages (Android 11+) -->
+    
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
 
-    <!--  Queries element for package visibility (Android 11+) -->
+    
+    <!-- Queries element for package visibility (Android 11+) -->
+    
     <queries>
         <!-- Query for all launchable apps -->
         <intent>
@@ -82,8 +108,9 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.AutoFlow">
-
-        <!--  ACTIVITIES  -->
+        
+        <!-- ACTIVITIES -->
+        
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -100,10 +127,8 @@
             android:exported="false"
             android:launchMode="singleTop"
             android:theme="@style/Theme.AutoFlow" />
-
-
-
-        <!--  RECEIVERS  -->
+        <!-- BROADCAST RECEIVERS -->
+        <!-- Alarm Receiver (Time Triggers + Boot Recovery) -->
         <receiver
             android:name=".receiver.AlarmReceiver"
             android:enabled="true"
@@ -113,16 +138,61 @@
             </intent-filter>
         </receiver>
 
-
+        <!-- Geofence Receiver (Location Triggers - Event-Driven) -->
         <receiver
             android:name=".geofence.GeofenceReceiver"
             android:enabled="true"
             android:exported="false" />
 
+        <!-- WiFi Receiver (WiFi State Triggers - Event-Driven) -->
+        <receiver
+            android:name=".receiver.WiFiReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <!--  WiFi radio ON/OFF state changes -->
+                <action android:name="android.net.wifi.WIFI_STATE_CHANGED" />
+                <!--  WiFi connection/disconnection events -->
+                <action android:name="android.net.wifi.STATE_CHANGE" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Bluetooth Receiver (Bluetooth State Triggers - Event-Driven) -->
+        <receiver
+            android:name=".receiver.BluetoothReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <!--  Bluetooth radio ON/OFF state changes -->
+                <action android:name="android.bluetooth.adapter.action.STATE_CHANGED" />
+                <!--  Device connection events -->
+                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+                <!--  Device disconnection events -->
+                <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Phone State Receiver (Auto-reply SMS on incoming calls) -->
+        <receiver
+            android:name=".receiver.PhoneStateReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter android:priority="1000">
+                <action android:name="android.intent.action.PHONE_STATE" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Mode Deactivate Receiver -->
         <receiver
             android:name=".receiver.ModeDeactivateReceiver"
             android:exported="false" />
 
+        <!-- Emergency Unblock Receiver -->
+        <receiver
+            android:name=".receiver.EmergencyUnblockReceiver"
+            android:exported="false" />
+
+        <!-- Device Admin Receiver (DPC - Device Policy Controller) -->
         <receiver
             android:name=".dpc.MyDeviceAdminReceiver"
             android:enabled="true"
@@ -135,41 +205,8 @@
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
             </intent-filter>
         </receiver>
-
-        <!-- WiFi Trigger Receiver -->
-        <receiver
-            android:name=".receiver.WiFiReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.net.wifi.STATE_CHANGE" />
-            </intent-filter>
-        </receiver>
-        <!-- Bluetooth Trigger Receiver -->
-        <receiver
-            android:name=".receiver.BluetoothReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
-                <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
-            </intent-filter>
-        </receiver>
-        <!-- ✅ ADD: Phone state receiver for auto-reply SMS -->
-        <receiver
-            android:name=".receiver.PhoneStateReceiver"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter android:priority="1000">
-                <action android:name="android.intent.action.PHONE_STATE" />
-            </intent-filter>
-        </receiver>
-
-
-        <receiver
-            android:name=".receiver.EmergencyUnblockReceiver"
-            android:exported="false" />
-
-
-        <!--  SERVICES  -->
+        <!-- SERVICES -->
+        <!-- App Block Accessibility Service -->
         <service
             android:name=".blocker.AppBlockAccessibilityService"
             android:enabled="true"
@@ -182,11 +219,11 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_config" />
         </service>
-
-        <!--  META-DATA  -->
+        <!-- META-DATA -->
         <meta-data
             android:name="com.google.android.gms.version"
             android:value="@integer/google_play_services_version" />
 
     </application>
+
 </manifest>

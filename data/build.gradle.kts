@@ -7,10 +7,10 @@ plugins {
 
 android {
     namespace = "com.example.autoflow.data"
-    compileSdk = 36
+    compileSdk = 34
 
     defaultConfig {
-        minSdk = 31
+        minSdk = 3
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")

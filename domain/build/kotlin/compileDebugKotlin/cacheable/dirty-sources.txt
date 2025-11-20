@@ -1,0 +1,16 @@
+C:\Users\ailik\AutoFlow\domain\src\main\java\com\example\autoflow\domain\model\ActionData.kt
+C:\Users\ailik\AutoFlow\domain\src\main\java\com\example\autoflow\domain\model\Trigger.kt
+C:\Users\ailik\AutoFlow\domain\src\main\java\com\example\autoflow\domain\trigger\TimeTriggerHandler.kt
+C:\Users\ailik\AutoFlow\domain\src\main\java\com\example\autoflow\domain\util\Constants.kt
+C:\Users\ailik\AutoFlow\domain\src\main\java\com\example\autoflow\domain\usecase\SaveWorkflowUseCase.kt
+C:\Users\ailik\AutoFlow\domain\src\main\java\com\example\autoflow\domain\model\Workflow.kt
+C:\Users\ailik\AutoFlow\domain\src\main\java\com\example\autoflow\domain\trigger\TriggerHandlerRegistry.kt
+C:\Users\ailik\AutoFlow\domain\src\main\java\com\example\autoflow\domain\repository\WorkflowRepository.kt
+C:\Users\ailik\AutoFlow\domain\src\main\java\com\example\autoflow\domain\usecase\ValidateWorkflowUseCase.kt
+C:\Users\ailik\AutoFlow\domain\src\main\java\com\example\autoflow\domain\model\TriggerData.kt
+C:\Users\ailik\AutoFlow\domain\src\main\java\com\example\autoflow\domain\trigger\WiFiTriggerHandler.kt
+C:\Users\ailik\AutoFlow\domain\src\main\java\com\example\autoflow\domain\trigger\LocationTriggerHandler.kt
+C:\Users\ailik\AutoFlow\domain\src\main\java\com\example\autoflow\domain\trigger\TriggerHandler.kt
+C:\Users\ailik\AutoFlow\domain\src\main\java\com\example\autoflow\domain\model\TriggerHelpers.kt
+C:\Users\ailik\AutoFlow\domain\src\main\java\com\example\autoflow\domain\model\Action.kt
+C:\Users\ailik\AutoFlow\domain\src\main\java\com\example\autoflow\domain\trigger\BluetoothTriggerHandler.kt

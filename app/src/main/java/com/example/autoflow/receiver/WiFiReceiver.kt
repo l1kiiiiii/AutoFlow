@@ -8,9 +8,17 @@ import android.util.Log
 import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.toTriggers
 import com.example.autoflow.util.ActionExecutor
-import kotlinx.coroutines.*
-import org.json.JSONObject
+import com.example.autoflow.util.Constants
+import com.example.autoflow.util.TriggerParser
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
+/**
+ * ✅ Event-Driven WiFi Receiver
+ * Listens for System Broadcasts -> Checks ALL active workflows
+ * Fires EVERY TIME the WiFi state changes and matches a trigger
+ */
 class WiFiReceiver : BroadcastReceiver() {
 
     companion object {
@@ -18,97 +26,59 @@ class WiFiReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        Log.d(TAG, "📶 WiFi state changed: ${intent.action}")
+        // ✅ 1. Keep alive
+        val pendingResult = goAsync()
 
-        when (intent.action) {
-            WifiManager.WIFI_STATE_CHANGED_ACTION -> {
-                val wifiState = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_UNKNOWN)
-                handleWifiStateChange(context, wifiState)
-            }
-            WifiManager.NETWORK_STATE_CHANGED_ACTION -> {
-                handleNetworkStateChange(context, intent)
-            }
-        }
-    }
+        Log.d(TAG, "📶 System WiFi Event Received: ${intent.action}")
 
-    private fun handleWifiStateChange(context: Context, wifiState: Int) {
-        val stateString = when (wifiState) {
-            WifiManager.WIFI_STATE_ENABLED -> "ON"
-            WifiManager.WIFI_STATE_DISABLED -> "OFF"
-            WifiManager.WIFI_STATE_ENABLING -> "ENABLING"
-            WifiManager.WIFI_STATE_DISABLING -> "DISABLING"
-            else -> return
-        }
+        // Determine current state immediately from System Service (Most accurate)
+        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        val isEnabled = wifiManager.isWifiEnabled
 
-        Log.d(TAG, "📶 WiFi state: $stateString")
-        checkWifiTriggers(context, stateString, null)
-    }
-
-    private fun handleNetworkStateChange(context: Context, intent: Intent) {
-        val wifiManager = context.getSystemService(Context.WIFI_SERVICE) as WifiManager
         val connectionInfo = wifiManager.connectionInfo
+        val isConnected = connectionInfo != null && connectionInfo.networkId != -1 && connectionInfo.ssid != "<unknown ssid>"
+        // Clean SSID (remove quotes)
+        val currentSsid = connectionInfo?.ssid?.replace("\"", "") ?: ""
 
-        if (connectionInfo != null && connectionInfo.ssid != null) {
-            // Remove quotes from SSID
-            val ssid = connectionInfo.ssid.replace("\"", "")
-            Log.d(TAG, "📶 Connected to WiFi: $ssid")
-            checkWifiTriggers(context, "CONNECTED", ssid)
-        } else {
-            Log.d(TAG, "📶 WiFi disconnected")
-            checkWifiTriggers(context, "DISCONNECTED", null)
-        }
-    }
+        val stateString = if (isConnected) "CONNECTED" else if (isEnabled) "ON" else "OFF"
+        Log.d(TAG, "🔍 Current WiFi State: $stateString (SSID: $currentSsid)")
 
-    private fun checkWifiTriggers(context: Context, state: String, connectedSsid: String?) {
+        // ✅ 2. Check ALL active workflows
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val database = AppDatabase.getDatabase(context)
-                val workflows = database.workflowDao().getActiveWorkflows()
+                val db = AppDatabase.getDatabase(context)
+                // Get ONLY enabled workflows to save resources
+                val activeWorkflows = db.workflowDao().getActiveWorkflows()
 
-                workflows.forEach { workflow ->
+                activeWorkflows.forEach { workflow ->
                     val triggers = workflow.toTriggers()
 
-                    triggers.forEach { trigger ->
-                        if (trigger.type == "WIFI" && matchesWifiTrigger(trigger.value, state, connectedSsid)) {
-                            Log.d(TAG, "✅ WiFi trigger matched for workflow: ${workflow.workflowName}")
+                    // Filter for WiFi triggers in this workflow
+                    triggers.filter { it.type == Constants.TRIGGER_WIFI }.forEach { trigger ->
+                        val config = TriggerParser.parseWifiData(trigger)
 
-                            withContext(Dispatchers.Main) {
+                        if (config != null) {
+                            // ✅ 3. Evaluate Logic
+                            val match = when (config.state.uppercase()) {
+                                "ON" -> isEnabled
+                                "OFF" -> !isEnabled
+                                "CONNECTED" -> isConnected && (config.ssid.isNullOrBlank() || config.ssid == currentSsid)
+                                "DISCONNECTED" -> !isConnected
+                                else -> false
+                            }
+
+                            if (match) {
+                                Log.d(TAG, "✅ Trigger Matched: '${workflow.workflowName}'")
                                 ActionExecutor.executeWorkflow(context, workflow)
                             }
                         }
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Error checking WiFi triggers", e)
+                Log.e(TAG, "❌ Error checking workflows", e)
+            } finally {
+                pendingResult.finish()
             }
-        }
-    }
-
-    /**
-     * ✅ Check if trigger value matches current WiFi state
-     */
-    private fun matchesWifiTrigger(triggerValue: String, currentState: String, currentSsid: String?): Boolean {
-        return try {
-            val json = JSONObject(triggerValue)
-            val targetState = json.optString("state", "")
-            val targetSsid = json.optString("ssid", null)
-
-            // Check state match
-            if (targetState != currentState) {
-                return false
-            }
-
-            // If trigger specifies SSID, check SSID match
-            if (targetSsid != null) {
-                return targetSsid == currentSsid
-            }
-
-            // State matches and no specific SSID required
-            true
-
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Error parsing WiFi trigger value: $triggerValue", e)
-            false
         }
     }
 }

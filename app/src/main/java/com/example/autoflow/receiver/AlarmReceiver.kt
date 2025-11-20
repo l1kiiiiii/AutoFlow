@@ -24,6 +24,7 @@ import com.example.autoflow.data.toActions
 import com.example.autoflow.integrations.SoundModeManager
 import com.example.autoflow.domain.model.Action
 import com.example.autoflow.util.ActionExecutor
+import com.example.autoflow.util.AlarmScheduler
 import com.example.autoflow.util.Constants
 import com.example.autoflow.util.Constants.EXTRA_WORKFLOW_ID
 import kotlinx.coroutines.CoroutineScope
@@ -87,6 +88,15 @@ class AlarmReceiver : BroadcastReceiver() {
                                 Log.d(TAG, "🎉 Workflow completed: ${w.workflowName}")
                                 Log.d(TAG, "   ✅ Success: $successCount actions")
                                 Log.d(TAG, "   ❌ Failed: $failCount actions")
+
+                                // ✅ NEW: Reschedule the workflow for next occurrence
+                                // This ensures time-based triggers fire again tomorrow (or on the next scheduled day)
+                                try {
+                                    AlarmScheduler.scheduleWorkflow(context, w)
+                                    Log.d(TAG, "🔄 Workflow rescheduled for next occurrence: ${w.workflowName}")
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "❌ Failed to reschedule workflow: ${w.workflowName}", e)
+                                }
 
                                 // Show completion toast
                                 CoroutineScope(Dispatchers.Main).launch {
@@ -468,5 +478,4 @@ class AlarmReceiver : BroadcastReceiver() {
             notificationManager.createNotificationChannel(channel)
         }
     }
-
 }
