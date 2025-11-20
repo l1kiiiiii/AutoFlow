@@ -15,18 +15,29 @@ import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.SavedLocationDao
 import com.example.autoflow.integrations.LocationManager
 import com.example.autoflow.data.SavedLocation
+import com.example.autoflow.domain.usecase.location.SaveLocationUseCase
+import com.example.autoflow.domain.usecase.location.DeleteLocationUseCase
+import com.example.autoflow.domain.usecase.location.UpdateLocationUseCase
+import com.example.autoflow.domain.usecase.location.GetLocationsUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * ✅ Enhanced LocationViewModel with proper saving functionality
+ * ✅ Enhanced LocationViewModel with Use Cases for business logic
+ * Follows Clean Architecture - delegates business logic to domain layer
  */
 class LocationViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = AppDatabase.getDatabase(application)
     private val locationDao: SavedLocationDao = database.savedLocationDao()
     private val locationManager = LocationManager(application)
+    
+    // Use Cases - encapsulate business logic
+    private val saveLocationUseCase = SaveLocationUseCase(locationDao)
+    private val deleteLocationUseCase = DeleteLocationUseCase(locationDao)
+    private val updateLocationUseCase = UpdateLocationUseCase(locationDao)
+    private val getLocationsUseCase = GetLocationsUseCase(locationDao)
 
     companion object {
         private const val TAG = "LocationViewModel"
@@ -56,22 +67,21 @@ class LocationViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * ✅ Load all saved locations from database using suspend function
+     * ✅ Load all saved locations from database using Use Case
      */
     fun loadSavedLocations() {
         viewModelScope.launch {
             try {
                 _isLoading.value = true
-                val locations = withContext(Dispatchers.IO) {
-                    locationDao.getAllLocationsSync() // ✅ Use sync version
+                val result = getLocationsUseCase.execute()
+                
+                result.onSuccess { locations ->
+                    _savedLocations.value = locations
+                    Log.d(TAG, "✅ Loaded ${locations.size} saved locations")
+                }.onFailure { error ->
+                    Log.e(TAG, "❌ Error loading locations", error)
+                    _statusMessage.value = "Failed to load locations: ${error.message}"
                 }
-
-                _savedLocations.value = locations
-                Log.d(TAG, "✅ Loaded ${locations.size} saved locations")
-
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Error loading locations", e)
-                _statusMessage.value = "Failed to load locations: ${e.message}"
             } finally {
                 _isLoading.value = false
             }
@@ -114,7 +124,7 @@ class LocationViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * ✅ FIXED: Save location with name - Convert Double to Int for radius
+     * ✅ FIXED: Save location with name - Using Use Case
      */
     fun saveLocation(
         name: String,
@@ -123,38 +133,20 @@ class LocationViewModel(application: Application) : AndroidViewModel(application
         radius: Double = 100.0,
         address: String = ""
     ) {
-        if (name.isBlank()) {
-            _statusMessage.value = "❌ Location name cannot be empty"
-            return
-        }
-
         viewModelScope.launch {
             try {
                 _isLoading.value = true
-
-                val savedLocation = SavedLocation(
-                    name = name.trim(),
-                    address = address.trim(),
-                    latitude = latitude,
-                    longitude = longitude,
-                    radius = radius,
-                    createdAt = System.currentTimeMillis(),
-                    isFavorite = false
-                )
-
-                withContext(Dispatchers.IO) {
-                    locationDao.insertLocation(savedLocation)
+                
+                val result = saveLocationUseCase.execute(name, latitude, longitude, radius, address)
+                
+                result.onSuccess { id ->
+                    _statusMessage.value = "✅ Location '$name' saved successfully"
+                    Log.d(TAG, "✅ Location saved: $name at $latitude, $longitude with ID $id")
+                    loadSavedLocations()
+                }.onFailure { error ->
+                    _statusMessage.value = "❌ ${error.message}"
+                    Log.e(TAG, "❌ Error saving location", error)
                 }
-
-                _statusMessage.value = "✅ Location '$name' saved successfully"
-                Log.d(TAG, "✅ Location saved: $name at $latitude, $longitude")
-
-                // Reload locations to update UI
-                loadSavedLocations()
-
-            } catch (e: Exception) {
-                _statusMessage.value = "❌ Failed to save location: ${e.message}"
-                Log.e(TAG, "❌ Error saving location", e)
             } finally {
                 _isLoading.value = false
             }
@@ -176,19 +168,21 @@ class LocationViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * ✅ Delete saved location - Accept SavedLocation object
+     * ✅ Delete saved location - Using Use Case
      */
     fun deleteLocation(location: SavedLocation) {
         viewModelScope.launch {
             try {
-                withContext(Dispatchers.IO) {
-                    locationDao.deleteLocation(location)
+                val result = deleteLocationUseCase.execute(location)
+                
+                result.onSuccess {
+                    _statusMessage.value = "✅ Location '${location.name}' deleted"
+                    loadSavedLocations()
+                    Log.d(TAG, "✅ Location deleted: ${location.name}")
+                }.onFailure { error ->
+                    _statusMessage.value = "❌ Failed to delete location: ${error.message}"
+                    Log.e(TAG, "❌ Error deleting location", error)
                 }
-
-                _statusMessage.value = "✅ Location '${location.name}' deleted"
-                loadSavedLocations()
-                Log.d(TAG, "✅ Location deleted: ${location.name}")
-
             } catch (e: Exception) {
                 _statusMessage.value = "❌ Failed to delete location: ${e.message}"
                 Log.e(TAG, "❌ Error deleting location", e)
@@ -197,19 +191,21 @@ class LocationViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * ✅ Delete by ID
+     * ✅ Delete by ID - Using Use Case
      */
     fun deleteLocationById(locationId: Long) {
         viewModelScope.launch {
             try {
-                withContext(Dispatchers.IO) {
-                    locationDao.deleteLocationById(locationId)
+                val result = deleteLocationUseCase.executeById(locationId)
+                
+                result.onSuccess {
+                    _statusMessage.value = "✅ Location deleted"
+                    loadSavedLocations()
+                    Log.d(TAG, "✅ Location deleted: ID $locationId")
+                }.onFailure { error ->
+                    _statusMessage.value = "❌ Failed to delete location: ${error.message}"
+                    Log.e(TAG, "❌ Error deleting location", error)
                 }
-
-                _statusMessage.value = "✅ Location deleted"
-                loadSavedLocations()
-                Log.d(TAG, "✅ Location deleted: ID $locationId")
-
             } catch (e: Exception) {
                 _statusMessage.value = "❌ Failed to delete location: ${e.message}"
                 Log.e(TAG, "❌ Error deleting location", e)
@@ -218,18 +214,20 @@ class LocationViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * ✅ Toggle favorite status
+     * ✅ Toggle favorite status - Using Use Case
      */
     fun toggleFavorite(locationId: Long, isFavorite: Boolean) {
         viewModelScope.launch {
             try {
-                withContext(Dispatchers.IO) {
-                    locationDao.updateFavorite(locationId, isFavorite)
+                val result = updateLocationUseCase.updateFavorite(locationId, isFavorite)
+                
+                result.onSuccess {
+                    loadSavedLocations()
+                    Log.d(TAG, "✅ Location favorite toggled: ID $locationId, favorite: $isFavorite")
+                }.onFailure { error ->
+                    _statusMessage.value = "❌ Failed to update favorite: ${error.message}"
+                    Log.e(TAG, "❌ Error updating favorite", error)
                 }
-
-                loadSavedLocations()
-                Log.d(TAG, "✅ Location favorite toggled: ID $locationId, favorite: $isFavorite")
-
             } catch (e: Exception) {
                 _statusMessage.value = "❌ Failed to update favorite: ${e.message}"
                 Log.e(TAG, "❌ Error updating favorite", e)
@@ -238,19 +236,21 @@ class LocationViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * ✅ Update location
+     * ✅ Update location - Using Use Case
      */
     fun updateLocation(location: SavedLocation) {
         viewModelScope.launch {
             try {
-                withContext(Dispatchers.IO) {
-                    locationDao.updateLocation(location)
+                val result = updateLocationUseCase.execute(location)
+                
+                result.onSuccess {
+                    _statusMessage.value = "✅ Location '${location.name}' updated"
+                    loadSavedLocations()
+                    Log.d(TAG, "✅ Location updated: ${location.name}")
+                }.onFailure { error ->
+                    _statusMessage.value = "❌ Failed to update location: ${error.message}"
+                    Log.e(TAG, "❌ Error updating location", error)
                 }
-
-                _statusMessage.value = "✅ Location '${location.name}' updated"
-                loadSavedLocations()
-                Log.d(TAG, "✅ Location updated: ${location.name}")
-
             } catch (e: Exception) {
                 _statusMessage.value = "❌ Failed to update location: ${e.message}"
                 Log.e(TAG, "❌ Error updating location", e)

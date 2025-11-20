@@ -6,11 +6,23 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.viewModelScope
 import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.SavedWiFiNetwork
+import com.example.autoflow.domain.usecase.wifi.SaveWiFiNetworkUseCase
+import com.example.autoflow.domain.usecase.wifi.DeleteWiFiNetworkUseCase
+import com.example.autoflow.domain.usecase.wifi.ToggleWiFiFavoriteUseCase
 import kotlinx.coroutines.launch
 
+/**
+ * WiFiViewModel refactored to use Use Cases
+ * Follows Clean Architecture - delegates business logic to domain layer
+ */
 class WiFiViewModel(application: Application) : AndroidViewModel(application) {
 
     private val wifiDao = AppDatabase.getDatabase(application).savedWiFiNetworkDao()
+    
+    // Use Cases - encapsulate business logic
+    private val saveWiFiNetworkUseCase = SaveWiFiNetworkUseCase(wifiDao)
+    private val deleteWiFiNetworkUseCase = DeleteWiFiNetworkUseCase(wifiDao)
+    private val toggleWiFiFavoriteUseCase = ToggleWiFiFavoriteUseCase(wifiDao)
 
     val allNetworks: LiveData<List<SavedWiFiNetwork>> = wifiDao.getAllNetworks()
 
@@ -21,26 +33,19 @@ class WiFiViewModel(application: Application) : AndroidViewModel(application) {
         isFavorite: Boolean = false
     ) {
         viewModelScope.launch {
-            val network = SavedWiFiNetwork(
-                ssid = ssid,
-                bssid = bssid,
-                displayName = displayName,
-                isFavorite = isFavorite
-            )
-            wifiDao.insertNetwork(network)
+            saveWiFiNetworkUseCase.execute(ssid, bssid, displayName, isFavorite)
         }
     }
 
     fun deleteNetwork(network: SavedWiFiNetwork) {
         viewModelScope.launch {
-            wifiDao.deleteNetwork(network)
+            deleteWiFiNetworkUseCase.execute(network)
         }
     }
 
     fun toggleFavorite(network: SavedWiFiNetwork) {
         viewModelScope.launch {
-            val updated = network.copy(isFavorite = !network.isFavorite)
-            wifiDao.updateNetwork(updated)
+            toggleWiFiFavoriteUseCase.execute(network)
         }
     }
 }

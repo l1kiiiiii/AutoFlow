@@ -5,10 +5,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.repository.WorkflowRepositoryImpl
-import com.example.autoflow.domain.model.Action
-import com.example.autoflow.domain.model.Trigger
 import com.example.autoflow.domain.usecase.SaveWorkflowUseCase
 import com.example.autoflow.domain.usecase.ValidateWorkflowUseCase
+import com.example.autoflow.domain.usecase.workflow.BuildTriggersListUseCase
+import com.example.autoflow.domain.usecase.workflow.BuildActionsListUseCase
 import com.example.autoflow.ui.state.TaskCreationEvent
 import com.example.autoflow.ui.state.TaskCreationUiState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +29,8 @@ class TaskCreationViewModel(application: Application) : AndroidViewModel(applica
     private val repository: WorkflowRepositoryImpl
     private val saveWorkflowUseCase: SaveWorkflowUseCase
     private val validateWorkflowUseCase: ValidateWorkflowUseCase
+    private val buildTriggersListUseCase: BuildTriggersListUseCase
+    private val buildActionsListUseCase: BuildActionsListUseCase
     
     // UI State
     private val _uiState = MutableStateFlow(TaskCreationUiState())
@@ -40,6 +42,8 @@ class TaskCreationViewModel(application: Application) : AndroidViewModel(applica
         repository = WorkflowRepositoryImpl(workflowDao)
         saveWorkflowUseCase = SaveWorkflowUseCase(repository)
         validateWorkflowUseCase = ValidateWorkflowUseCase()
+        buildTriggersListUseCase = BuildTriggersListUseCase()
+        buildActionsListUseCase = BuildActionsListUseCase()
     }
     
     /**
@@ -197,11 +201,29 @@ class TaskCreationViewModel(application: Application) : AndroidViewModel(applica
                 
                 val state = _uiState.value
                 
-                // Build triggers list
-                val triggers = buildTriggersList(state)
+                // Build triggers list using Use Case
+                val triggersResult = buildTriggersListUseCase.execute(state)
+                if (triggersResult.isFailure) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        showErrorDialog = true,
+                        errorMessage = triggersResult.exceptionOrNull()?.message ?: "Failed to build triggers"
+                    )
+                    return@launch
+                }
+                val triggers = triggersResult.getOrThrow()
                 
-                // Build actions list
-                val actions = buildActionsList(state)
+                // Build actions list using Use Case
+                val actionsResult = buildActionsListUseCase.execute(state)
+                if (actionsResult.isFailure) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        showErrorDialog = true,
+                        errorMessage = actionsResult.exceptionOrNull()?.message ?: "Failed to build actions"
+                    )
+                    return@launch
+                }
+                val actions = actionsResult.getOrThrow()
                 
                 // Validate workflow
                 val validationResult = validateWorkflowUseCase.execute(
@@ -247,113 +269,5 @@ class TaskCreationViewModel(application: Application) : AndroidViewModel(applica
                 )
             }
         }
-    }
-    
-    /**
-     * Build triggers list from UI state
-     * This logic is still in the ViewModel but is now much simpler
-     */
-    private fun buildTriggersList(state: TaskCreationUiState): List<Trigger> {
-        val triggers = mutableListOf<Trigger>()
-        
-        // Location trigger
-        if (state.locationTriggerExpanded && state.locationDetailsInput.isNotBlank()) {
-            val parts = state.locationDetailsInput.split(",").map { it.trim() }
-            if (parts.size == 2) {
-                val lat = parts[0].toDoubleOrNull()
-                val lng = parts[1].toDoubleOrNull()
-                if (lat != null && lng != null) {
-                    triggers.add(
-                        com.example.autoflow.domain.model.TriggerHelpers.createLocationTrigger(
-                            locationName = state.locationName.ifEmpty { "Unnamed Location" },
-                            latitude = lat,
-                            longitude = lng,
-                            radius = state.radiusValue.toDouble(),
-                            triggerOnEntry = state.triggerOnOption == "Entry" || state.triggerOnOption == "Both",
-                            triggerOnExit = state.triggerOnOption == "Exit" || state.triggerOnOption == "Both"
-                        )
-                    )
-                }
-            }
-        }
-        
-        // Time trigger
-        if (state.timeTriggerExpanded && state.timeValue.isNotBlank()) {
-            triggers.add(
-                com.example.autoflow.domain.model.TriggerHelpers.createTimeTrigger(
-                    state.timeValue,
-                    emptyList()
-                )
-            )
-        }
-        
-        // WiFi trigger
-        if (state.wifiTriggerExpanded) {
-            triggers.add(
-                com.example.autoflow.domain.model.TriggerHelpers.createWifiTrigger(
-                    null,
-                    state.wifiState
-                )
-            )
-        }
-        
-        // Bluetooth trigger
-        if (state.bluetoothDeviceTriggerExpanded && state.bluetoothDeviceAddress.isNotBlank()) {
-            triggers.add(
-                com.example.autoflow.domain.model.TriggerHelpers.createBluetoothTrigger(
-                    state.bluetoothDeviceAddress,
-                    null
-                )
-            )
-        }
-        
-        return triggers
-    }
-    
-    /**
-     * Build actions list from UI state
-     */
-    private fun buildActionsList(state: TaskCreationUiState): List<Action> {
-        val actions = mutableListOf<Action>()
-        
-        // Notification action
-        if (state.sendNotificationActionExpanded && state.notificationTitle.isNotBlank()) {
-            actions.add(
-                Action.createNotificationAction(
-                    state.notificationTitle,
-                    state.notificationMessage,
-                    state.notificationPriority
-                )
-            )
-        }
-        
-        // Toggle settings action
-        if (state.toggleSettingsActionExpanded) {
-            when (state.toggleSetting) {
-                "WiFi" -> actions.add(Action(Action.TYPE_WIFI_TOGGLE, "ON"))
-                "Bluetooth" -> actions.add(Action(Action.TYPE_BLUETOOTH_TOGGLE, "ON"))
-            }
-        }
-        
-        // Script action
-        if (state.runScriptActionExpanded && state.scriptText.isNotBlank()) {
-            actions.add(Action.createScriptAction(state.scriptText))
-        }
-        
-        // Sound mode action
-        if (state.setSoundModeActionExpanded) {
-            actions.add(Action.createSoundModeAction(state.soundMode))
-        }
-        
-        // Block apps action
-        if (state.blockAppsActionExpanded && state.selectedAppsToBlock.isNotEmpty()) {
-            actions.add(
-                Action.createBlockAppsAction(
-                    state.selectedAppsToBlock.joinToString(",")
-                )
-            )
-        }
-        
-        return actions
     }
 }
