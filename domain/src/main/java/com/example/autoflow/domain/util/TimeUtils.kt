@@ -1,5 +1,5 @@
 // file: TimeUtils.kt in util package
-package com.example.autoflow.util
+package com.example.autoflow.domain.util
 
 import java.time.LocalDate
 import java.time.LocalDateTime

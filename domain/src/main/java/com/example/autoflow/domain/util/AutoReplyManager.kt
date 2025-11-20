@@ -1,4 +1,4 @@
-package com.example.autoflow.util
+package com.example.autoflow.domain.util
 
 import android.Manifest
 import android.app.NotificationManager
@@ -12,7 +12,6 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import com.example.autoflow.data.AppDatabase
 import kotlinx.coroutines.*
-import android.provider.CallLog
 import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.data.toActions
 import com.example.autoflow.domain.model.Action

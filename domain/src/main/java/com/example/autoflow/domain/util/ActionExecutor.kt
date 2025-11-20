@@ -1,4 +1,4 @@
-package com.example.autoflow.util
+package com.example.autoflow.domain.util
 
 import android.Manifest
 import android.app.AlarmManager
@@ -18,7 +18,6 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.data.toActions
-import com.example.autoflow.integrations.PhoneStateManager
 import com.example.autoflow.domain.model.Action
 import com.example.autoflow.model.NotificationType
 import com.example.autoflow.policy.BlockPolicy

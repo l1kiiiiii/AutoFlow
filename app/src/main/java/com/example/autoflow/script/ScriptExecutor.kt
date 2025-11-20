@@ -6,8 +6,6 @@ import android.util.Log
 import com.example.autoflow.domain.model.Action
 import com.example.autoflow.util.NotificationHelper
 import org.mozilla.javascript.*
-import java.io.StringWriter
-import java.io.PrintWriter
 import java.net.HttpURLConnection
 import java.net.URL
 

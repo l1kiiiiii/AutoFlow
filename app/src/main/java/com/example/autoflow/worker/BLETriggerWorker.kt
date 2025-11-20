@@ -1,6 +1,5 @@
 package com.example.autoflow.worker
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback

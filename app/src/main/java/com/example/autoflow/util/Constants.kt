@@ -1,4 +1,4 @@
-package com.example.autoflow.util
+package com.example.autoflow.domain.util
 
 /**
  * Central constants repository for AutoFlow automation app

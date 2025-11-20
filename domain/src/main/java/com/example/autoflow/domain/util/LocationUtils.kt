@@ -1,4 +1,4 @@
-package com.example.autoflow.util
+package com.example.autoflow.domain.util
 
 import android.Manifest
 import android.content.Context
@@ -11,7 +11,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import com.google.android.gms.location.*
-import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 

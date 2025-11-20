@@ -1,6 +1,5 @@
 package com.example.autoflow.domain.model
 
-import com.example.autoflow.util.*
 
 /**
  * ✅ Helper functions to create triggers easily - Fixed to use data classes

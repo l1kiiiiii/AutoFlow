@@ -11,7 +11,6 @@ import androidx.annotation.RequiresPermission
 import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.toTriggers
 import com.example.autoflow.util.ActionExecutor
-import com.example.autoflow.util.Constants
 import com.example.autoflow.util.TriggerParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

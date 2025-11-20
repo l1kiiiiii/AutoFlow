@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -41,6 +42,9 @@ dependencies {
     // Kotlin coroutines
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.androidx.lifecycle.livedata.core.ktx)
+
+    // Serialization
+    implementation(libs.kotlinx.serialization.json)
 
     // Testing
     testImplementation(libs.junit)

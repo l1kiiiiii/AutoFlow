@@ -1,4 +1,4 @@
-package com.example.autoflow.util
+package com.example.autoflow.domain.util
 
 import android.Manifest
 import android.app.NotificationChannel

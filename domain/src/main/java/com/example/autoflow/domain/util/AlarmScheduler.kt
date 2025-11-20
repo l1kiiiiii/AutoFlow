@@ -1,4 +1,4 @@
-package com.example.autoflow.util
+package com.example.autoflow.domain.util
 
 import android.app.AlarmManager
 import android.app.PendingIntent
@@ -7,9 +7,7 @@ import android.content.Intent
 import android.util.Log
 import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.data.toTriggers
-import com.example.autoflow.domain.model.Trigger
 import com.example.autoflow.receiver.AlarmReceiver
-import java.text.SimpleDateFormat
 import java.util.*
 
 object AlarmScheduler {

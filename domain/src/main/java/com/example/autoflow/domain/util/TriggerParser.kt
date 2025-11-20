@@ -1,9 +1,8 @@
-package com.example.autoflow.util
+package com.example.autoflow.domain.util
 
 import android.util.Log
 import com.example.autoflow.domain.model.Trigger
 import org.json.JSONObject
-import org.json.JSONArray
 
 /**
  * ✅ Helper to parse trigger JSON values safely

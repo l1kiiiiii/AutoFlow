@@ -143,8 +143,6 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import com.example.autoflow.data.SavedBluetoothDevice
 import com.example.autoflow.data.SavedLocation
 import com.example.autoflow.data.SavedWiFiNetwork
