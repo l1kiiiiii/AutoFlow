@@ -164,6 +164,11 @@ import androidx.compose.material3.*
 import androidx.compose.ui.text.font.FontFamily
 import com.example.autoflow.util.AutoReplyManager
 import kotlinx.coroutines.withContext
+import com.example.autoflow.script.ScriptPermission
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.material.icons.filled.Code
 
 
 /**
@@ -218,8 +223,10 @@ fun TaskCreationScreen(
     var toggleSettingsActionExpanded: Boolean by remember { mutableStateOf(false) }
     var toggleSetting: String by remember { mutableStateOf("WiFi") }
 
-    var runScriptActionExpanded: Boolean by remember { mutableStateOf(false) }
     var scriptText: String by remember { mutableStateOf("") }
+    var runScriptActionExpanded: Boolean by remember { mutableStateOf(false) }
+    val selectedScriptPermissions = remember { mutableStateListOf<ScriptPermission>() }
+
 
     //  Error/success messages with explicit types
     var showErrorDialog: Boolean by remember { mutableStateOf(false) }
@@ -401,8 +408,7 @@ fun TaskCreationScreen(
             )
 
             // Actions Card
-            ActionsCard(
-                sendNotificationActionExpanded = sendNotificationActionExpanded,
+            ActionsCard(sendNotificationActionExpanded = sendNotificationActionExpanded,
                 onNotificationExpandedChange = { sendNotificationActionExpanded = it },
                 notificationTitle = notificationTitle,
                 onNotificationTitleChange = { notificationTitle = it },
@@ -423,8 +429,14 @@ fun TaskCreationScreen(
                 selectedAppsToBlock = selectedAppsToBlock,
                 onSelectedAppsChange = { selectedAppsToBlock = it },
                 unblockAppsActionExpanded = unblockAppsActionExpanded,
-                onUnblockAppsExpandedChange = { unblockAppsActionExpanded = it }
-            )
+                onUnblockAppsExpandedChange = { unblockAppsActionExpanded = it },
+                // 🆕 ADD THESE:
+                runScriptActionExpanded = runScriptActionExpanded,
+                onRunScriptExpandedChange = { runScriptActionExpanded = it },
+                scriptText = scriptText,
+                onScriptTextChange = { scriptText = it },
+                selectedScriptPermissions = selectedScriptPermissions
+                )
 
             // Save/Back Buttons Card
             SaveButtonsCard(
@@ -455,6 +467,7 @@ fun TaskCreationScreen(
                             toggleSetting = toggleSetting,
                             runScriptActionExpanded = runScriptActionExpanded,
                             scriptText = scriptText,
+                            selectedScriptPermissions = selectedScriptPermissions,
                             setSoundModeActionExpanded = setSoundModeActionExpanded,
                             soundMode = soundMode,
                             blockAppsActionExpanded = blockAppsActionExpanded,
@@ -679,7 +692,13 @@ private fun ActionsCard(
     selectedAppsToBlock: List<String>,
     onSelectedAppsChange: (List<String>) -> Unit,
     unblockAppsActionExpanded: Boolean,
-    onUnblockAppsExpandedChange: (Boolean) -> Unit
+    onUnblockAppsExpandedChange: (Boolean) -> Unit,
+
+    runScriptActionExpanded: Boolean,
+    onRunScriptExpandedChange: (Boolean) -> Unit,
+    scriptText: String,
+    onScriptTextChange: (String) -> Unit,
+    selectedScriptPermissions: MutableList<ScriptPermission>
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -757,6 +776,21 @@ private fun ActionsCard(
             ) {
                 UnblockAppsContent()
             }
+            ExpandableActionSection(
+                title = "Run Script",
+                icon = Icons.Default.Code,
+                expanded = runScriptActionExpanded,
+                onExpandedChange = onRunScriptExpandedChange
+            ) {
+                RunScriptContent(
+                    scriptText = scriptText,
+                    onScriptTextChange = onScriptTextChange,
+                    selectedPermissions = selectedScriptPermissions
+                )
+            }
+
+
+
         }
     }
 }
@@ -2783,7 +2817,8 @@ private fun ToggleSettingsContent(
 @Composable
 private fun RunScriptContent(
     scriptText: String,
-    onScriptTextChange: (String) -> Unit
+    onScriptTextChange: (String) -> Unit,
+    selectedPermissions: MutableList<ScriptPermission> = remember { mutableStateListOf() }
 ) {
     val context = LocalContext.current
     var selectedTemplate by remember { mutableStateOf("Custom") }
@@ -2796,7 +2831,8 @@ private fun RunScriptContent(
     )
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Templates:", style = MaterialTheme.typography.labelLarge)
+        // Templates
+        Text("Templates", style = MaterialTheme.typography.labelLarge)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(templates.keys.toList()) { template ->
                 FilterChip(
@@ -2810,15 +2846,107 @@ private fun RunScriptContent(
             }
         }
 
+        // Script Code Editor
         OutlinedTextField(
             value = scriptText,
             onValueChange = onScriptTextChange,
             label = { Text("JavaScript Code") },
-            placeholder = { Text("Enter code here...") },
-            modifier = Modifier.fillMaxWidth().height(150.dp),
-            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+            placeholder = { Text("// Enter code here...") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(150.dp),
+            textStyle = MaterialTheme.typography.bodySmall.copy(
+                fontFamily = FontFamily.Monospace
+            )
         )
 
+        // 🆕 PERMISSION SELECTION SECTION
+        HorizontalDivider()
+
+        Text(
+            "Script Permissions",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+
+        Text(
+            "Select capabilities this script can use:",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        // Permission Checkboxes
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 300.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ScriptPermission.values().forEach { permission ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            if (selectedPermissions.contains(permission)) {
+                                selectedPermissions.remove(permission)
+                            } else {
+                                selectedPermissions.add(permission)
+                            }
+                        },
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (selectedPermissions.contains(permission))
+                            MaterialTheme.colorScheme.primaryContainer
+                        else
+                            MaterialTheme.colorScheme.surface
+                    ),
+                    border = if (selectedPermissions.contains(permission))
+                        BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                    else
+                        BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = selectedPermissions.contains(permission),
+                            onCheckedChange = null // Handled by Card click
+                        )
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = permission.name.replace("_", " ").lowercase()
+                                    .replaceFirstChar { it.uppercase() },
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = if (selectedPermissions.contains(permission))
+                                    FontWeight.Bold
+                                else
+                                    FontWeight.Normal
+                            )
+                            Text(
+                                text = ScriptPermission.getDescription(permission),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        if (selectedPermissions.contains(permission)) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Selected",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Validation buttons
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -2838,6 +2966,8 @@ private fun RunScriptContent(
         }
     }
 }
+
+
 
 //  ERROR DIALOG
 
@@ -2886,6 +3016,7 @@ private suspend fun handleSaveTask(
     toggleSetting: String,
     runScriptActionExpanded: Boolean,
     scriptText: String,
+    selectedScriptPermissions: List<ScriptPermission>,
     setSoundModeActionExpanded: Boolean,
     soundMode: String,
     blockAppsActionExpanded: Boolean,
@@ -3041,10 +3172,14 @@ private suspend fun handleSaveTask(
         }
 
         if (hasScriptAction) {
-            Log.d("TaskCreation", "Adding SCRIPT action")
-            actions.add(Action(type = Constants.ACTION_RUN_SCRIPT).apply {
-                value = scriptText
-            })
+            Log.d("TaskCreation", "Adding SECURE SCRIPT action with ${selectedScriptPermissions.size} permissions")
+
+            // Use secure script creation
+            val secureScriptAction = Action.createSecureScriptAction(
+                scriptContent = scriptText,
+                permissions = selectedScriptPermissions.toSet()
+            )
+            actions.add(secureScriptAction)
         }
 
         Log.d("TaskCreation", "✅ Total actions created: ${actions.size}")

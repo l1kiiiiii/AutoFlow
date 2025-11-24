@@ -43,7 +43,20 @@ class ScriptExecutor(private val context: AndroidContext) {
             org.mozilla.javascript.Context.exit()
         }
     }
-
+    /**
+     * Execute script with security validation
+     * This is the new secure entry point
+     */
+    fun executeScriptSecure(
+        scriptCode: String,
+        permissions: Set<ScriptPermission> = ScriptPermission.getDefaultPermissions()
+    ): ScriptResult {
+        val secureExecutor = SecureScriptExecutor(
+            context,
+            ScriptSecurityPolicy.createRestrictivePolicy()
+        )
+        return secureExecutor.executeSecure(scriptCode, permissions)
+    }
     private fun addUtilityFunctions(rhinoContext: org.mozilla.javascript.Context, scope: Scriptable) {
         // Add log function
         val logFunction = object : BaseFunction() {

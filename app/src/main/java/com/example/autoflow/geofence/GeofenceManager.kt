@@ -5,11 +5,11 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.location.Location // ✅ FIXED: Use correct Location import
+import android.location.Location
 import android.os.Build
 import android.util.Log
 import androidx.core.app.ActivityCompat
-import com.example.autoflow.integrations.LocationManager // ✅ ADD: Import your LocationManager
+import com.example.autoflow.integrations.LocationManager
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingClient
 import com.google.android.gms.location.GeofencingRequest
@@ -17,18 +17,22 @@ import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/**
+ * ✅ ULTRA-RESPONSIVE GeofenceManager - Instant triggering with zero delays
+ */
 object GeofenceManager {
     private const val TAG = "GeofenceManager"
 
     // Constants
     const val MAX_GEOFENCES = 100
-    private const val MIN_GEOFENCE_RADIUS = 20f // 20 meters minimum
-    private const val MAX_GEOFENCE_RADIUS = 1000f // 1km maximum
-    private const val RESPONSIVENESS_MS = 10000
-    private val activeGeofences = mutableSetOf<String>()  // Track active geofence IDs
+    private const val MIN_GEOFENCE_RADIUS = 20f
+    private const val MAX_GEOFENCE_RADIUS = 1000f
+    private const val RESPONSIVENESS_MS = 0 // ✅ INSTANT: 0ms delay = immediate response
+    private const val LOITERING_DELAY_MS = 1000 // ✅ 1 second dwell (minimum allowed)
+    private val activeGeofences = mutableSetOf<String>()
 
     /**
-     * Add a geofence for a workflow
+     * ✅ Add ultra-responsive geofence with instant triggering
      */
     fun addGeofence(
         context: Context,
@@ -37,9 +41,13 @@ object GeofenceManager {
         longitude: Double,
         radius: Float,
         triggerOnEntry: Boolean = true,
-        triggerOnExit: Boolean = false
+        triggerOnExit: Boolean = true
     ): Boolean {
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
             Log.e(TAG, "❌ Location permission not granted")
             return false
         }
@@ -53,51 +61,39 @@ object GeofenceManager {
             val geofencingClient = LocationServices.getGeofencingClient(context)
             val requestId = "workflow_$workflowId"
 
-            // ✅ CRITICAL: Optimize radius for better responsiveness
             val optimizedRadius = when {
-                radius < MIN_GEOFENCE_RADIUS -> {
-                    Log.w(TAG, "⚠️ Radius too small ($radius), using minimum ${MIN_GEOFENCE_RADIUS}m")
-                    MIN_GEOFENCE_RADIUS
-                }
-                radius > MAX_GEOFENCE_RADIUS -> {
-                    Log.w(TAG, "⚠️ Radius too large ($radius), using maximum ${MAX_GEOFENCE_RADIUS}m")
-                    MAX_GEOFENCE_RADIUS
-                }
+                radius < MIN_GEOFENCE_RADIUS -> MIN_GEOFENCE_RADIUS
+                radius > MAX_GEOFENCE_RADIUS -> MAX_GEOFENCE_RADIUS
                 else -> radius
             }
 
-            // Determine transition types
-            val transitionTypes = when {
-                triggerOnEntry && triggerOnExit ->
-                    Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_EXIT
-                triggerOnEntry -> Geofence.GEOFENCE_TRANSITION_ENTER
-                triggerOnExit -> Geofence.GEOFENCE_TRANSITION_EXIT
-                else -> Geofence.GEOFENCE_TRANSITION_ENTER
-            }
+            // ✅ Monitor ENTER + EXIT + DWELL
+            val transitionTypes = Geofence.GEOFENCE_TRANSITION_ENTER or
+                    Geofence.GEOFENCE_TRANSITION_EXIT or
+                    Geofence.GEOFENCE_TRANSITION_DWELL
 
-            // ✅ CRITICAL: Create responsive geofence
+            Log.d(TAG, "⚡ Creating INSTANT-RESPONSE geofence:")
+            Log.d(TAG, "   📍 Location: ($latitude, $longitude)")
+            Log.d(TAG, "   🎯 Radius: ${optimizedRadius}m")
+            Log.d(TAG, "   🚪 Monitoring: ENTER + EXIT + DWELL")
+            Log.d(TAG, "   ⚡ Responsiveness: INSTANT (${RESPONSIVENESS_MS}ms)")
+            Log.d(TAG, "   ⏱️ Dwell delay: ${LOITERING_DELAY_MS}ms")
+
+            // ✅ Create INSTANT-RESPONSE geofence
             val geofence = Geofence.Builder()
                 .setRequestId(requestId)
                 .setCircularRegion(latitude, longitude, optimizedRadius)
                 .setExpirationDuration(Geofence.NEVER_EXPIRE)
                 .setTransitionTypes(transitionTypes)
-                .setNotificationResponsiveness(RESPONSIVENESS_MS) // ✅ KEY: 10-second response
-                .setLoiteringDelay(5000) // ✅ 5-second dwell time
+                .setNotificationResponsiveness(RESPONSIVENESS_MS) // ✅ 0ms = instant
+                .setLoiteringDelay(LOITERING_DELAY_MS) // ✅ 1 second minimum
                 .build()
 
-            // ✅ CRITICAL: Enhanced geofencing request
             val geofencingRequest = GeofencingRequest.Builder()
-                .setInitialTrigger(
-                    when {
-                        triggerOnEntry -> GeofencingRequest.INITIAL_TRIGGER_ENTER
-                        triggerOnExit -> GeofencingRequest.INITIAL_TRIGGER_EXIT
-                        else -> GeofencingRequest.INITIAL_TRIGGER_ENTER
-                    }
-                )
+                .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER or GeofencingRequest.INITIAL_TRIGGER_EXIT)
                 .addGeofence(geofence)
                 .build()
 
-            // ✅ Create pending intent with proper flags
             val intent = Intent(context, GeofenceReceiver::class.java)
             val pendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 PendingIntent.getBroadcast(
@@ -115,18 +111,14 @@ object GeofenceManager {
                 )
             }
 
-            // Add geofence with enhanced logging
             geofencingClient.addGeofences(geofencingRequest, pendingIntent)
                 .addOnSuccessListener {
                     activeGeofences.add(requestId)
-                    Log.d(TAG, "✅ RESPONSIVE Geofence added: $requestId")
-                    Log.d(TAG, "   📍 Location: ($latitude, $longitude)")
-                    Log.d(TAG, "   🎯 Radius: ${optimizedRadius}m")
-                    Log.d(TAG, "   ⚡ Responsiveness: ${RESPONSIVENESS_MS}ms")
-                    Log.d(TAG, "   🚪 Entry: $triggerOnEntry, Exit: $triggerOnExit")
+                    Log.d(TAG, "✅ ⚡ INSTANT-RESPONSE Geofence registered: $requestId")
+                    Log.d(TAG, "   Ready for immediate re-triggering on every entry")
                 }
                 .addOnFailureListener { e ->
-                    Log.e(TAG, "❌ Failed to add responsive geofence: ${e.message}", e)
+                    Log.e(TAG, "❌ Failed to add geofence: ${e.message}", e)
                 }
 
             return true
@@ -141,28 +133,24 @@ object GeofenceManager {
     }
 
     /**
-     * ✅ FIXED: Validate current location with proper Location class
+     * ✅ Validate current location
      */
     suspend fun validateCurrentLocationForWorkflow(
-        context: Context, // ✅ ADD: Missing context parameter
+        context: Context,
         workflowId: Long,
         targetLatitude: Double,
         targetLongitude: Double,
         radius: Double
     ): Boolean = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "🔍 Validating current location for workflow $workflowId")
-
-            // ✅ FIXED: Use your LocationManager class to get current location
             val locationManager = LocationManager(context)
-            val currentLocation = locationManager.getCurrentLocationSync(3000L) // 3-second timeout
+            val currentLocation = locationManager.getCurrentLocationSync(3000L)
 
             if (currentLocation == null) {
-                Log.e(TAG, "❌ Cannot validate - no current location available")
+                Log.e(TAG, "❌ Cannot get current location")
                 return@withContext false
             }
 
-            // ✅ FIXED: Create proper Location object
             val targetLocation = Location("target").apply {
                 latitude = targetLatitude
                 longitude = targetLongitude
@@ -171,30 +159,28 @@ object GeofenceManager {
             val distance = currentLocation.distanceTo(targetLocation)
             val isWithinRadius = distance <= radius
 
-            Log.d(TAG, "📍 Current: ${currentLocation.latitude}, ${currentLocation.longitude}")
-            Log.d(TAG, "🎯 Target: $targetLatitude, $targetLongitude")
-            Log.d(TAG, "📏 Distance: ${distance.toInt()}m (radius: ${radius.toInt()}m)")
-            Log.d(TAG, "✅ Within radius: ${if (isWithinRadius) "YES" else "NO"}")
+            Log.d(TAG, "📏 Distance: ${distance.toInt()}m (radius: ${radius.toInt()}m) - ${if (isWithinRadius) "✅ INSIDE" else "❌ OUTSIDE"}")
 
             isWithinRadius
 
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error validating location for workflow", e)
+            Log.e(TAG, "❌ Error validating location", e)
             false
         }
     }
 
     /**
-     * Remove a geofence for a workflow
+     * Remove a geofence
      */
     fun removeGeofence(context: Context, workflowId: Long) {
         try {
-            val geofencingClient: GeofencingClient = LocationServices.getGeofencingClient(context)
+            val geofencingClient = LocationServices.getGeofencingClient(context)
             val requestId = "workflow_$workflowId"
 
             geofencingClient.removeGeofences(listOf(requestId))
                 .addOnSuccessListener {
                     activeGeofences.remove(requestId)
+                    clearGeofenceState(context, workflowId)
                     Log.d(TAG, "✅ Geofence removed: $requestId")
                 }
                 .addOnFailureListener { e ->
@@ -210,12 +196,13 @@ object GeofenceManager {
      */
     fun removeAllGeofences(context: Context) {
         try {
-            val geofencingClient: GeofencingClient = LocationServices.getGeofencingClient(context)
+            val geofencingClient = LocationServices.getGeofencingClient(context)
 
             geofencingClient.removeGeofences(activeGeofences.toList())
                 .addOnSuccessListener {
                     val count = activeGeofences.size
                     activeGeofences.clear()
+                    clearAllGeofenceStates(context)
                     Log.d(TAG, "✅ Removed $count geofences")
                 }
                 .addOnFailureListener { e ->
@@ -226,24 +213,30 @@ object GeofenceManager {
         }
     }
 
-    /**
-     * Check if location permissions are granted
-     */
-    private fun hasLocationPermission(context: Context): Boolean {
-        return ActivityCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
+    private fun clearGeofenceState(context: Context, workflowId: Long) {
+        try {
+            val prefs = context.getSharedPreferences("geofence_states", Context.MODE_PRIVATE)
+            prefs.edit().apply {
+                remove("location_state_${workflowId}_current")
+                remove("location_state_${workflowId}_previous")
+                apply()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error clearing geofence state", e)
+        }
     }
 
-    /**
-     * Get count of active geofences
-     */
+    private fun clearAllGeofenceStates(context: Context) {
+        try {
+            val prefs = context.getSharedPreferences("geofence_states", Context.MODE_PRIVATE)
+            prefs.edit().clear().apply()
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error clearing all states", e)
+        }
+    }
+
     fun getActiveGeofenceCount(): Int = activeGeofences.size
 
-    /**
-     * Check if a specific workflow has an active geofence
-     */
     fun hasGeofence(workflowId: Long): Boolean {
         return activeGeofences.contains("workflow_$workflowId")
     }

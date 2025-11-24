@@ -50,43 +50,6 @@
                 }
             }
         }
-        /**
-         * ✅ ADD: This method to your TriggerEvaluator object
-         */
-        suspend fun validateCurrentLocationForTrigger(
-            context: Context,
-            trigger: Trigger
-        ): Boolean = withContext(Dispatchers.IO) {
-            try {
-                val locationData = TriggerParser.parseLocationData(trigger) ?: return@withContext false
-
-                // Get current location
-                val locationManager = com.example.autoflow.integrations.LocationManager(context)
-                val currentLocation = locationManager.getCurrentLocationSync(3000L)
-
-                if (currentLocation == null) {
-                    Log.e(TAG, "❌ Cannot get current location")
-                    return@withContext false
-                }
-
-                // Calculate distance
-                val targetLocation = android.location.Location("target").apply {
-                    latitude = locationData.latitude
-                    longitude = locationData.longitude
-                }
-
-                val distance = currentLocation.distanceTo(targetLocation)
-                val isWithinRadius = distance <= locationData.radius
-
-                Log.d(TAG, "📍 GPS validation: ${distance.toInt()}m from target (radius: ${locationData.radius.toInt()}m)")
-
-                return@withContext isWithinRadius
-
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Error validating location", e)
-                return@withContext false
-            }
-        }
 
         private suspend fun checkCurrentLocationTrigger(
             context: Context,
@@ -424,4 +387,53 @@
             val currentStates = buildCurrentStates(context, triggers)
             return evaluateWorkflow(workflow, currentStates)
         }
+
+        /**
+         * ✅ Validate current GPS location for a trigger
+         * This method performs REAL-TIME GPS checking
+         */
+        suspend fun validateCurrentLocationForTrigger(
+            context: Context,
+            trigger: Trigger
+        ): Boolean = withContext(Dispatchers.IO) {
+            try {
+                val locationData = TriggerParser.parseLocationData(trigger)
+                if (locationData == null) {
+                    Log.e(TAG, "❌ Failed to parse location data")
+                    return@withContext false
+                }
+
+                Log.d(TAG, "🛰️ Real-time GPS check for: ${locationData.locationName}")
+
+                // ✅ Get current GPS location
+                val locationManager = com.example.autoflow.integrations.LocationManager(context)
+                val currentLocation = locationManager.getCurrentLocationSync(5000L)
+
+                if (currentLocation == null) {
+                    Log.e(TAG, "❌ Cannot get current GPS position")
+                    return@withContext false
+                }
+
+                // ✅ Calculate distance
+                val targetLocation = android.location.Location("target").apply {
+                    latitude = locationData.latitude
+                    longitude = locationData.longitude
+                }
+
+                val distance = currentLocation.distanceTo(targetLocation)
+                val isWithinRadius = distance <= locationData.radius
+
+                Log.d(TAG, "📍 GPS: (${currentLocation.latitude}, ${currentLocation.longitude})")
+                Log.d(TAG, "🎯 Target: (${locationData.latitude}, ${locationData.longitude})")
+                Log.d(TAG, "📏 Distance: ${distance.toInt()}m / Radius: ${locationData.radius.toInt()}m")
+                Log.d(TAG, "✅ Location validation: ${if (isWithinRadius) "PASS" else "FAIL"}")
+
+                return@withContext isWithinRadius
+
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error in GPS validation", e)
+                return@withContext false
+            }
+        }
+
     }

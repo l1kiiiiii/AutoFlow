@@ -29,6 +29,9 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import com.example.autoflow.script.ScriptExecutor
+import com.example.autoflow.script.ScriptResult
+
 
 //  meeting mode state tracking
 object MeetingModeTracker {
@@ -192,6 +195,58 @@ object ActionExecutor {
 
                 Constants.ACTION_AUTO_REPLY_SMS -> {
                     executeAutoReplySms(context, action)
+                }
+
+
+                Action.TYPE_RUN_SCRIPT -> {
+                    Log.d(TAG, "Executing SCRIPT action")
+                    val scriptCode = action.value
+
+                    if (scriptCode.isNullOrBlank()) {
+                        Log.w(TAG, "Script code is empty")
+                        return false
+                    }
+
+                    // Get permissions from action
+                    val permissions = action.getScriptPermissions()
+
+                    Log.d(TAG, "Script has ${permissions.size} permissions: $permissions")
+
+                    // Execute script in background thread
+                    Thread {
+                        try {
+                            val scriptExecutor = ScriptExecutor(context)
+                            val result = scriptExecutor.executeScriptSecure(scriptCode, permissions)
+
+                            // Handle result
+                            when (result) {
+                                is ScriptResult.Success -> {
+                                    Log.i(TAG, "✅ Script executed successfully: ${result.output}")
+                                    // Optionally show success notification
+                                    sendNotification(
+                                        context,
+                                        "Script Success",
+                                        "Output: ${result.output.take(100)}",
+                                        "Normal"
+                                    )
+                                }
+                                is ScriptResult.Error -> {
+                                    Log.e(TAG, "❌ Script execution failed: ${result.error}")
+                                    // Show error notification
+                                    sendNotification(
+                                        context,
+                                        "Script Error",
+                                        result.error,
+                                        "High"
+                                    )
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "❌ Script execution exception: ${e.message}", e)
+                        }
+                    }.start()
+
+                    true  // Return true immediately (script runs in background)
                 }
 
                 else -> {
