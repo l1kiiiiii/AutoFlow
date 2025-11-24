@@ -1,5 +1,7 @@
 package com.example.autoflow.model
 
+import com.example.autoflow.script.ScriptPermission
+
 /**
  *  Enhanced Action class for AutoFlow workflows
  * Represents different types of actions that can be executed
@@ -26,6 +28,10 @@ class Action {
     @JvmField
     var scheduledUnblockTime: Long? = null
 
+    // NEW: Store script permissions as comma-separated string
+    @JvmField
+    var scriptPermissions: String? = null
+
     // Constructor for notification actions
     constructor(type: String?, title: String?, message: String?, priority: String?) {
         this.type = type
@@ -35,6 +41,7 @@ class Action {
         this.value = null
         this.duration = null
         this.scheduledUnblockTime = null
+        this.scriptPermissions = null
     }
 
     // Constructor for simple actions (only type)
@@ -46,6 +53,7 @@ class Action {
         this.value = null
         this.duration = null
         this.scheduledUnblockTime = null
+        this.scriptPermissions = null
     }
 
     // Constructor for actions with value (e.g., sound mode, toggles)
@@ -57,6 +65,7 @@ class Action {
         this.priority = "Normal"
         this.duration = null
         this.scheduledUnblockTime = null
+        this.scriptPermissions = null
     }
 
     // Constructor for actions with duration (e.g., timers, blocks)
@@ -68,6 +77,7 @@ class Action {
         this.message = null
         this.priority = "Normal"
         this.scheduledUnblockTime = null
+        this.scriptPermissions = null
     }
 
     // Full constructor
@@ -87,6 +97,7 @@ class Action {
         this.value = value
         this.duration = duration
         this.scheduledUnblockTime = scheduledUnblockTime
+        this.scriptPermissions = null
     }
 
     // Default constructor
@@ -98,6 +109,7 @@ class Action {
         this.value = null
         this.duration = null
         this.scheduledUnblockTime = null
+        this.scriptPermissions = null
     }
 
     companion object {
@@ -150,10 +162,46 @@ class Action {
         fun createScriptAction(scriptContent: String): Action {
             return Action(TYPE_RUN_SCRIPT, scriptContent)
         }
+
+        /**
+         * NEW: Create secure script action with permissions
+         */
+        fun createSecureScriptAction(
+            scriptContent: String,
+            permissions: Set<ScriptPermission> = ScriptPermission.getDefaultPermissions()
+        ): Action {
+            val action = Action(TYPE_RUN_SCRIPT, scriptContent)
+            // Store permissions as comma-separated string
+            action.scriptPermissions = permissions.joinToString(",") { it.name }
+            return action
+        }
+    }
+
+    /**
+     * NEW: Get script permissions from stored string
+     */
+    fun getScriptPermissions(): Set<ScriptPermission> {
+        if (scriptPermissions.isNullOrEmpty()) {
+            return ScriptPermission.getDefaultPermissions()
+        }
+
+        return try {
+            scriptPermissions!!.split(",")
+                .mapNotNull {
+                    try {
+                        ScriptPermission.valueOf(it.trim())
+                    } catch (e: IllegalArgumentException) {
+                        null
+                    }
+                }
+                .toSet()
+        } catch (e: Exception) {
+            ScriptPermission.getDefaultPermissions()
+        }
     }
 
     override fun toString(): String {
-        return "Action(type='$type', title='$title', message='$message', priority='$priority', value='$value', duration=$duration, scheduledUnblockTime=$scheduledUnblockTime)"
+        return "Action(type='$type', title='$title', message='$message', priority='$priority', value='$value', duration=$duration, scheduledUnblockTime=$scheduledUnblockTime, scriptPermissions='$scriptPermissions')"
     }
 
     fun isValid(): Boolean {
@@ -184,12 +232,17 @@ class Action {
             TYPE_WIFI_TOGGLE -> "Turn ${value ?: "Unknown"} WiFi"
             TYPE_BLUETOOTH_TOGGLE -> "Turn ${value ?: "Unknown"} Bluetooth"
             TYPE_BLOCK_APPS -> "Block selected apps${if (duration != null) " for ${duration}ms" else ""}"
-            TYPE_RUN_SCRIPT -> "Execute custom script"
+            TYPE_RUN_SCRIPT -> {
+                val permCount = getScriptPermissions().size
+                "Execute custom script ($permCount permissions)"
+            }
             else -> "Perform action"
         }
     }
 
     fun copy(): Action {
-        return Action(type, title, message, priority, value, duration, scheduledUnblockTime)
+        val newAction = Action(type, title, message, priority, value, duration, scheduledUnblockTime)
+        newAction.scriptPermissions = this.scriptPermissions
+        return newAction
     }
 }
