@@ -46,6 +46,7 @@ object AlarmScheduler {
     /**
      * Schedule a single alarm for a time trigger
      */
+
     private fun scheduleAlarmForTime(
         context: Context,
         workflow: WorkflowEntity,
@@ -54,6 +55,13 @@ object AlarmScheduler {
         index: Int
     ) {
         try {
+            // ✅ SAFETY CHECK: Validate workflow ID
+            val workflowId = workflow.id
+            if (workflowId == null || workflowId <= 0) {
+                Log.e(TAG, "❌ Cannot schedule alarm - invalid workflow ID: $workflowId")
+                return
+            }
+
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
             val calendar = Calendar.getInstance()
@@ -68,12 +76,13 @@ object AlarmScheduler {
             }
 
             val intent = Intent(context, AlarmReceiver::class.java).apply {
-                putExtra("workflow_id", workflow.id)
+                // ✅ FIX: Use the correct constant key that AlarmReceiver expects
+                putExtra(Constants.EXTRA_WORKFLOW_ID, workflowId)
                 putExtra("workflow_name", workflow.workflowName)
                 putExtra("trigger_time", time)
             }
 
-            val requestCode = (workflow.id.toString() + index.toString()).toInt()
+            val requestCode = (workflowId.toString() + index.toString()).toInt()
             val pendingIntent = PendingIntent.getBroadcast(
                 context, requestCode, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -85,12 +94,18 @@ object AlarmScheduler {
                 pendingIntent
             )
 
+            // ✅ Save alarm ID for later cancellation
+            saveAlarmId(context, workflowId, requestCode)
+
             Log.d(TAG, "⏰ Alarm scheduled for ${workflow.workflowName} at $time")
+            Log.d(TAG, "   📋 Workflow ID: $workflowId, RequestCode: $requestCode")
 
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error scheduling alarm", e)
         }
     }
+
+
 
     /**
      * Cancel all alarms for a workflow

@@ -17,7 +17,7 @@ import com.example.autoflow.model.SavedWiFiNetwork
         SavedWiFiNetwork::class,
         SavedBluetoothDevice::class
     ],
-    version = 7,
+    version = 1,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
