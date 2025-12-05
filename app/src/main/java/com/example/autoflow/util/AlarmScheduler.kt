@@ -46,9 +46,7 @@ object AlarmScheduler {
     /**
      * Schedule a single alarm for a time trigger
      */
-    /**
-     * Schedule a single alarm for a time trigger
-     */
+
     private fun scheduleAlarmForTime(
         context: Context,
         workflow: WorkflowEntity,
@@ -57,7 +55,7 @@ object AlarmScheduler {
         index: Int
     ) {
         try {
-            //  SAFETY CHECK: Validate workflow ID
+            // ✅ SAFETY CHECK: Validate workflow ID
             val workflowId = workflow.id
             if (workflowId == null || workflowId <= 0) {
                 Log.e(TAG, "❌ Cannot schedule alarm - invalid workflow ID: $workflowId")
@@ -78,7 +76,7 @@ object AlarmScheduler {
             }
 
             val intent = Intent(context, AlarmReceiver::class.java).apply {
-                //  FIX: Use the correct constant key that AlarmReceiver expects
+                // ✅ FIX: Use the correct constant key that AlarmReceiver expects
                 putExtra(Constants.EXTRA_WORKFLOW_ID, workflowId)
                 putExtra("workflow_name", workflow.workflowName)
                 putExtra("trigger_time", time)
@@ -96,7 +94,7 @@ object AlarmScheduler {
                 pendingIntent
             )
 
-            //  Save alarm ID for later cancellation
+            // ✅ Save alarm ID for later cancellation
             saveAlarmId(context, workflowId, requestCode)
 
             Log.d(TAG, "⏰ Alarm scheduled for ${workflow.workflowName} at $time")
@@ -108,12 +106,13 @@ object AlarmScheduler {
     }
 
 
+
     /**
      * Cancel all alarms for a workflow
-     *  FIXED: Proper error handling
+     * ✅ FIXED: Proper error handling
      */
     fun cancelWorkflowAlarms(context: Context, workflowId: Long) {
-        //  FIXED: Validate workflow ID
+        // ✅ FIXED: Validate workflow ID
         if (workflowId <= 0) {
             Log.d(TAG, "🚫 Cancelling alarms for workflow ID: $workflowId (skipping - invalid ID)")
             return
@@ -141,7 +140,7 @@ object AlarmScheduler {
                     )
                     alarmManager.cancel(pendingIntent)
                     pendingIntent.cancel()
-                    Log.d(TAG, " Cancelled alarm with requestCode: $requestCode")
+                    Log.d(TAG, "✅ Cancelled alarm with requestCode: $requestCode")
                 } catch (e: Exception) {
                     Log.e(TAG, "❌ Error cancelling alarm $requestCode", e)
                 }
@@ -149,7 +148,7 @@ object AlarmScheduler {
 
             // Clear saved IDs
             clearAlarmIds(context, workflowId)
-            Log.d(TAG, " Cancelled ${alarmIds.size} alarms for workflow $workflowId")
+            Log.d(TAG, "✅ Cancelled ${alarmIds.size} alarms for workflow $workflowId")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error cancelling workflow alarms", e)
         }
@@ -157,7 +156,7 @@ object AlarmScheduler {
 
     /**
      * Generate unique request code for alarm
-     *  FIXED: Better hash generation
+     * ✅ FIXED: Better hash generation
      */
     private fun generateRequestCode(workflowId: Long, time: String): Int {
         return "$workflowId-$time".hashCode()
@@ -198,7 +197,7 @@ object AlarmScheduler {
 
     /**
      * Get saved alarm IDs for a workflow
-     *  FIXED: Proper error handling for parsing
+     * ✅ FIXED: Proper error handling for parsing
      */
     private fun getAlarmIds(context: Context, workflowId: Long): List<Int> {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
