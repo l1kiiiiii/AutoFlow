@@ -116,7 +116,7 @@ fun WorkflowEntity.toTriggers(): List<Trigger> {
                         val ssid = if (valueJson.has("ssid")) valueJson.getString("ssid") else null
                         val state = if (valueJson.has("state")) valueJson.getString("state") else "CONNECTED"
                         Trigger.WiFiTrigger(ssid = ssid, state = state)
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         // Fallback for simple string values
                         Trigger.WiFiTrigger(ssid = triggerValue, state = "CONNECTED")
                     }
@@ -127,7 +127,7 @@ fun WorkflowEntity.toTriggers(): List<Trigger> {
                         val deviceAddress = valueJson.getString("deviceAddress")
                         val deviceName = if (valueJson.has("deviceName")) valueJson.getString("deviceName") else null
                         Trigger.BluetoothTrigger(deviceAddress = deviceAddress, deviceName = deviceName)
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         // Fallback for simple string values
                         Trigger.BluetoothTrigger(deviceAddress = triggerValue)
                     }
@@ -152,7 +152,7 @@ fun WorkflowEntity.toTriggers(): List<Trigger> {
                             triggerOnExit = triggerOnExit,
                             triggerOn = triggerOn
                         )
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         // Create a default location trigger if parsing fails
                         Trigger.LocationTrigger(
                             locationName = "Unknown Location",
@@ -174,7 +174,7 @@ fun WorkflowEntity.toTriggers(): List<Trigger> {
                             days.add(daysJsonArray.getString(j))
                         }
                         Trigger.TimeTrigger(time = time, days = days)
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         // Fallback for simple time values
                         Trigger.TimeTrigger(time = triggerValue, days = listOf("MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"))
                     }
@@ -185,7 +185,7 @@ fun WorkflowEntity.toTriggers(): List<Trigger> {
                         val level = valueJson.getInt("level")
                         val condition = valueJson.getString("condition")
                         Trigger.BatteryTrigger(level = level, condition = condition)
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         // Fallback for simple battery level values
                         val level = triggerValue.toIntOrNull() ?: 20
                         Trigger.BatteryTrigger(level = level, condition = "below")
@@ -311,7 +311,7 @@ fun WorkflowEntity.getTriggerSummary(): String {
             triggersList.size == 1 -> triggersList.first().type
             else -> "${triggersList.first().type} + ${triggersList.size - 1} more"
         }
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         "Unknown triggers"
     }
 }
@@ -327,7 +327,7 @@ fun WorkflowEntity.getActionSummary(): String {
             actionsList.size == 1 -> actionsList.first().type ?: "Unknown"
             else -> "${actionsList.first().type ?: "Unknown"} + ${actionsList.size - 1} more"
         }
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         "Unknown actions"
     }
 }

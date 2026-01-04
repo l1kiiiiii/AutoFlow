@@ -5,7 +5,8 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.autoflow.data.AppDatabase
-import com.example.autoflow.data.toActions  // ✅ FIXED: Import toActions
+import com.example.autoflow.data.WorkflowRepository
+import com.example.autoflow.data.toActions
 import com.example.autoflow.util.ActionExecutor
 import com.example.autoflow.util.Constants
 import kotlinx.coroutines.Dispatchers
@@ -14,7 +15,7 @@ import kotlin.math.abs
 
 /**
  * Time Trigger Worker - Executes actions at specific times
- * ✅ UPDATED: Uses toActions() instead of toAction()
+ * ✅ Refactored to use WorkflowRepository for consistency
  */
 class TimeTriggerWorker(
     context: Context,
@@ -28,7 +29,6 @@ class TimeTriggerWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            // Get input data
             val targetTimeMillis = inputData.getLong(Constants.KEY_TIME_TRIGGER, -1L)
             val workflowId = inputData.getLong(Constants.KEY_WORKFLOW_ID, -1L)
 
@@ -37,7 +37,6 @@ class TimeTriggerWorker(
                 return@withContext Result.failure()
             }
 
-            // Check if time has arrived
             val currentTime = System.currentTimeMillis()
             val timeDiff = abs(currentTime - targetTimeMillis)
 
@@ -61,11 +60,14 @@ class TimeTriggerWorker(
         }
     }
 
-    // ✅ FIXED: Execute ALL actions
     private suspend fun executeActions(workflowId: Long): Result {
         return try {
+            // ✅ FIX: Use Repository instead of direct DAO
             val database = AppDatabase.getDatabase(applicationContext)
-            val workflow = database.workflowDao().getByIdSync(workflowId)
+            val repository = WorkflowRepository(database.workflowDao())
+
+            // Use the new suspend function
+            val workflow = repository.getWorkflowById(workflowId)
 
             if (workflow == null) {
                 Log.e(TAG, "❌ Workflow not found: $workflowId")
@@ -77,14 +79,12 @@ class TimeTriggerWorker(
                 return Result.success()
             }
 
-            // ✅ FIXED: Get ALL actions as a list
             val actions = workflow.toActions()
             if (actions.isEmpty()) {
                 Log.e(TAG, "❌ No valid actions")
                 return Result.failure()
             }
 
-            // Execute all actions
             var allSuccessful = true
             actions.forEach { action ->
                 val success = ActionExecutor.executeAction(applicationContext, action)

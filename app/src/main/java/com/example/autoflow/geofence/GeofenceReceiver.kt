@@ -1,3 +1,4 @@
+
 package com.example.autoflow.geofence
 
 import android.content.BroadcastReceiver
@@ -6,6 +7,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.util.Log
 import com.example.autoflow.data.AppDatabase
+import com.example.autoflow.data.WorkflowEntity
 import com.example.autoflow.data.WorkflowRepository
 import com.example.autoflow.data.toTriggers
 import com.example.autoflow.util.ActionExecutor
@@ -19,8 +21,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * ✅ ZERO COOLDOWN VERSION - Instant re-execution on every entry
+ * ✅ Refactored GeofenceReceiver using Kotlin Coroutines
+ *
+ * ZERO COOLDOWN VERSION - Instant re-execution on every entry
  * No delays, no throttling - executes immediately every time
+ *
+ * Key Features:
+ * - Uses suspend functions instead of callbacks
+ * - Proper coroutine scope management
+ * - Instant execution on entry
+ * - Auto-unblock on exit
+ * - Real-time GPS validation
+ * - State tracking for transitions
  */
 class GeofenceReceiver : BroadcastReceiver() {
 
@@ -73,6 +85,7 @@ class GeofenceReceiver : BroadcastReceiver() {
 
     /**
      * ✅ INSTANT EXECUTION - No cooldown, no throttling
+     * Uses coroutines instead of callbacks for cleaner code
      */
     private fun handleLocationTransition(context: Context, geofenceId: String, transition: String) {
         if (!geofenceId.startsWith("workflow_")) {
@@ -105,7 +118,6 @@ class GeofenceReceiver : BroadcastReceiver() {
                         updateLocationState(prefs, workflowId, "OUTSIDE")
                         Log.d(TAG, "✅ State updated: User is now OUTSIDE location")
                         Log.d(TAG, "♻️ Ready for instant re-execution on next entry")
-                        return@launch // Don't execute on EXIT
                     }
                     "DWELL" -> {
                         updateLocationState(prefs, workflowId, "DWELLING")
@@ -116,12 +128,12 @@ class GeofenceReceiver : BroadcastReceiver() {
                 // ✅ Check if we should execute based on state transition
                 val shouldExecute = when (transition) {
                     "ENTER" -> {
-                        // ✅ INSTANT EXECUTION: Execute on EVERY entry, regardless of timing
+                        // INSTANT EXECUTION: Execute on EVERY entry, regardless of timing
                         val isValidTransition = previousState == "OUTSIDE" || previousState == "UNKNOWN"
                         Log.d(TAG, "⚡ Entry detected - INSTANT EXECUTION ${if (isValidTransition) "ENABLED" else "SKIPPED"}")
                         isValidTransition
                     }
-                    "EXIT" -> false
+                    "EXIT" -> true
                     "DWELL" -> currentState == "INSIDE"
                     else -> false
                 }
@@ -131,65 +143,75 @@ class GeofenceReceiver : BroadcastReceiver() {
                     return@launch
                 }
 
-                // ✅ NO COOLDOWN CHECK - Execute immediately every time
-
-                // ✅ Load and validate workflow
+                // ✅ Load workflow using Coroutines (NO CALLBACKS!)
                 val repository = WorkflowRepository(AppDatabase.getDatabase(context).workflowDao())
+                val workflow = repository.getWorkflowById(workflowId)
 
-                repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
-                    override fun onWorkflowLoaded(workflow: com.example.autoflow.data.WorkflowEntity?) {
-                        if (workflow == null) {
-                            Log.e(TAG, "❌ Workflow $workflowId not found")
-                            return
-                        }
+                if (workflow == null) {
+                    Log.e(TAG, "❌ Workflow $workflowId not found")
+                    return@launch
+                }
 
-                        if (!workflow.isEnabled) {
-                            Log.w(TAG, "⚠️ Workflow ${workflow.workflowName} is disabled")
-                            return
-                        }
+                if (!workflow.isEnabled) {
+                    Log.w(TAG, "⚠️ Workflow '${workflow.workflowName}' is disabled")
+                    return@launch
+                }
 
-                        Log.d(TAG, "📋 Workflow found: ${workflow.workflowName}")
-                        Log.d(TAG, "⚡ INSTANT EXECUTION MODE - No delays")
+                // ✅ 1. HANDLE EXIT (AUTO-UNBLOCK)
+                // Check this FIRST to bypass GPS validation (since we know we are outside)
+                if (transition == "EXIT") {
+                    Log.d(TAG, "🚪 EXIT Detected for '${workflow.workflowName}'")
+                    Log.d(TAG, "🔓 Initiating Auto-Unblock...")
 
-                        // ✅ Execute immediately with GPS validation
-                        receiverScope.launch {
-                            try {
-                                Log.d(TAG, "🔐 Starting validation and execution...")
+                    val unblocked = ActionExecutor.unblockApps(context)
 
-                                // ✅ Real-time GPS location validation
-                                val validationResult = validateLocationWithGPS(context, workflow, transition)
+                    if (unblocked) {
+                        ActionExecutor.sendNotification(
+                            context,
+                            "📍 Left ${workflow.workflowName}",
+                            "Apps have been automatically unblocked",
+                            "Normal"
+                        )
+                        Log.d(TAG, "✅ Auto-unblock complete")
+                    } else {
+                        Log.w(TAG, "⚠️ No apps to unblock")
+                    }
+                    return@launch // 🛑 Stop here! Do not run the "Enter" logic below.
+                }
 
-                                if (!validationResult) {
-                                    Log.e(TAG, "❌ EXECUTION BLOCKED - GPS validation failed")
-                                    Log.e(TAG, "   User is not actually in the trigger location")
-                                    return@launch
-                                }
+                // ✅ 2. HANDLE ENTER/DWELL (NORMAL EXECUTION)
+                Log.d(TAG, "📋 Workflow found: '${workflow.workflowName}'")
+                Log.d(TAG, "⚡ INSTANT EXECUTION MODE - No delays")
 
-                                Log.d(TAG, "✅ GPS validation passed")
-                                Log.d(TAG, "⚡ EXECUTING INSTANTLY...")
+                try {
+                    Log.d(TAG, "🔐 Starting validation and execution...")
 
-                                // ✅ INSTANT EXECUTION
-                                val startTime = System.currentTimeMillis()
-                                val success = ActionExecutor.executeWorkflow(context, workflow)
-                                val executionTime = System.currentTimeMillis() - startTime
+                    // Real-time GPS location validation
+                    val validationResult = validateLocationWithGPS(context, workflow, transition)
 
-                                if (success) {
-                                    Log.d(TAG, "🎉 ⚡ INSTANT EXECUTION COMPLETE: ${workflow.workflowName}")
-                                    Log.d(TAG, "   Execution time: ${executionTime}ms")
-                                } else {
-                                    Log.e(TAG, "❌ Workflow execution failed: ${workflow.workflowName}")
-                                }
-
-                            } catch (e: Exception) {
-                                Log.e(TAG, "❌ Error executing workflow", e)
-                            }
-                        }
+                    if (!validationResult) {
+                        Log.e(TAG, "❌ EXECUTION BLOCKED - GPS validation failed")
+                        Log.e(TAG, "   User is not actually in the trigger location")
+                        return@launch
                     }
 
-                    override fun onWorkflowError(error: String) {
-                        Log.e(TAG, "❌ Error loading workflow $workflowId: $error")
+                    Log.d(TAG, "✅ GPS validation passed")
+                    Log.d(TAG, "⚡ EXECUTING INSTANTLY...")
+
+                    val startTime = System.currentTimeMillis()
+                    val success = ActionExecutor.executeWorkflow(context, workflow)
+                    val executionTime = System.currentTimeMillis() - startTime
+
+                    if (success) {
+                        Log.d(TAG, "🎉 ⚡ INSTANT EXECUTION COMPLETE: '${workflow.workflowName}'")
+                        Log.d(TAG, "   Execution time: ${executionTime}ms")
+                    } else {
+                        Log.e(TAG, "❌ Workflow execution failed: '${workflow.workflowName}'")
                     }
-                })
+
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Error executing workflow", e)
+                }
 
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error processing location transition", e)
@@ -199,10 +221,11 @@ class GeofenceReceiver : BroadcastReceiver() {
 
     /**
      * ✅ Validate user location with real-time GPS check
+     * Uses suspend functions throughout
      */
     private suspend fun validateLocationWithGPS(
         context: Context,
-        workflow: com.example.autoflow.data.WorkflowEntity,
+        workflow: WorkflowEntity,
         transition: String
     ): Boolean = withContext(Dispatchers.IO) {
         try {

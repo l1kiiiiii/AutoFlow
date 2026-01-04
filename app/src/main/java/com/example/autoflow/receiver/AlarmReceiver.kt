@@ -1,9 +1,11 @@
+
 package com.example.autoflow.receiver
 
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -21,7 +23,6 @@ import com.example.autoflow.R
 import com.example.autoflow.data.AppDatabase
 import com.example.autoflow.data.WorkflowRepository
 import com.example.autoflow.data.toActions
-import com.example.autoflow.integrations.SoundModeManager
 import com.example.autoflow.model.Action
 import com.example.autoflow.util.ActionExecutor
 import com.example.autoflow.util.Constants
@@ -30,6 +31,17 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+/**
+ * ✅ Refactored AlarmReceiver using Kotlin Coroutines
+ *
+ * Key Features:
+ * - Uses goAsync() to keep receiver alive during DB operations
+ * - Uses suspend functions instead of callbacks
+ * - Proper coroutine scope management
+ * - Handles workflow execution from AlarmScheduler
+ * - Handles system toggles (WiFi/Bluetooth)
+ * - Handles app blocking/unblocking
+ */
 class AlarmReceiver : BroadcastReceiver() {
 
     companion object {
@@ -41,125 +53,113 @@ class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         Log.d(TAG, "🔔 AlarmReceiver triggered")
 
-        // ✅ FIX: Validate workflow ID with proper error handling
-        val workflowId = intent.getLongExtra(EXTRA_WORKFLOW_ID, -1L)
-
-        if (workflowId <= 0) {
-            Log.e(TAG, "❌ Invalid workflow ID received: $workflowId")
-            return  // Don't crash, just return
+        // 1. Handle Workflow Execution (from AlarmScheduler)
+        if (intent.hasExtra(EXTRA_WORKFLOW_ID)) {
+            val workflowId = intent.getLongExtra(EXTRA_WORKFLOW_ID, -1L)
+            handleWorkflowExecution(context, workflowId)
+            return
         }
 
-        Log.d(TAG, "⏰ Processing alarm for workflow ID: $workflowId")
+        // 2. Handle System Toggles (WiFi/Bluetooth)
+        // (These run synchronously, so no need for goAsync)
+        if (intent.hasExtra("wifi_state")) {
+            handleWiFiToggle(context, intent)
+        } else if (intent.hasExtra("bluetooth_state")) {
+            handleBluetoothToggle(context, intent)
+        } else if (intent.hasExtra("app_packages")) {
+            handleBlockApps(context, intent)
+        } else if (intent.action == Constants.ACTION_UNBLOCK_APPS || intent.action == "com.example.autoflow.UNBLOCK_APPS") {
+            handleUnblockApps(context, intent)
+        }
+    }
 
-        // Execute workflow asynchronously
+    /**
+     * ✅ Handle workflow execution with goAsync() for reliability
+     * Uses suspend functions instead of callbacks
+     */
+    private fun handleWorkflowExecution(context: Context, workflowId: Long) {
+        if (workflowId <= 0) {
+            Log.e(TAG, "❌ Invalid workflow ID received: $workflowId")
+            return
+        }
+
+        // ✅ CRITICAL: Use goAsync() to keep the Receiver alive during DB operations
+        val pendingResult = goAsync()
+
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                Log.d(TAG, "⏰ Processing alarm for workflow ID: $workflowId")
+
                 val database = AppDatabase.getDatabase(context)
                 val repository = WorkflowRepository(database.workflowDao())
 
-                repository.getWorkflowById(workflowId, object : WorkflowRepository.WorkflowByIdCallback {
-                    override fun onWorkflowLoaded(workflow: com.example.autoflow.data.WorkflowEntity?) {
-                        workflow?.let { w ->
-                            if (w.isEnabled) {
-                                Log.d(TAG, "✅ Executing workflow: ${w.workflowName}")
+                // ✅ FIX: Use Suspend function (No Callback)
+                val workflow = repository.getWorkflowById(workflowId)
 
-                                // ✅ FIXED: Execute all actions individually
-                                val actions = w.toActions()
-                                var successCount = 0
-                                var failCount = 0
+                if (workflow == null) {
+                    Log.w(TAG, "⚠️ Workflow $workflowId not found")
+                    return@launch
+                }
 
-                                actions.forEach { action ->
-                                    try {
-                                        val success = ActionExecutor.executeAction(context, action)
-                                        if (success) {
-                                            successCount++
-                                            Log.d(TAG, "✅ Action executed: ${action.type}")
-                                        } else {
-                                            failCount++
-                                            Log.w(TAG, "⚠️ Action failed: ${action.type}")
-                                        }
-                                    } catch (e: Exception) {
-                                        failCount++
-                                        Log.e(TAG, "❌ Action error: ${action.type}", e)
-                                    }
-                                }
+                if (!workflow.isEnabled) {
+                    Log.w(TAG, "⚠️ Workflow '${workflow.workflowName}' is disabled")
+                    return@launch
+                }
 
-                                Log.d(TAG, "🎉 Workflow completed: ${w.workflowName}")
-                                Log.d(TAG, "   ✅ Success: $successCount actions")
-                                Log.d(TAG, "   ❌ Failed: $failCount actions")
+                Log.d(TAG, "✅ Executing workflow: '${workflow.workflowName}'")
 
-                                // Show completion toast
-                                CoroutineScope(Dispatchers.Main).launch {
-                                    Toast.makeText(
-                                        context,
-                                        "Workflow '${w.workflowName}' executed ($successCount/${actions.size} actions)",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            } else {
-                                Log.d(TAG, "⏭️ Workflow disabled: ${w.workflowName}")
-                            }
-                        } ?: run {
-                            Log.w(TAG, "⚠️ Workflow not found: ID $workflowId")
+                val actions = workflow.toActions()
+                var successCount = 0
+                var failCount = 0
+
+                actions.forEach { action ->
+                    try {
+                        val success = ActionExecutor.executeAction(context, action)
+                        if (success) {
+                            successCount++
+                            Log.d(TAG, "✅ Action executed: ${action.type}")
+                        } else {
+                            failCount++
+                            Log.w(TAG, "⚠️ Action failed: ${action.type}")
                         }
+                    } catch (e: Exception) {
+                        failCount++
+                        Log.e(TAG, "❌ Action error: ${action.type}", e)
                     }
+                }
 
-                    override fun onWorkflowError(error: String) {
-                        Log.e(TAG, "❌ Error loading workflow: $error")
+                Log.d(TAG, "🎉 Workflow completed: '${workflow.workflowName}'")
+                Log.d(TAG, "   ✅ Success: $successCount actions")
+                Log.d(TAG, "   ❌ Failed: $failCount actions")
+
+                // Optional: Show toast on Main thread
+                CoroutineScope(Dispatchers.Main).launch {
+                    try {
+                        Toast.makeText(
+                            context,
+                            "Executed: ${workflow.workflowName} ($successCount/${actions.size})",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } catch (e: Exception) {
+                        // Ignore UI errors in background
+                        Log.d(TAG, "Toast skipped (UI not available)")
                     }
-                })
+                }
+
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error in AlarmReceiver", e)
+            } finally {
+                // ✅ CRITICAL: Must call finish() to release the wake lock
+                pendingResult.finish()
+                Log.d(TAG, "✅ PendingResult finished")
             }
         }
     }
-/*
-    private fun handleNotification(context: Context, intent: Intent) {
-        val title = intent.getStringExtra("notification_title") ?: "AutoFlow"
-        val message = intent.getStringExtra("notification_message") ?: "Trigger activated"
 
-        Log.d(TAG, "📬 Sending notification: $title")
-        createNotificationChannel(context)
+    // =========================================================================
+    // SYSTEM TOGGLE HANDLERS
+    // =========================================================================
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(title)
-            .setContentText(message)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setAutoCancel(true)
-            .build()
-
-        val notificationManager = NotificationManagerCompat.from(context)
-        try {
-            notificationManager.notify(System.currentTimeMillis().toInt(), notification)
-            Log.d(TAG, "✅ Notification sent successfully")
-        } catch (e: SecurityException) {
-            Log.e(TAG, "❌ Notification permission denied", e)
-            Toast.makeText(context, "Notification permission required", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun handleSoundMode(context: Context, intent: Intent) {
-        val soundMode = intent.getStringExtra("sound_mode") ?: "Silent"
-        Log.d(TAG, "🔊 Setting sound mode to: $soundMode")
-
-        val soundModeManager = SoundModeManager(context)
-        val success = soundModeManager.setSoundMode(soundMode)
-
-        if (success) {
-            Log.d(TAG, "✅ Sound mode changed to: $soundMode")
-            Toast.makeText(context, "Sound mode: $soundMode", Toast.LENGTH_SHORT).show()
-        } else {
-            Log.e(TAG, "❌ Failed to change sound mode")
-            if (soundMode == "DND" && !soundModeManager.DNDPermission()) {
-                Toast.makeText(context, "DND permission required", Toast.LENGTH_LONG).show()
-                soundModeManager.openDNDSettings()
-            } else {
-                Toast.makeText(context, "Failed to set sound mode", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-*/
     private fun handleWiFiToggle(context: Context, intent: Intent) {
         val wifiStateStr = intent.getStringExtra("wifi_state") ?: "false"
         val wifiState = wifiStateStr.toBoolean()
@@ -172,16 +172,9 @@ class AlarmReceiver : BroadcastReceiver() {
         }
     }
 
-    /**
-     * Modern WiFi toggle (Android 10+) - Uses notification with full-screen intent
-     */
     private fun handleWiFiToggleModern(context: Context, wifiState: Boolean) {
-        Log.d(TAG, "📶 Opening WiFi settings via notification")
-
-        // Don't try to launch activity directly - it will be blocked
-        // Instead, show a high-priority notification that user can tap
+        Log.d(TAG, "📶 Opening WiFi settings via notification (Android 10+)")
         showWiFiToggleNotification(context, wifiState)
-
         Toast.makeText(
             context,
             "Tap notification to toggle WiFi ${if (wifiState) "ON" else "OFF"}",
@@ -197,17 +190,14 @@ class AlarmReceiver : BroadcastReceiver() {
             Log.d(TAG, "✅ WiFi ${if (wifiState) "enabled" else "disabled"}")
             Toast.makeText(context, "WiFi ${if (wifiState) "ON" else "OFF"}", Toast.LENGTH_SHORT).show()
         } catch (e: SecurityException) {
-            Log.e(TAG, "❌ WiFi permission denied: ${e.message}", e)
+            Log.e(TAG, "❌ WiFi permission denied", e)
             openWiFiSettings(context)
         } catch (e: Exception) {
-            Log.e(TAG, "❌ WiFi toggle failed: ${e.message}", e)
+            Log.e(TAG, "❌ WiFi toggle failed", e)
             openWiFiSettings(context)
         }
     }
 
-    /**
-     * Show WiFi toggle notification with full-screen intent
-     */
     @SuppressLint("FullScreenIntentPolicy")
     private fun showWiFiToggleNotification(context: Context, wifiState: Boolean) {
         createNotificationChannel(context)
@@ -220,34 +210,33 @@ class AlarmReceiver : BroadcastReceiver() {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
 
-        val pendingIntent = android.app.PendingIntent.getActivity(
+        val pendingIntent = PendingIntent.getActivity(
             context,
             100,
             settingsIntent,
-            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("⚡ WiFi Toggle Required")
             .setContentText("Tap to ${if (wifiState) "turn ON" else "turn OFF"} WiFi")
-            .setPriority(NotificationCompat.PRIORITY_MAX)  // ✅ Changed to MAX
-            .setCategory(NotificationCompat.CATEGORY_ALARM)  // ✅ Added category
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)  // ✅ Show on lockscreen
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .addAction(
                 0,
                 if (wifiState) "Turn WiFi ON" else "Turn WiFi OFF",
                 pendingIntent
             )
-            .setFullScreenIntent(pendingIntent, true)  // ✅ Full-screen intent
+            .setFullScreenIntent(pendingIntent, true)
             .build()
 
-        val notificationManager = NotificationManagerCompat.from(context)
         try {
-            notificationManager.notify(200, notification)
-            Log.d(TAG, "✅ WiFi toggle notification sent with full-screen intent")
+            NotificationManagerCompat.from(context).notify(200, notification)
+            Log.d(TAG, "✅ WiFi toggle notification sent")
         } catch (e: SecurityException) {
             Log.e(TAG, "❌ Notification permission denied", e)
         }
@@ -261,14 +250,18 @@ class AlarmReceiver : BroadcastReceiver() {
             context.startActivity(wifiIntent)
             Toast.makeText(context, "Please toggle WiFi manually", Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Failed to open WiFi settings: ${e.message}", e)
+            Log.e(TAG, "❌ Failed to open WiFi settings", e)
         }
     }
+
+    // =========================================================================
+    // BLUETOOTH HANDLERS
+    // =========================================================================
 
     private fun handleBluetoothToggle(context: Context, intent: Intent) {
         val bluetoothStateStr = intent.getStringExtra("bluetooth_state") ?: "false"
         val bluetoothState = bluetoothStateStr.toBoolean()
-        Log.d(TAG, "📶 Bluetooth toggle request: ${if (bluetoothState) "ON" else "OFF"}")
+        Log.d(TAG, "📡 Bluetooth toggle request: ${if (bluetoothState) "ON" else "OFF"}")
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             handleBluetoothToggleModern(context, bluetoothState)
@@ -276,16 +269,10 @@ class AlarmReceiver : BroadcastReceiver() {
             handleBluetoothToggleLegacy(context, bluetoothState)
         }
     }
-    /**
-     * Modern Bluetooth toggle (Android 13+) - Uses notification with full-screen intent
-     */
+
     private fun handleBluetoothToggleModern(context: Context, bluetoothState: Boolean) {
-        Log.d(TAG, "📶 Opening Bluetooth settings via notification")
-
-        // Don't try to launch activity directly - it will be blocked
-        // Instead, show a high-priority notification that user can tap
+        Log.d(TAG, "📡 Opening Bluetooth settings via notification (Android 13+)")
         showBluetoothToggleNotification(context, bluetoothState)
-
         Toast.makeText(
             context,
             "Tap notification to toggle Bluetooth ${if (bluetoothState) "ON" else "OFF"}",
@@ -327,17 +314,14 @@ class AlarmReceiver : BroadcastReceiver() {
             Log.d(TAG, "✅ Bluetooth ${if (bluetoothState) "enabled" else "disabled"}")
             Toast.makeText(context, "Bluetooth ${if (bluetoothState) "ON" else "OFF"}", Toast.LENGTH_SHORT).show()
         } catch (e: SecurityException) {
-            Log.e(TAG, "❌ Bluetooth permission denied: ${e.message}", e)
+            Log.e(TAG, "❌ Bluetooth permission denied", e)
             openBluetoothSettings(context)
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Bluetooth toggle failed: ${e.message}", e)
+            Log.e(TAG, "❌ Bluetooth toggle failed", e)
             openBluetoothSettings(context)
         }
     }
 
-    /**
-     * Show Bluetooth toggle notification with full-screen intent
-     */
     @SuppressLint("FullScreenIntentPolicy")
     private fun showBluetoothToggleNotification(context: Context, bluetoothState: Boolean) {
         createNotificationChannel(context)
@@ -346,34 +330,33 @@ class AlarmReceiver : BroadcastReceiver() {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
 
-        val pendingIntent = android.app.PendingIntent.getActivity(
+        val pendingIntent = PendingIntent.getActivity(
             context,
             101,
             settingsIntent,
-            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("⚡ Bluetooth Toggle Required")
             .setContentText("Tap to ${if (bluetoothState) "turn ON" else "turn OFF"} Bluetooth")
-            .setPriority(NotificationCompat.PRIORITY_MAX)  // ✅ Changed to MAX
-            .setCategory(NotificationCompat.CATEGORY_ALARM)  // ✅ Added category
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)  // ✅ Show on lockscreen
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .addAction(
                 0,
                 if (bluetoothState) "Turn Bluetooth ON" else "Turn Bluetooth OFF",
                 pendingIntent
             )
-            .setFullScreenIntent(pendingIntent, true)  // ✅ Full-screen intent
+            .setFullScreenIntent(pendingIntent, true)
             .build()
 
-        val notificationManager = NotificationManagerCompat.from(context)
         try {
-            notificationManager.notify(201, notification)
-            Log.d(TAG, "✅ Bluetooth toggle notification sent with full-screen intent")
+            NotificationManagerCompat.from(context).notify(201, notification)
+            Log.d(TAG, "✅ Bluetooth toggle notification sent")
         } catch (e: SecurityException) {
             Log.e(TAG, "❌ Notification permission denied", e)
         }
@@ -387,26 +370,14 @@ class AlarmReceiver : BroadcastReceiver() {
             context.startActivity(bluetoothIntent)
             Toast.makeText(context, "Please toggle Bluetooth manually", Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Failed to open Bluetooth settings: ${e.message}", e)
+            Log.e(TAG, "❌ Failed to open Bluetooth settings", e)
         }
     }
 
-    private fun handleScript(context: Context, intent: Intent) {
-        val scriptText = intent.getStringExtra("script_text") ?: ""
-        Log.d(TAG, "📜 Executing script: ${scriptText.take(50)}...")
+    // =========================================================================
+    // APP BLOCKING HANDLERS
+    // =========================================================================
 
-        if (scriptText.isBlank()) {
-            Log.w(TAG, "⚠️ Script is empty")
-            Toast.makeText(context, "Script is empty", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        Toast.makeText(context, "Script execution not yet implemented", Toast.LENGTH_LONG).show()
-        Log.w(TAG, "⚠️ Script execution not implemented for security reasons")
-    }
-    /**
-     * Handle BLOCK_APPS action
-     */
     private fun handleBlockApps(context: Context, intent: Intent) {
         val packages = intent.getStringExtra("app_packages") ?: ""
 
@@ -433,9 +404,6 @@ class AlarmReceiver : BroadcastReceiver() {
         }
     }
 
-    /**
-     * Handle UNBLOCK_APPS action
-     */
     private fun handleUnblockApps(context: Context, intent: Intent) {
         Log.d(TAG, "🔓 Executing UNBLOCK_APPS action")
 
@@ -452,17 +420,21 @@ class AlarmReceiver : BroadcastReceiver() {
         }
     }
 
+    // =========================================================================
+    // NOTIFICATION CHANNEL SETUP
+    // =========================================================================
+
     private fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_HIGH  // Keep HIGH for notifications
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Notifications from AutoFlow workflows"
                 enableVibration(true)
                 enableLights(true)
-                setBypassDnd(true)  // ✅ Allow notifications even in DND
+                setBypassDnd(true)
                 setShowBadge(true)
             }
 
@@ -470,5 +442,4 @@ class AlarmReceiver : BroadcastReceiver() {
             notificationManager.createNotificationChannel(channel)
         }
     }
-
 }

@@ -12,7 +12,8 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.autoflow.data.AppDatabase
-import com.example.autoflow.data.toActions  // ✅ FIXED: Import toActions
+import com.example.autoflow.data.WorkflowRepository
+import com.example.autoflow.data.toActions
 import com.example.autoflow.util.ActionExecutor
 import com.example.autoflow.util.Constants
 import com.example.autoflow.util.PermissionUtils
@@ -21,7 +22,7 @@ import kotlin.coroutines.resume
 
 /**
  * BLE Trigger Worker - Scans for Bluetooth devices
- * ✅ UPDATED: Uses toActions() instead of toAction()
+ * ✅ Refactored to use WorkflowRepository for consistency
  */
 class BLETriggerWorker(
     context: Context,
@@ -148,11 +149,14 @@ class BLETriggerWorker(
         }
     }
 
-    // ✅ FIXED: Execute ALL actions from workflow
     private suspend fun executeActions(workflowId: Long): Result {
         return try {
+            // ✅ FIX: Use Repository instead of direct DAO
             val database = AppDatabase.getDatabase(applicationContext)
-            val workflow = database.workflowDao().getByIdSync(workflowId)
+            val repository = WorkflowRepository(database.workflowDao())
+
+            // ✅ Use suspend function
+            val workflow = repository.getWorkflowById(workflowId)
 
             if (workflow == null) {
                 Log.e(TAG, "❌ Workflow not found: $workflowId")
@@ -164,7 +168,7 @@ class BLETriggerWorker(
                 return Result.success()
             }
 
-            // ✅ FIXED: Get ALL actions as a list
+            // Get ALL actions as a list
             val actions = workflow.toActions()
             if (actions.isEmpty()) {
                 Log.e(TAG, "❌ No valid actions")
