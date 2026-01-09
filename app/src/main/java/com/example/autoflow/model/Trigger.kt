@@ -86,7 +86,7 @@ sealed class Trigger(val type: String, val value: String) {
         val deviceAddress: String,
         val deviceName: String? = null,
         val state: String = "CONNECTED"
-    ) : Trigger("BLUETOOTH", buildBluetoothJson(deviceAddress, deviceName))
+    ) : Trigger("Constants.TRIGGER_BLE", buildBluetoothJson(deviceAddress, deviceName))
 
     /**
      * Time-based trigger
@@ -242,10 +242,20 @@ sealed class Trigger(val type: String, val value: String) {
         }
 
         private fun validateBleTrigger(value: String): Boolean {
-            // Check MAC address format
+            try {
+                val json = JSONObject(value)
+                if (json.has("deviceAddress")) {
+                    val address = json.getString("deviceAddress")
+                    return MAC_ADDRESS_PATTERN.matcher(address).matches()
+                }
+            } catch (e: Exception) {
+                // Not JSON, fall through
+            }
+
+            // 2. Fallback: Check if it is just a MAC address directly
             if (MAC_ADDRESS_PATTERN.matcher(value).matches()) return true
 
-            // Check device name (1-248 characters)
+            // 3. Fallback: Check if it is a device name
             return value.length in 1..248 && value.isNotBlank()
         }
 

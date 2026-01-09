@@ -41,6 +41,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Login
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Apps
@@ -63,8 +65,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.Login
-import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneCallback
@@ -441,55 +441,112 @@ fun TaskCreationScreen(
             SaveButtonsCard(
                 workflowId = workflowId,
                 onSave = {
+                    // 1. Strict UI-Side Validation
+                    if (taskName.isBlank()) {
+                        taskNameError = "Task name is required"
+                        return@SaveButtonsCard
+                    }
+
+                    // Validate Triggers
+                    val validLocation = locationTriggerExpanded && locationDetailsInput.isNotBlank()
+                    val validWifi = wifiTriggerExpanded // Valid even if SSID is empty (Any WiFi)
+                    val validTime = timeTriggerExpanded && timeValue.isNotBlank()
+                    val validBluetooth = bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank()
+
+                    if (!validLocation && !validWifi && !validTime && !validBluetooth) {
+                        errorMessage = "Please configure at least ONE valid trigger."
+                        showErrorDialog = true
+                        return@SaveButtonsCard
+                    }
+
+                    // Validate Actions
+                    val validNotification = sendNotificationActionExpanded && notificationTitle.isNotBlank()
+                    val validToggle = toggleSettingsActionExpanded
+                    val validScript = runScriptActionExpanded && scriptText.isNotBlank()
+                    val validSound = setSoundModeActionExpanded
+                    val validBlock = blockAppsActionExpanded && selectedAppsToBlock.isNotEmpty()
+                    val validUnblock = unblockAppsActionExpanded
+
+                    if (!validNotification && !validToggle && !validScript && !validSound && !validBlock && !validUnblock) {
+                        errorMessage = "Please configure at least ONE action"
+                        showErrorDialog = true
+                        return@SaveButtonsCard
+                    }
+
+                    // 2. Safe Save Execution
                     scope.launch {
-                        handleSaveTask(
-                            context = context,
-                            viewModel = viewModel,
-                            workflowId = workflowId,
-                            taskName = taskName,
-                            locationTriggerExpanded = locationTriggerExpanded,
-                            locationName = locationName,
-                            locationDetailsInput = locationDetailsInput,
-                            radiusValue = radiusValue,
-                            triggerOnOption = triggerOnOption,
-                            wifiTriggerExpanded = wifiTriggerExpanded,
-                            wifiState = wifiState,
-                            timeTriggerExpanded = timeTriggerExpanded,
-                            timeValue = timeValue,
-                            bluetoothDeviceTriggerExpanded = bluetoothDeviceTriggerExpanded,
-                            bluetoothDeviceAddress = bluetoothDeviceAddress,
-                            sendNotificationActionExpanded = sendNotificationActionExpanded,
-                            notificationTitle = notificationTitle,
-                            notificationMessage = notificationMessage,
-                            notificationPriority = notificationPriority,
-                            toggleSettingsActionExpanded = toggleSettingsActionExpanded,
-                            toggleSetting = toggleSetting,
-                            runScriptActionExpanded = runScriptActionExpanded,
-                            scriptText = scriptText,
-                            selectedScriptPermissions = selectedScriptPermissions,
-                            setSoundModeActionExpanded = setSoundModeActionExpanded,
-                            soundMode = soundMode,
-                            blockAppsActionExpanded = blockAppsActionExpanded,
-                            selectedAppsToBlock = selectedAppsToBlock,
-                            unblockAppsActionExpanded = unblockAppsActionExpanded,
-                            onSuccess = {
-                                showSuccessSnackbar = true
-                                onSaveTask(taskName)
-                            },
-                            onError = { error ->
-                                errorMessage = error
-                                taskNameError = if (error.contains("name")) error else null
-                                showErrorDialog = true
-                            }
-                        )
+                        try {
+                            handleSaveTask(
+                                context = context,
+                                viewModel = viewModel,
+                                workflowId = workflowId,
+                                taskName = taskName,
+
+                                // Triggers
+                                locationTriggerExpanded = validLocation, // Pass VALIDATED flag
+                                locationName = locationName,
+                                locationDetailsInput = locationDetailsInput,
+                                radiusValue = radiusValue,
+                                triggerOnOption = triggerOnOption,
+
+                                wifiTriggerExpanded = validWifi, // Pass VALIDATED flag
+                                wifiState = wifiState,
+                                wifiSsid = wifiSsid,
+                                wifiTriggerType = wifiTriggerType,
+
+                                timeTriggerExpanded = validTime, // Pass VALIDATED flag
+                                timeValue = timeValue,
+
+                                bluetoothDeviceTriggerExpanded = validBluetooth, // Pass VALIDATED flag
+                                bluetoothMacAddress = bluetoothDeviceAddress, // Map state variable
+                                bluetoothDeviceName = bluetoothDeviceName,
+                                bluetoothTriggerType = bluetoothTriggerType,
+
+                                // Actions
+                                sendNotificationActionExpanded = validNotification,
+                                notificationTitle = notificationTitle,
+                                notificationMessage = notificationMessage,
+                                notificationPriority = notificationPriority,
+
+                                toggleSettingsActionExpanded = validToggle,
+                                toggleSetting = toggleSetting,
+
+                                runScriptActionExpanded = validScript,
+                                scriptText = scriptText,
+                                selectedScriptPermissions = selectedScriptPermissions,
+
+                                setSoundModeActionExpanded = validSound,
+                                soundMode = soundMode,
+
+                                blockAppsActionExpanded = validBlock,
+                                selectedAppsToBlock = selectedAppsToBlock,
+
+                                unblockAppsActionExpanded = validUnblock,
+
+                                onSuccess = {
+                                    showSuccessSnackbar = true
+                                    onSaveTask(taskName)
+                                },
+                                onError = { error ->
+                                    errorMessage = error
+                                    taskNameError = if (error.contains("name")) error else null
+                                    showErrorDialog = true
+                                }
+                            )
+                        } catch (e: Exception) {
+                            Log.e("TaskCreation", "Crash prevented during save", e)
+                            errorMessage = "Error saving task: ${e.message}"
+                            showErrorDialog = true
+                        }
                     }
                 },
                 onBack = onBack
             )
 
-
             Spacer(modifier = Modifier.height(16.dp))
         }
+
+
 
         // Error Dialog
         if (showErrorDialog) {
@@ -576,13 +633,6 @@ private fun TriggersCard(
     onBluetoothTriggerTypeChange: (String) -> Unit,
     context: Context
 ) {
-    val availableTriggers = listOf(
-        "Time" to Icons.Default.Schedule,
-        "Location" to Icons.Default.LocationOn,
-        "WiFi" to Icons.Default.Wifi,           //  ADD THIS
-        "Bluetooth" to Icons.Default.Bluetooth  //  ADD THIS
-    )
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -654,9 +704,13 @@ private fun TriggersCard(
                     selectedDevice = selectedBluetoothDevice,
                     deviceName = bluetoothDeviceName,
                     macAddress = bluetoothMacAddress,
-                    onDeviceNameChange = onBluetoothDeviceNameChange,
-                    onMacAddressChange = onBluetoothMacAddressChange,
-                    onDeviceSelected = onBluetoothDeviceSelected,
+                    onDeviceNameChange = onBluetoothDeviceNameChange, // Passed Callback
+                    onMacAddressChange = onBluetoothMacAddressChange, // Passed Callback
+                    onDeviceSelected = { device ->
+                        onBluetoothDeviceSelected(device) // Update Object
+                        onBluetoothMacAddressChange(device.macAddress) // Update String State
+                        onBluetoothDeviceNameChange(device.deviceName) // Update String State
+                    },
                     triggerType = bluetoothTriggerType,
                     onTriggerTypeChange = onBluetoothTriggerTypeChange,
                     context = context
@@ -665,6 +719,8 @@ private fun TriggersCard(
         }
     }
 }
+
+
 
 //  UPDATED ACTIONS CARD
 
@@ -2093,8 +2149,10 @@ private fun LocationTriggerContent(
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(
-                Triple("Entry", Icons.Default.Login, "Trigger when entering the location area"),
-                Triple("Exit", Icons.Default.Logout, "Trigger when leaving the location area"),
+                Triple("Entry",
+                    Icons.AutoMirrored.Filled.Login, "Trigger when entering the location area"),
+                Triple("Exit",
+                    Icons.AutoMirrored.Filled.Logout, "Trigger when leaving the location area"),
                 Triple("Both", Icons.Default.SwapHoriz, "Trigger on both entry and exit")
             ).forEach { (option, icon, description) ->
                 Card(
@@ -2604,7 +2662,7 @@ fun WiFiTriggerContent(
 
 //  BLUETOOTH TRIGGER CONTENT
 @Composable
-fun BluetoothTriggerContent(
+private fun BluetoothTriggerContent(
     selectedDevice: SavedBluetoothDevice?,
     deviceName: String,
     macAddress: String,
@@ -2615,137 +2673,148 @@ fun BluetoothTriggerContent(
     onTriggerTypeChange: (String) -> Unit,
     context: Context
 ) {
+    // 1. Initialize ViewModel
     val bluetoothViewModel: BluetoothViewModel = viewModel()
-    val savedDevices by bluetoothViewModel.allDevices.observeAsState(emptyList())
-    var showDevicePicker by remember { mutableStateOf(false) }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer
-        )
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                "📲 Bluetooth Device Trigger",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+    // 2. Observe LiveData as State
+    val pairedDevices by bluetoothViewModel.pairedDevices.observeAsState(initial = emptyList())
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Device Name
-            OutlinedTextField(
-                value = deviceName,
-                onValueChange = onDeviceNameChange,
-                label = { Text("Device Name") },
-                placeholder = { Text("e.g., Car Bluetooth") },
-                modifier = Modifier.fillMaxWidth(),
-                leadingIcon = {
-                    Icon(Icons.Default.Bluetooth, contentDescription = null)
-                }
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // MAC Address
-            OutlinedTextField(
-                value = macAddress,
-                onValueChange = onMacAddressChange,
-                label = { Text("MAC Address") },
-                placeholder = { Text("AA:BB:CC:DD:EE:FF") },
-                modifier = Modifier.fillMaxWidth(),
-                trailingIcon = {
-                    IconButton(onClick = { showDevicePicker = true }) {
-                        Icon(Icons.Default.ArrowDropDown, "Pick saved device")
-                    }
-                }
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Trigger Type
-            Text("Trigger When:", style = MaterialTheme.typography.labelMedium)
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilterChip(
-                    selected = triggerType == "connect",
-                    onClick = { onTriggerTypeChange("connect") },
-                    label = { Text("Connected") },
-                    modifier = Modifier.weight(1f)
-                )
-
-                FilterChip(
-                    selected = triggerType == "disconnect",
-                    onClick = { onTriggerTypeChange("disconnect") },
-                    label = { Text("Disconnected") },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Scan for Devices Button
-            Button(
-                onClick = {
-                    // Scan for Bluetooth devices
-                    Toast.makeText(context, "Scanning for Bluetooth devices...", Toast.LENGTH_SHORT).show()
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Search, null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Scan Nearby Devices")
-            }
+    // 3. Permission Launcher
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.entries.all { it.value }
+        if (allGranted) {
+            bluetoothViewModel.refreshPairedDevices()
+        } else {
+            Toast.makeText(context, "Bluetooth permissions required", Toast.LENGTH_SHORT).show()
         }
     }
 
-    // Device Picker Dialog
-    if (showDevicePicker) {
-        AlertDialog(
-            onDismissRequest = { showDevicePicker = false },
-            title = { Text("Select Bluetooth Device") },
-            text = {
-                LazyColumn {
-                    items(savedDevices.size) { index ->
-                        val device = savedDevices[index]
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .clickable {
-                                    onDeviceSelected(device)
-                                    onDeviceNameChange(device.deviceName)
-                                    onMacAddressChange(device.macAddress)
-                                    showDevicePicker = false
-                                }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.Bluetooth, null)
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Text(device.displayName, fontWeight = FontWeight.Bold)
-                                    Text(device.macAddress, style = MaterialTheme.typography.bodySmall)
-                                }
+    // 4. Load Devices on Start
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+                bluetoothViewModel.refreshPairedDevices()
+            }
+        } else {
+            bluetoothViewModel.refreshPairedDevices()
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
+        // Trigger Type Selector
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Trigger Event:", style = MaterialTheme.typography.labelMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = triggerType == "connect",
+                    onClick = { onTriggerTypeChange("connect") },
+                    label = { Text("Connect") },
+                    leadingIcon = { if (triggerType == "connect") Icon(Icons.Default.Check, null) else null }
+                )
+                FilterChip(
+                    selected = triggerType == "disconnect",
+                    onClick = { onTriggerTypeChange("disconnect") },
+                    label = { Text("Disconnect") },
+                    leadingIcon = { if (triggerType == "disconnect") Icon(Icons.Default.Check, null) else null }
+                )
+            }
+        }
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+        // Paired Devices List
+        Text("Select Paired Device:", style = MaterialTheme.typography.labelMedium)
+
+        if (pairedDevices.isEmpty()) {
+            OutlinedButton(
+                onClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        permissionLauncher.launch(arrayOf(
+                            Manifest.permission.BLUETOOTH_CONNECT,
+                            Manifest.permission.BLUETOOTH_SCAN
+                        ))
+                    } else {
+                        bluetoothViewModel.refreshPairedDevices()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Bluetooth, null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Load Paired Devices")
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 200.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+            ) {
+                items(pairedDevices) { device ->
+                    // FIX: Use macAddress instead of address
+                    val isSelected = macAddress == device.macAddress
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onDeviceSelected(device)
+                                // FIX: Use correct property names from data class
+                                onDeviceNameChange(device.deviceName)
+                                onMacAddressChange(device.macAddress)
                             }
+                            .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else androidx.compose.ui.graphics.Color.Transparent)
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Bluetooth, null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            // FIX: Use deviceName
+                            Text(device.deviceName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            // FIX: Use macAddress
+                            Text(device.macAddress, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (isSelected) {
+                            Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
                         }
                     }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showDevicePicker = false }) {
-                    Text("Cancel")
+                    HorizontalDivider(thickness = 0.5.dp)
                 }
             }
+        }
+
+        // Manual Entry
+        Text("Or Enter Manually:", style = MaterialTheme.typography.labelMedium)
+
+        OutlinedTextField(
+            value = deviceName,
+            onValueChange = onDeviceNameChange,
+            label = { Text("Device Name") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+
+        OutlinedTextField(
+            value = macAddress,
+            onValueChange = onMacAddressChange,
+            label = { Text("MAC Address") },
+            placeholder = { Text("AA:BB:CC:11:22:33") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
         )
     }
 }
+
+
+
+
 
 //  ACTION CONTENT COMPONENTS
 
@@ -2992,6 +3061,7 @@ private fun ErrorDialog(
 /**
  *  FIXED: Complete handleSaveTask function with proper variable scoping
  */
+//  FIXED: handleSaveTask function with correct parameters
 private suspend fun handleSaveTask(
     context: Context,
     viewModel: WorkflowViewModel,
@@ -3004,10 +3074,14 @@ private suspend fun handleSaveTask(
     triggerOnOption: String,
     wifiTriggerExpanded: Boolean,
     wifiState: String,
+    wifiSsid: String,               //  NEW
+    wifiTriggerType: String,        //  NEW
     timeTriggerExpanded: Boolean,
     timeValue: String,
     bluetoothDeviceTriggerExpanded: Boolean,
-    bluetoothDeviceAddress: String,
+    bluetoothMacAddress: String,    //  RENAMED from bluetoothDeviceAddress
+    bluetoothDeviceName: String,    //  NEW
+    bluetoothTriggerType: String,   //  NEW
     sendNotificationActionExpanded: Boolean,
     notificationTitle: String,
     notificationMessage: String,
@@ -3040,7 +3114,8 @@ private suspend fun handleSaveTask(
         val hasLocationTrigger = locationTriggerExpanded && locationDetailsInput.isNotBlank()
         val hasWifiTrigger = wifiTriggerExpanded
         val hasTimeTrigger = timeTriggerExpanded && timeValue.isNotBlank()
-        val hasBluetoothTrigger = bluetoothDeviceTriggerExpanded && bluetoothDeviceAddress.isNotBlank()
+        val hasBluetoothTrigger = bluetoothDeviceTriggerExpanded && bluetoothMacAddress.isNotBlank()
+
 
         Log.d("TaskCreation", "🔍 TRIGGER CHECK:")
         Log.d("TaskCreation", "  Location: $hasLocationTrigger")
@@ -3066,12 +3141,19 @@ private suspend fun handleSaveTask(
 
         if (hasWifiTrigger) {
             Log.d("TaskCreation", "Adding WIFI trigger: $wifiState")
-            triggers.add(TriggerHelpers.createWifiTrigger(null, wifiState))
+            triggers.add(TriggerHelpers.createWifiTrigger(
+                if (wifiSsid.isNotBlank()) wifiSsid else null,
+                wifiTriggerType
+            ))
         }
 
         if (hasBluetoothTrigger) {
-            Log.d("TaskCreation", "Adding BLUETOOTH trigger: $bluetoothDeviceAddress")
-            triggers.add(TriggerHelpers.createBluetoothTrigger(bluetoothDeviceAddress, null))
+            Log.d("TaskCreation", "Adding BLUETOOTH trigger: $bluetoothMacAddress ($bluetoothTriggerType)")
+            triggers.add(TriggerHelpers.createBluetoothTrigger(
+                bluetoothMacAddress,                   //  Use the MAC address
+                bluetoothDeviceName.ifBlank { null },  //  Pass the device name
+                bluetoothTriggerType                   //  Pass the trigger type (connect/disconnect)
+            ))
         }
 
         if (hasLocationTrigger) {
@@ -3245,6 +3327,7 @@ private suspend fun handleSaveTask(
         onError("Error: ${e.message}")
     }
 }
+
 
 
 //  UTILITY FUNCTIONS
