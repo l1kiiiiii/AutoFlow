@@ -3,7 +3,7 @@ package com.example.autoflow.model
 import com.example.autoflow.util.*
 
 /**
- * ✅ Helper functions to create triggers easily - Fixed to use data classes
+ *  Helper functions to create triggers easily - Fixed to use data classes
  */
 object TriggerHelpers {
 
@@ -46,16 +46,18 @@ object TriggerHelpers {
      * Create a WiFi-based trigger
      */
     fun createWifiTrigger(ssid: String?, state: String): Trigger {
+        // If user selected "connected"/ "disconnected" generic, ssid might be null
         return Trigger.WiFiTrigger(ssid = ssid, state = state)
     }
 
     /**
      * Create a Bluetooth-based trigger
      */
-    fun createBluetoothTrigger(deviceAddress: String, deviceName: String? = null): Trigger {
+    fun createBluetoothTrigger(deviceAddress: String, deviceName: String? = null, state: String): Trigger {
         return Trigger.BluetoothTrigger(
             deviceAddress = deviceAddress,
-            deviceName = deviceName
+            deviceName = deviceName,
+            state = state //  Pass state to the Trigger
         )
     }
 
@@ -67,14 +69,14 @@ object TriggerHelpers {
     }
 
     /**
-     * ✅ Create a manual trigger (for Meeting Mode, etc.)
+     *  Create a manual trigger (for Meeting Mode, etc.)
      */
     fun createManualTrigger(actionType: String = "quick_action"): Trigger {
         return Trigger.ManualTrigger(actionType = actionType)
     }
 
     /**
-     * ✅ Create a time range trigger (for Sleep Mode, etc.)
+     *  Create a time range trigger (for Sleep Mode, etc.)
      */
     fun createTimeRangeTrigger(
         startTime: String = "22:00",
@@ -84,7 +86,7 @@ object TriggerHelpers {
         return TimeRangeTrigger(startTime = startTime, endTime = endTime, days = days)
     }
 
-    // ✅ Parse trigger data back to individual fields
+    //  Parse trigger data back to individual fields
 
     /**
      * Parse time trigger data
@@ -122,7 +124,7 @@ object TriggerHelpers {
     }
 
     /**
-     * ✅ Parse manual trigger data
+     *  Parse manual trigger data
      */
     fun parseManualTrigger(trigger: Trigger): String? {
         return if (trigger is Trigger.ManualTrigger) {
@@ -133,14 +135,14 @@ object TriggerHelpers {
     }
 
     /**
-     * ✅ Check if trigger is a manual trigger
+     *  Check if trigger is a manual trigger
      */
     fun isManualTrigger(trigger: Trigger): Boolean {
         return trigger is Trigger.ManualTrigger || trigger.type == "MANUAL"
     }
 
     /**
-     * ✅ Check if trigger is a time range trigger
+     *  Check if trigger is a time range trigger
      */
     fun isTimeRangeTrigger(trigger: Trigger): Boolean {
         return trigger is TimeRangeTrigger || trigger.type == "TIME_RANGE"

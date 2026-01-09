@@ -84,7 +84,8 @@ sealed class Trigger(val type: String, val value: String) {
      */
     data class BluetoothTrigger(
         val deviceAddress: String,
-        val deviceName: String? = null
+        val deviceName: String? = null,
+        val state: String = "CONNECTED"
     ) : Trigger("BLUETOOTH", buildBluetoothJson(deviceAddress, deviceName))
 
     /**

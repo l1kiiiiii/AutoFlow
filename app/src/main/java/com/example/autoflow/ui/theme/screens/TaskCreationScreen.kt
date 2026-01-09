@@ -3,23 +3,30 @@ package com.example.autoflow.ui.screens
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
+import android.content.Context
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.location.Geocoder
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,18 +35,25 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DoNotDisturb
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
@@ -48,18 +62,21 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PhoneCallback
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Vibration
-import androidx.compose.material.icons.filled.VolumeOff
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -71,7 +88,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DividerDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -81,6 +100,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -91,6 +112,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -99,6 +121,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -108,11 +131,25 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.autoflow.data.WorkflowEntity
+import com.example.autoflow.data.toActions
+import com.example.autoflow.data.toTriggers
 import com.example.autoflow.geofence.GeofenceManager
 import com.example.autoflow.model.Action
+import com.example.autoflow.model.SavedBluetoothDevice
+import com.example.autoflow.model.SavedLocation
+import com.example.autoflow.model.SavedWiFiNetwork
 import com.example.autoflow.model.Trigger
+import com.example.autoflow.model.TriggerHelpers
+import com.example.autoflow.script.ScriptPermission
+import com.example.autoflow.ui.components.AppSelectorComposable
+import com.example.autoflow.ui.components.getAppNameFromPackage
 import com.example.autoflow.ui.theme.AutoFlowTheme
+import com.example.autoflow.util.AutoReplyManager
 import com.example.autoflow.util.Constants
+import com.example.autoflow.util.TriggerParser
+import com.example.autoflow.viewmodel.BluetoothViewModel
+import com.example.autoflow.viewmodel.LocationViewModel
+import com.example.autoflow.viewmodel.WiFiViewModel
 import com.example.autoflow.viewmodel.WorkflowViewModel
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
@@ -120,55 +157,14 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationToken
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.gms.tasks.OnTokenCanceledListener
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.util.Locale
 import kotlin.math.roundToInt
-import android.content.Context
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.material.icons.filled.Warning
-import com.example.autoflow.data.toActions
-import com.example.autoflow.data.toTriggers
-import com.example.autoflow.ui.components.AppSelectorComposable
-import android.content.Intent
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Surface
-import com.example.autoflow.ui.components.getAppNameFromPackage
-import com.example.autoflow.viewmodel.LocationViewModel
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ArrowDropUp
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import com.example.autoflow.model.SavedBluetoothDevice
-import com.example.autoflow.model.SavedLocation
-import com.example.autoflow.model.SavedWiFiNetwork
-import com.example.autoflow.viewmodel.WiFiViewModel
-import com.example.autoflow.viewmodel.BluetoothViewModel
-import android.net.wifi.WifiManager
-import android.widget.Toast
-import androidx.compose.material3.Switch
-import androidx.compose.material.icons.filled.*
-import androidx.compose.foundation.background
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.foundation.layout.PaddingValues
-import com.example.autoflow.model.TriggerHelpers
-import com.example.autoflow.util.TriggerParser
-import kotlinx.coroutines.Dispatchers
-import androidx.compose.material3.*
-import androidx.compose.ui.text.font.FontFamily
-import com.example.autoflow.util.AutoReplyManager
-import kotlinx.coroutines.withContext
-import com.example.autoflow.script.ScriptPermission
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.material.icons.filled.Code
 
 
 /**
@@ -746,7 +742,7 @@ private fun ActionsCard(
             // NEW: Set Sound Mode Action
             ExpandableActionSection(
                 title = "Set Sound Mode",
-                icon = Icons.Default.VolumeUp,
+                icon = Icons.AutoMirrored.Filled.VolumeUp,
                 expanded = setSoundModeActionExpanded,
                 onExpandedChange = onSoundModeExpandedChange
             ) {
@@ -810,8 +806,9 @@ private fun SetSoundModeContent(
 
         // Sound mode options
         val soundModes = listOf(
-            SoundModeOption("Normal", Icons.Default.VolumeUp, "Normal ringing and notifications"),
-            SoundModeOption("Silent", Icons.Default.VolumeOff, "No sound or vibration"),
+            SoundModeOption("Normal",
+                Icons.AutoMirrored.Filled.VolumeUp, "Normal ringing and notifications"),
+            SoundModeOption("Silent", Icons.AutoMirrored.Filled.VolumeOff, "No sound or vibration"),
             SoundModeOption("Vibrate", Icons.Default.Vibration, "Vibrate only, no sound"),
             SoundModeOption("DND", Icons.Default.DoNotDisturb, "Do Not Disturb mode")
         )
