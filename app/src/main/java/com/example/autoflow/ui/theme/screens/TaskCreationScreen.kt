@@ -454,10 +454,13 @@ fun TaskCreationScreen(
                             triggerOnOption = triggerOnOption,
                             wifiTriggerExpanded = wifiTriggerExpanded,
                             wifiState = wifiState,
+                            wifiSsid = wifiSsid, // Added
+                            wifiTriggerType = wifiTriggerType, // Added
                             timeTriggerExpanded = timeTriggerExpanded,
                             timeValue = timeValue,
                             bluetoothDeviceTriggerExpanded = bluetoothDeviceTriggerExpanded,
                             bluetoothDeviceAddress = bluetoothDeviceAddress,
+                            bluetoothTriggerType = bluetoothTriggerType, // Added
                             sendNotificationActionExpanded = sendNotificationActionExpanded,
                             notificationTitle = notificationTitle,
                             notificationMessage = notificationMessage,
@@ -3004,10 +3007,13 @@ private suspend fun handleSaveTask(
     triggerOnOption: String,
     wifiTriggerExpanded: Boolean,
     wifiState: String,
+    wifiSsid: String,
+    wifiTriggerType: String,
     timeTriggerExpanded: Boolean,
     timeValue: String,
     bluetoothDeviceTriggerExpanded: Boolean,
     bluetoothDeviceAddress: String,
+    bluetoothTriggerType: String,
     sendNotificationActionExpanded: Boolean,
     notificationTitle: String,
     notificationMessage: String,
@@ -3065,13 +3071,22 @@ private suspend fun handleSaveTask(
         }
 
         if (hasWifiTrigger) {
-            Log.d("TaskCreation", "Adding WIFI trigger: $wifiState")
-            triggers.add(TriggerHelpers.createWifiTrigger(null, wifiState))
+            Log.d("TaskCreation", "Adding WIFI trigger: $wifiState on SSID: $wifiSsid")
+            // FIX: Pass wifiSsid instead of null
+            triggers.add(TriggerHelpers.createWifiTrigger(
+                if (wifiSsid.isNotBlank()) wifiSsid else null, 
+                wifiState
+            ))
         }
 
         if (hasBluetoothTrigger) {
-            Log.d("TaskCreation", "Adding BLUETOOTH trigger: $bluetoothDeviceAddress")
-            triggers.add(TriggerHelpers.createBluetoothTrigger(bluetoothDeviceAddress, null))
+            Log.d("TaskCreation", "Adding BLUETOOTH trigger: $bluetoothDeviceAddress ($bluetoothTriggerType)")
+            // FIX: Pass bluetoothTriggerType and Device Name
+            triggers.add(TriggerHelpers.createBluetoothTrigger(
+                bluetoothDeviceAddress, 
+                null, 
+                bluetoothTriggerType // FIX: Pass the selected state (connect/disconnect)
+            ))
         }
 
         if (hasLocationTrigger) {
