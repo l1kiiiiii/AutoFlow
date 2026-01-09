@@ -141,7 +141,8 @@ class WorkflowViewModel(application: Application) : AndroidViewModel(application
         workflowName: String,
         triggers: List<Trigger>,
         actions: List<Action>,
-        triggerLogic: String = "AND"
+        triggerLogic: String = "AND",
+        onWorkflowCreated: ((Long) -> Unit)? = null
     ) {
         if (workflowName.isBlank()) {
             _errorMessage.value = "Workflow name cannot be empty"

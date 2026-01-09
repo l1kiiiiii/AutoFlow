@@ -257,13 +257,13 @@ fun TaskCreationScreen(
     var bluetoothTriggerType by remember { mutableStateOf("connect") }
 
     // Pre-populate fields if editing
-    // ✅ FIXED: Pre-populate fields if editing
+    //  FIXED: Pre-populate fields if editing
     LaunchedEffect(existingWorkflow) {
         existingWorkflow?.let { workflow ->
             try {
                 taskName = workflow.workflowName
 
-                // ✅ FIXED: Use explicit type for forEach
+                //  FIXED: Use explicit type for forEach
                 val triggersList: List<Trigger> = workflow.toTriggers()
                 triggersList.forEach { trigger: Trigger ->
                     when (trigger.type) {
@@ -278,14 +278,17 @@ fun TaskCreationScreen(
                             wifiTriggerExpanded = true
                             val wifiData = TriggerParser.parseWifiData(trigger)
                             wifiData?.let { data ->
-                                wifiState = data.state
+                                wifiSsid = data.ssid ?: "" //  SET SSID
+                                wifiTriggerType = data.state //  SET TRIGGER TYPE (connect/disconnect)
                             }
                         }
                         "BLUETOOTH" -> {
                             bluetoothDeviceTriggerExpanded = true
                             val bluetoothData = TriggerParser.parseBluetoothData(trigger)
                             bluetoothData?.let { data ->
-                                bluetoothDeviceAddress = data.deviceAddress
+                                bluetoothMacAddress = data.deviceAddress //  SET MAC
+                                bluetoothDeviceName = data.deviceName ?: "" //  SET NAME
+                                bluetoothTriggerType = data.state //  SET TRIGGER TYPE
                             }
                         }
                         "LOCATION" -> {
@@ -306,7 +309,7 @@ fun TaskCreationScreen(
                     }
                 }
 
-                // ✅ FIXED: Handle actions similarly
+                //  FIXED: Handle actions similarly
                 val actionsList: List<Action> = workflow.toActions()
                 actionsList.firstOrNull()?.let { action: Action ->
                     when (action.type) {
@@ -576,8 +579,8 @@ private fun TriggersCard(
     val availableTriggers = listOf(
         "Time" to Icons.Default.Schedule,
         "Location" to Icons.Default.LocationOn,
-        "WiFi" to Icons.Default.Wifi,           // ✅ ADD THIS
-        "Bluetooth" to Icons.Default.Bluetooth  // ✅ ADD THIS
+        "WiFi" to Icons.Default.Wifi,           //  ADD THIS
+        "Bluetooth" to Icons.Default.Bluetooth  //  ADD THIS
     )
 
     Card(
@@ -923,7 +926,7 @@ private fun BlockAppsContent(
             fontWeight = FontWeight.Medium
         )
 
-        // ✅ Accessibility Service Warning
+        //  Accessibility Service Warning
         if (!isAccessibilityEnabled) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -980,7 +983,7 @@ private fun BlockAppsContent(
             }
         }
 
-        // ✅ Selected Apps Display with Remove Option
+        //  Selected Apps Display with Remove Option
         if (selectedApps.isNotEmpty()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1104,7 +1107,7 @@ private fun UnblockAppsContent() {
 
 
 /**
- * ✅ NEW: Chip component for selected apps
+ *  NEW: Chip component for selected apps
  */
 @Composable
 private fun SelectedAppChip(
@@ -1169,7 +1172,7 @@ private fun SelectedAppChip(
 }
 
 /**
- * ✅ NEW: Check if accessibility service is enabled
+ *  NEW: Check if accessibility service is enabled
  */
 private fun isAccessibilityServiceEnabled(context: Context): Boolean {
     val serviceName = "${context.packageName}/.blocker.AppBlockAccessibilityService"
@@ -1498,7 +1501,7 @@ private fun LocationTriggerContent(
     var currentAddress by remember { mutableStateOf<String?>(null) }
     var showLocationPermissionDialog by remember { mutableStateOf(false) }
 
-    // ✅ ADD: Location ViewModel and Save states
+    //  ADD: Location ViewModel and Save states
     val locationViewModel: LocationViewModel = viewModel()
     val savedLocations by locationViewModel.allLocations.observeAsState(emptyList())
     var showSaveLocationDialog by remember { mutableStateOf(false) }
@@ -1553,7 +1556,7 @@ private fun LocationTriggerContent(
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
 
-        // ✅ ENHANCED: Location Name Field with Saved Location Dropdown
+        //  ENHANCED: Location Name Field with Saved Location Dropdown
         ExposedDropdownMenuBox(
             expanded = showLocationDropdown,
             onExpandedChange = { showLocationDropdown = it }
@@ -1767,7 +1770,7 @@ private fun LocationTriggerContent(
             }
         }
 
-        // ✅ SAVE LOCATION SECTION - appears when location is ready
+        //  SAVE LOCATION SECTION - appears when location is ready
         if (locationName.isNotBlank() && locationDetailsInput.isNotBlank() && isValidCoordinates(locationDetailsInput)) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1812,7 +1815,7 @@ private fun LocationTriggerContent(
                         }
                     }
 
-                    // ✅ SAVE LOCATION BUTTON
+                    //  SAVE LOCATION BUTTON
                     OutlinedButton(
                         onClick = {
                             showSaveLocationDialog = true
@@ -2153,7 +2156,7 @@ private fun LocationTriggerContent(
         }
     }
 
-    // ✅ SAVE LOCATION DIALOG
+    //  SAVE LOCATION DIALOG
     if (showSaveLocationDialog) {
         SaveLocationToRoomDialog(
             initialName = locationName,
@@ -2172,7 +2175,7 @@ private fun LocationTriggerContent(
                             isFavorite = isFavorite
                         )
                         showSaveLocationDialog = false
-                        Toast.makeText(context, "✅ Location '$name' saved!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, " Location '$name' saved!", Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
                         Toast.makeText(context, "❌ Failed to save: ${e.message}", Toast.LENGTH_LONG).show()
                     } finally {
@@ -2309,7 +2312,7 @@ private fun TimeTriggerContent(
 
     val datePickerState = rememberDatePickerState()
 
-    // ✅ AUTOMATICALLY DETECTS USER'S SYSTEM PREFERENCE (12hr or 24hr)
+    //  AUTOMATICALLY DETECTS USER'S SYSTEM PREFERENCE (12hr or 24hr)
     val context = LocalContext.current
     val is24HourFormat = android.text.format.DateFormat.is24HourFormat(context)
 
@@ -2339,7 +2342,7 @@ private fun TimeTriggerContent(
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 selectedTime?.let {
-                    // ✅ Display in user's preferred format
+                    //  Display in user's preferred format
                     if (is24HourFormat) {
                         String.format("%02d:%02d", it.hour, it.minute)
                     } else {
@@ -2353,7 +2356,7 @@ private fun TimeTriggerContent(
 
         // Show scheduled time
         if (selectedDate != null && selectedTime != null) {
-            // ✅ Create local variable to avoid smart cast issue
+            //  Create local variable to avoid smart cast issue
             val timeValue = selectedTime  // This makes a copy
             val dateValue = selectedDate
 
@@ -2365,11 +2368,11 @@ private fun TimeTriggerContent(
                 Log.d("TimeTriggerContent", "Selected Time: $timeValue")
                 Log.d("TimeTriggerContent", "Combined DateTime: $dateTime")
 
-                // ✅ FIXED: Format as HH:mm (e.g., "22:11")
+                //  FIXED: Format as HH:mm (e.g., "22:11")
                 val formattedTime = String.format("%02d:%02d", timeValue.hour, timeValue.minute)
                 onTimeValueChange(formattedTime)
 
-                Log.d("TimeTriggerContent", "✅ Formatted time: $formattedTime")
+                Log.d("TimeTriggerContent", " Formatted time: $formattedTime")
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -2436,7 +2439,7 @@ private fun TimeTriggerContent(
             onDismissRequest = { showTimePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    // ✅ TimePickerState.hour is ALWAYS in 24-hour format (0-23)
+                    //  TimePickerState.hour is ALWAYS in 24-hour format (0-23)
                     // No conversion needed - it handles 12hr/24hr automatically!
                     selectedTime = LocalTime.of(
                         timePickerState.hour,    // Always 0-23
@@ -2599,7 +2602,7 @@ fun WiFiTriggerContent(
     }
 }
 
-// ✅ BLUETOOTH TRIGGER CONTENT
+//  BLUETOOTH TRIGGER CONTENT
 @Composable
 fun BluetoothTriggerContent(
     selectedDevice: SavedBluetoothDevice?,
@@ -2987,7 +2990,7 @@ private fun ErrorDialog(
 }
 //  SAVE HANDLER
 /**
- * ✅ FIXED: Complete handleSaveTask function with proper variable scoping
+ *  FIXED: Complete handleSaveTask function with proper variable scoping
  */
 private suspend fun handleSaveTask(
     context: Context,
@@ -3031,7 +3034,7 @@ private suspend fun handleSaveTask(
             onError("Task name cannot be empty")
             return
         }
-        Log.d("TaskCreation", "✅ Task name valid: $taskName")
+        Log.d("TaskCreation", " Task name valid: $taskName")
 
         // 2. CHECK WHICH TRIGGERS ARE CONFIGURED
         val hasLocationTrigger = locationTriggerExpanded && locationDetailsInput.isNotBlank()
@@ -3051,9 +3054,9 @@ private suspend fun handleSaveTask(
             onError("Please configure at least ONE trigger")
             return
         }
-        Log.d("TaskCreation", "✅ At least one trigger is configured")
+        Log.d("TaskCreation", " At least one trigger is configured")
 
-        // 4. ✅ CREATE LIST OF ALL CONFIGURED TRIGGERS (DECLARE triggers HERE)
+        // 4.  CREATE LIST OF ALL CONFIGURED TRIGGERS (DECLARE triggers HERE)
         val triggers = mutableListOf<Trigger>()
 
         if (hasTimeTrigger) {
@@ -3095,7 +3098,7 @@ private suspend fun handleSaveTask(
             ))
         }
 
-        Log.d("TaskCreation", "✅ Total triggers created: ${triggers.size}")
+        Log.d("TaskCreation", " Total triggers created: ${triggers.size}")
 
         // 5. CHECK WHICH ACTIONS ARE CONFIGURED
         val hasNotificationAction = sendNotificationActionExpanded && notificationTitle.isNotBlank()
@@ -3120,9 +3123,9 @@ private suspend fun handleSaveTask(
             onError("Please configure at least ONE action")
             return
         }
-        Log.d("TaskCreation", "✅ At least one action is configured")
+        Log.d("TaskCreation", " At least one action is configured")
 
-        // 7. ✅ CREATE LIST OF ALL CONFIGURED ACTIONS (DECLARE actions HERE)
+        // 7.  CREATE LIST OF ALL CONFIGURED ACTIONS (DECLARE actions HERE)
         val actions = mutableListOf<Action>()
 
         if (hasNotificationAction) {
@@ -3179,7 +3182,7 @@ private suspend fun handleSaveTask(
             actions.add(secureScriptAction)
         }
 
-        Log.d("TaskCreation", "✅ Total actions created: ${actions.size}")
+        Log.d("TaskCreation", " Total actions created: ${actions.size}")
 
         // 8. SAVE TO DATABASE
         Log.d("TaskCreation", "💾 Saving workflow...")
@@ -3200,13 +3203,13 @@ private suspend fun handleSaveTask(
             )
         }
 
-        Log.d("TaskCreation", "✅ Workflow saved. Triggers will be automatically registered.")
+        Log.d("TaskCreation", " Workflow saved. Triggers will be automatically registered.")
 
         // 9. ADD GEOFENCES FOR LOCATION TRIGGERS
         if (workflowId == null || workflowId == 0L) {
             Log.w("TaskCreation", "⚠️ Skipping geofence registration - invalid workflowId: $workflowId")
         } else {
-            // ✅ FIXED: Explicit type for filter and forEach
+            //  FIXED: Explicit type for filter and forEach
             val locationTriggers: List<Trigger> = triggers.filter { it.type == "LOCATION" }
             locationTriggers.forEach { trigger: Trigger ->
                 try {
@@ -3221,7 +3224,7 @@ private suspend fun handleSaveTask(
                             data.triggerOnEntry,
                             data.triggerOnExit
                         )
-                        Log.d("TaskCreation", "✅ Geofence registered for location: ${data.locationName}")
+                        Log.d("TaskCreation", " Geofence registered for location: ${data.locationName}")
                     }
                 } catch (e: Exception) {
                     Log.e("TaskCreation", "❌ Geofence setup failed", e)
@@ -3470,7 +3473,7 @@ private fun validateScript(scriptCode: String) {
     }
 }
 
-// ✅ Auto-Reply Settings Card for TaskCreationScreen
+//  Auto-Reply Settings Card for TaskCreationScreen
 @Composable
 fun AutoReplySettingsCard(
     modifier: Modifier = Modifier
@@ -3961,16 +3964,16 @@ private suspend fun saveLocationToRoom(
             throw IllegalArgumentException("Coordinates are out of valid range")
         }
 
-        // ✅ FIX: Pass radius as Double (will be converted to Int in LocationViewModel)
+        //  FIX: Pass radius as Double (will be converted to Int in LocationViewModel)
         locationViewModel.saveLocation(
             name = name,
             latitude = latitude,
             longitude = longitude,
-            radius = radius.toDouble(), // ✅ Convert Float to Double
+            radius = radius.toDouble(), //  Convert Float to Double
             address = address
         )
 
-        Log.d("TaskCreation", "✅ Saved location to Room DB: $name at ($latitude, $longitude)")
+        Log.d("TaskCreation", " Saved location to Room DB: $name at ($latitude, $longitude)")
 
     } catch (e: Exception) {
         Log.e("TaskCreation", "❌ Failed to save location to Room DB", e)
@@ -3979,7 +3982,7 @@ private suspend fun saveLocationToRoom(
 }
 
 /**
- * ✅ Individual saved location item
+ *  Individual saved location item
  */
 @Composable
 private fun LocationItem(

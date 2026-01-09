@@ -177,32 +177,43 @@ sealed class Trigger(val type: String, val value: String) {
             triggerOnExit: Boolean,
             triggerOn: String
         ): String {
-            return """{"locationName":"$locationName","latitude":$latitude,"longitude":$longitude,"radius":$radius,"triggerOnEntry":$triggerOnEntry,"triggerOnExit":$triggerOnExit,"triggerOn":"$triggerOn"}"""
+            return JSONObject().apply {
+                put("locationName", locationName)
+                put("latitude", latitude)
+                put("longitude", longitude)
+                put("radius", radius)
+                put("triggerOnEntry", triggerOnEntry)
+                put("triggerOnExit", triggerOnExit)
+                put("triggerOn", triggerOn)
+            }.toString()
         }
 
         fun buildWiFiJson(ssid: String?, state: String): String {
-            return if (ssid != null) {
-                """{"ssid":"$ssid","state":"$state"}"""
-            } else {
-                """{"state":"$state"}"""
-            }
+            return JSONObject().apply {
+                if (ssid != null) put("ssid", ssid)
+                put("state", state)
+            }.toString()
         }
 
         fun buildBluetoothJson(deviceAddress: String, deviceName: String?): String {
-            return if (deviceName != null) {
-                """{"deviceAddress":"$deviceAddress","deviceName":"$deviceName"}"""
-            } else {
-                """{"deviceAddress":"$deviceAddress"}"""
-            }
+            return JSONObject().apply {
+                put("deviceAddress", deviceAddress)
+                if (deviceName != null) put("deviceName", deviceName)
+            }.toString()
         }
 
         fun buildTimeJson(time: String, days: List<String>): String {
-            val daysJson = days.joinToString(separator = "\",\"", prefix = "[\"", postfix = "\"]")
-            return """{"time":"$time","days":$daysJson}"""
+            return JSONObject().apply {
+                put("time", time)
+                put("days", org.json.JSONArray(days))
+            }.toString()
         }
 
         fun buildBatteryJson(level: Int, condition: String): String {
-            return """{"level":$level,"condition":"$condition"}"""
+            return JSONObject().apply {
+                put("level", level)
+                put("condition", condition)
+            }.toString()
         }
 
         /**

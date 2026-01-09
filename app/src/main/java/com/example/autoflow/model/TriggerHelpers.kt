@@ -53,7 +53,11 @@ object TriggerHelpers {
     /**
      * Create a Bluetooth-based trigger
      */
-    fun createBluetoothTrigger(deviceAddress: String, deviceName: String? = null, state: String): Trigger {
+    fun createBluetoothTrigger(
+        deviceAddress: String,
+        deviceName: String? = null,
+        state: String="connect"
+    ): Trigger {
         return Trigger.BluetoothTrigger(
             deviceAddress = deviceAddress,
             deviceName = deviceName,
