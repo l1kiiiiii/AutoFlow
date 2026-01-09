@@ -66,7 +66,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
-
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 /**
  * Settings Screen for AutoFlow
  * Provides access to app settings, permissions, and information
@@ -90,11 +91,45 @@ fun Settings() {
     var showMessageDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
 
-    // Permission states
+
+    // Location Launcher
     var locationPermissionGranted by remember { mutableStateOf(checkLocationPermission(context)) }
+    val locationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        // Update state based on result
+        locationPermissionGranted = checkLocationPermission(context)
+        if (locationPermissionGranted) {
+            scope.launch { snackbarHostState.showSnackbar("Location permission granted") }
+        }
+    }
+
+    // Bluetooth Launcher
     var bluetoothPermissionGranted by remember { mutableStateOf(checkBluetoothPermission(context)) }
+    val bluetoothLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        bluetoothPermissionGranted = checkBluetoothPermission(context)
+    }
+
+    // SMS Launcher
     var smsPermissionGranted by remember { mutableStateOf(checkSmsPermission(context)) }
+    val smsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        smsPermissionGranted = isGranted
+        if (isGranted) scope.launch { snackbarHostState.showSnackbar("SMS permission granted") }
+    }
+
+    // Notification Launcher
     var notificationPermissionGranted by remember { mutableStateOf(checkNotificationPermission(context)) }
+    val notificationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        notificationPermissionGranted = isGranted
+    }
+
+    // Exact Alarm state
     var exactAlarmGranted by remember { mutableStateOf(checkExactAlarmPermission(context)) }
 
     Scaffold(
@@ -229,28 +264,74 @@ fun Settings() {
                         title = "Location",
                         description = "Required for location-based triggers",
                         granted = locationPermissionGranted,
-                        onClick = { openAppSettings(context) }
+                        onClick = {
+                            if (!locationPermissionGranted) {
+                                //  Launch the popup instead of opening settings
+                                locationLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION
+                                    )
+                                )
+                            } else {
+                                openAppSettings(context)
+                            }
+                        }
                     ),
                     PermissionItem(
                         icon = Icons.Default.Bluetooth,
                         title = "Bluetooth",
                         description = "Required for Bluetooth triggers",
                         granted = bluetoothPermissionGranted,
-                        onClick = { openAppSettings(context) }
+                        onClick = { if (!bluetoothPermissionGranted) {
+                            //  Handle Android 12+ vs older versions
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                bluetoothLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.BLUETOOTH_SCAN,
+                                        Manifest.permission.BLUETOOTH_CONNECT
+                                    )
+                                )
+                            } else {
+                                // Older phones need location for Bluetooth scanning
+                                locationLauncher.launch(
+                                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+                                )
+                            }
+                        } else {
+                            openAppSettings(context)
+                        }
+                        }
                     ),
                     PermissionItem(
                         icon = Icons.Default.Sms,
                         title = "SMS",
                         description = "Required for auto-reply feature",
                         granted = smsPermissionGranted,
-                        onClick = { openAppSettings(context) }
+                        onClick = {
+                            if (!smsPermissionGranted) {
+                                //  Launch SMS permission popup
+                                smsLauncher.launch(Manifest.permission.SEND_SMS)
+                            } else {
+                                openAppSettings(context)
+                            }
+                        }
                     ),
                     PermissionItem(
                         icon = Icons.Default.NotificationsActive,
                         title = "Notifications",
                         description = "Required for workflow notifications",
                         granted = notificationPermissionGranted,
-                        onClick = { openAppSettings(context) }
+                        onClick = {
+                            if (!notificationPermissionGranted) {
+                                //  Launch Notification popup (Android 13+)
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                }
+                            } else {
+                                openAppSettings(context)
+                            }
+                        }
                     ),
                     PermissionItem(
                         icon = Icons.Default.Alarm,

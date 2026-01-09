@@ -3,9 +3,12 @@ package com.example.autoflow.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkInfo
 import android.net.wifi.WifiManager
 import android.util.Log
 import com.example.autoflow.data.AppDatabase
+import com.example.autoflow.data.WorkflowRepository
 import com.example.autoflow.data.toTriggers
 import com.example.autoflow.util.ActionExecutor
 import kotlinx.coroutines.*
@@ -18,8 +21,6 @@ class WiFiReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        Log.d(TAG, "📶 WiFi state changed: ${intent.action}")
-
         when (intent.action) {
             WifiManager.WIFI_STATE_CHANGED_ACTION -> {
                 val wifiState = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_UNKNOWN)
@@ -39,41 +40,50 @@ class WiFiReceiver : BroadcastReceiver() {
             WifiManager.WIFI_STATE_DISABLING -> "DISABLING"
             else -> return
         }
-
-        Log.d(TAG, "📶 WiFi state: $stateString")
-        checkWifiTriggers(context, stateString, null)
+        checkWifiTriggers(context, stateString, "")
     }
 
     private fun handleNetworkStateChange(context: Context, intent: Intent) {
-        val wifiManager = context.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        val connectionInfo = wifiManager.connectionInfo
+        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
 
-        if (connectionInfo != null && connectionInfo.ssid != null) {
-            // Remove quotes from SSID
-            val ssid = connectionInfo.ssid.replace("\"", "")
-            Log.d(TAG, "📶 Connected to WiFi: $ssid")
-            checkWifiTriggers(context, "CONNECTED", ssid)
-        } else {
+        // Use ConnectivityManager for network type checking if possible, but for SSID we usually need WifiManager
+        // Note: SSID access requires location permission on modern Android
+
+        @Suppress("DEPRECATION")
+        val networkInfo = intent.getParcelableExtra<NetworkInfo>(WifiManager.EXTRA_NETWORK_INFO)
+
+        if (networkInfo?.isConnected == true) {
+            // ✅ FIX: Explicitly suppress deprecation as we need a quick synchronous check
+            @Suppress("DEPRECATION")
+            val connectionInfo = wifiManager.connectionInfo
+
+            if (connectionInfo != null && connectionInfo.ssid != null) {
+                val ssid = connectionInfo.ssid.replace("\"", "")
+                Log.d(TAG, "📶 Connected to WiFi: $ssid")
+                checkWifiTriggers(context, "CONNECTED", ssid)
+            }
+        } else if (networkInfo?.isConnected == false) {
             Log.d(TAG, "📶 WiFi disconnected")
-            checkWifiTriggers(context, "DISCONNECTED", null)
+            checkWifiTriggers(context, "DISCONNECTED", "")
         }
     }
 
-    private fun checkWifiTriggers(context: Context, state: String, connectedSsid: String?) {
+    private fun checkWifiTriggers(context: Context, state: String, connectedSsid: String) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val database = AppDatabase.getDatabase(context)
-                val workflows = database.workflowDao().getActiveWorkflows()
+                // Use Repository pattern
+                val repository = WorkflowRepository(database.workflowDao())
+                val workflows = repository.getAllWorkflowsList()
 
                 workflows.forEach { workflow ->
-                    val triggers = workflow.toTriggers()
-
-                    triggers.forEach { trigger ->
-                        if (trigger.type == "WIFI" && matchesWifiTrigger(trigger.value, state, connectedSsid)) {
-                            Log.d(TAG, "✅ WiFi trigger matched for workflow: ${workflow.workflowName}")
-
-                            withContext(Dispatchers.Main) {
-                                ActionExecutor.executeWorkflow(context, workflow)
+                    if (workflow.isEnabled) {
+                        val triggers = workflow.toTriggers()
+                        triggers.forEach { trigger ->
+                            if (trigger.type == "WIFI" && matchesWifiTrigger(trigger.value, state, connectedSsid)) {
+                                withContext(Dispatchers.Main) {
+                                    ActionExecutor.executeWorkflow(context, workflow)
+                                }
                             }
                         }
                     }
@@ -84,30 +94,17 @@ class WiFiReceiver : BroadcastReceiver() {
         }
     }
 
-    /**
-     * ✅ Check if trigger value matches current WiFi state
-     */
-    private fun matchesWifiTrigger(triggerValue: String, currentState: String, currentSsid: String?): Boolean {
+    private fun matchesWifiTrigger(triggerValue: String, currentState: String, currentSsid: String): Boolean {
         return try {
             val json = JSONObject(triggerValue)
             val targetState = json.optString("state", "")
-            val targetSsid = json.optString("ssid", null)
+            val targetSsid = json.optString("ssid", "")
 
-            // Check state match
-            if (targetState != currentState) {
-                return false
-            }
+            if (targetState.isNotEmpty() && targetState != currentState) return false
+            if (targetSsid.isNotEmpty() && targetSsid != currentSsid) return false
 
-            // If trigger specifies SSID, check SSID match
-            if (targetSsid != null) {
-                return targetSsid == currentSsid
-            }
-
-            // State matches and no specific SSID required
             true
-
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error parsing WiFi trigger value: $triggerValue", e)
             false
         }
     }

@@ -161,7 +161,7 @@
                 <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
             </intent-filter>
         </receiver>
-        <!-- ✅ ADD: Phone state receiver for auto-reply SMS -->
+        <!--  Phone state receiver for auto-reply SMS -->
         <receiver
             android:name=".receiver.PhoneStateReceiver"
             android:enabled="true"

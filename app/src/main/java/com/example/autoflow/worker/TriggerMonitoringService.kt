@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.autoflow.data.AppDatabase
+import com.example.autoflow.data.WorkflowRepository
 import com.example.autoflow.data.toActions
 import com.example.autoflow.data.toTriggers
 import com.example.autoflow.util.ActionExecutor
@@ -14,7 +15,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Generic Trigger Monitoring Worker
- * Monitors and executes workflow actions
+ * ✅ Refactored to use WorkflowRepository
  */
 class TriggerMonitoringWorker(
     context: Context,
@@ -24,7 +25,6 @@ class TriggerMonitoringWorker(
     companion object {
         private const val TAG = "TriggerMonitoringWorker"
         const val KEY_WORKFLOW_ID = "workflow_id"
-        const val KEY_TRIGGER_TYPE = "trigger_type"
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -35,29 +35,30 @@ class TriggerMonitoringWorker(
                 return@withContext Result.failure()
             }
 
-            // Get workflow from database
+            // ✅ FIX: Use Repository
             val database = AppDatabase.getDatabase(applicationContext)
-            val workflow = database.workflowDao().getByIdSync(workflowId)
+            val repository = WorkflowRepository(database.workflowDao())
+
+            // Use the new suspend function
+            val workflow = repository.getWorkflowById(workflowId)
 
             if (workflow == null || !workflow.isEnabled) {
                 return@withContext Result.success()
             }
 
-            // ✅ NEW: Get all triggers and build current states
+            // Get triggers and evaluate
             val triggers = workflow.toTriggers()
             val currentStates = TriggerEvaluator.buildCurrentStates(
                 applicationContext,
                 triggers
             )
 
-            // ✅ NEW: Evaluate with trigger logic
             val shouldExecute = TriggerEvaluator.evaluateWorkflow(
                 workflow,
                 currentStates
             )
 
             if (shouldExecute) {
-                // Execute all actions
                 val actions = workflow.toActions()
                 actions.forEach { action ->
                     ActionExecutor.executeAction(applicationContext, action)
@@ -73,5 +74,4 @@ class TriggerMonitoringWorker(
             return@withContext Result.retry()
         }
     }
-
 }
