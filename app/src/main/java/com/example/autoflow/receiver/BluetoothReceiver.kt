@@ -68,6 +68,8 @@ class BluetoothReceiver : BroadcastReceiver() {
     }
 
     private fun handleDeviceConnected(context: Context, device: BluetoothDevice) {
+        val address = device.address ?: return
+        saveDeviceState(context, address, true)
         if (hasBluetoothPermission(context)) {
             try {
                 val deviceName = device.name ?: "Unknown Device"
@@ -82,6 +84,10 @@ class BluetoothReceiver : BroadcastReceiver() {
     }
 
     private fun handleDeviceDisconnected(context: Context, device: BluetoothDevice) {
+        val address = device.address ?: return
+
+        //  SAVE STATE: Mark this device as disconnected
+        saveDeviceState(context, address, false)
         if (hasBluetoothPermission(context)) {
             try {
                 val deviceName = device.name ?: "Unknown Device"
@@ -94,7 +100,11 @@ class BluetoothReceiver : BroadcastReceiver() {
             checkBluetoothTriggers(context, "DISCONNECTED", device.address ?: "", "Unknown Device")
         }
     }
-
+    private fun saveDeviceState(context: Context, address: String, isConnected: Boolean) {
+        val prefs = context.getSharedPreferences("bt_device_states", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(address, isConnected).apply()
+        Log.d(TAG, "💾 Saved BT State: $address = $isConnected")
+    }
     private fun hasBluetoothPermission(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==

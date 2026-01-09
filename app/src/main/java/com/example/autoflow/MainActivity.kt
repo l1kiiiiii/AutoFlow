@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
             checkAllAutoReplyRequirements(this)
 
             // ✅ ADD: Set flags manually for testing (REMOVE after testing)
-            testSetAutoReplyFlags(this)
+           // testSetAutoReplyFlags(this)
 
             // ✅ Request permissions
             checkAndRequestAllPermissions()

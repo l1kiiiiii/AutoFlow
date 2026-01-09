@@ -41,7 +41,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "autoflow_database"
                 )
-                    .fallbackToDestructiveMigration() //  THIS WILL CLEAR DATABASE ON VERSION CHANGE
+                    .fallbackToDestructiveMigration(true) //  THIS WILL CLEAR DATABASE ON VERSION CHANGE
                     .build()
                 INSTANCE = instance
                 instance

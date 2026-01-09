@@ -3,7 +3,6 @@ package com.example.autoflow.util
 import android.util.Log
 import com.example.autoflow.model.Trigger
 import org.json.JSONObject
-import org.json.JSONArray
 
 /**
  * ✅ Helper to parse trigger JSON values safely
@@ -78,7 +77,8 @@ object TriggerParser {
             val json = JSONObject(trigger.value)
             BluetoothData(
                 deviceAddress = json.optString("deviceAddress", ""),
-                deviceName = json.optString("deviceName").takeIf { it.isNotEmpty() }
+                deviceName = json.optString("deviceName").takeIf { it.isNotEmpty() },
+                state = json.optString("state", "connected")
             )
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing Bluetooth trigger: ${e.message}")
@@ -120,7 +120,8 @@ data class WiFiData(
 
 data class BluetoothData(
     val deviceAddress: String,
-    val deviceName: String?
+    val deviceName: String?,
+    val state: String
 )
 
 data class BatteryData(

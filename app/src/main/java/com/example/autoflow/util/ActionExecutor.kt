@@ -924,36 +924,28 @@ object ActionExecutor {
      */
     private fun toggleWiFi(context: Context, state: String): Boolean {
         return try {
+            // ✅ ANDROID 10+ FIX: Use Settings Panel
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // Android 10+ doesn't allow programmatic WiFi control
-                Log.w(TAG, "⚠️ WiFi control not available on Android 10+")
-
-                // Open WiFi settings instead
-                val intent = Intent(Settings.Panel.ACTION_WIFI)
+                Log.i(TAG, "🤖 Android 10+: Opening WiFi Panel")
+                val intent = Intent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY)
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
                 return true
             }
 
+            // Legacy Android 9 and below logic
             val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
 
-            when (state.lowercase()) {
-                "on" -> {
-                    @Suppress("DEPRECATION")
-                    wifiManager.isWifiEnabled = true
-                    Log.d(TAG, "📶 WiFi enabled")
-                }
-                "off" -> {
-                    @Suppress("DEPRECATION")
-                    wifiManager.isWifiEnabled = false
-                    Log.d(TAG, "📶 WiFi disabled")
-                }
-                "toggle" -> {
-                    @Suppress("DEPRECATION")
-                    wifiManager.isWifiEnabled = !wifiManager.isWifiEnabled
-                    Log.d(TAG, "📶 WiFi toggled")
-                }
+            val shouldEnable = when (state.lowercase()) {
+                "on" -> true
+                "off" -> false
+                "toggle" -> !wifiManager.isWifiEnabled
+                else -> return false
             }
+
+            @Suppress("DEPRECATION")
+            wifiManager.isWifiEnabled = shouldEnable
+            Log.d(TAG, "📶 WiFi set to: $shouldEnable")
             true
         } catch (e: Exception) {
             Log.e(TAG, "Error toggling WiFi", e)
